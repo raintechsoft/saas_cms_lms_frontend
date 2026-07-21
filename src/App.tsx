@@ -1,0 +1,129 @@
+import { Navigate, Route, Routes } from "react-router-dom";
+import { DashboardPage } from "./pages/campus/DashboardPage";
+import { LoginPage } from "./pages/auth/LoginPage";
+import { ForgotPasswordPage } from "./pages/auth/ForgotPasswordPage";
+import { ResetPasswordPage } from "./pages/auth/ResetPasswordPage";
+import { AcademicsPage } from "./pages/campus/AcademicsPage";
+import { SettingsPage } from "./pages/campus/SettingsPage";
+import { StudentsPage } from "./pages/campus/StudentsPage";
+import { UsersPage } from "./pages/campus/UsersPage";
+import { FeesPage } from "./pages/campus/FeesPage";
+import { AttendancePage } from "./pages/campus/AttendancePage";
+import { AppShell } from "./components/AppShell";
+import { RequireProductBucket } from "./components/RequireProductBucket";
+import { ExamsPage } from "./pages/campus/ExamsPage";
+import { HrPage } from "./pages/campus/HrPage";
+import { DocumentsPage } from "./pages/campus/DocumentsPage";
+import { ReportsPage } from "./pages/campus/ReportsPage";
+import { DocumentPrintPage } from "./pages/campus/DocumentPrintPage";
+import { FeeReceiptPrintPage } from "./pages/campus/FeeReceiptPrintPage";
+import { TimetablePage } from "./pages/campus/TimetablePage";
+import { HomeworkPage } from "./pages/campus/HomeworkPage";
+import { ErpSettingsPage } from "./pages/campus/ErpSettingsPage";
+import { NoticesPage } from "./pages/campus/NoticesPage";
+import { OnlineAdmissionPage } from "./pages/public/OnlineAdmissionPage";
+import { PlatformShell } from "./pages/super-admin/PlatformShell";
+import { SuperAdminLoginPage } from "./pages/super-admin/SuperAdminLoginPage";
+import { StudentLoginPage, ParentLoginPage } from "./pages/student-parent/PortalLoginPage";
+import { AdminDashboardPage } from "./pages/super-admin/AdminDashboardPage";
+import { AdminTenantsPage } from "./pages/super-admin/AdminTenantsPage";
+import { AdminTenantFormPage } from "./pages/super-admin/AdminTenantFormPage";
+import { AdminTenantDetailPage } from "./pages/super-admin/AdminTenantDetailPage";
+import {
+  AdminResellerDetailPage,
+  AdminResellerFormPage,
+  AdminResellersPage,
+} from "./pages/super-admin/AdminResellersPage";
+import { AdminUsersPage } from "./pages/super-admin/AdminUsersPage";
+import { AdminAuditPage } from "./pages/super-admin/AdminAuditPage";
+import { AdminSettingsPage } from "./pages/super-admin/AdminSettingsPage";
+import { PortalRedirect } from "./pages/student-parent/PortalRedirect";
+import { PortalShell } from "./pages/student-parent/PortalShell";
+import { PortalHomePage } from "./pages/student-parent/PortalHomePage";
+import { PortalNoticesPage } from "./pages/student-parent/PortalNoticesPage";
+import { PortalAttendancePage } from "./pages/student-parent/PortalAttendancePage";
+import { PortalLeavePage } from "./pages/student-parent/PortalLeavePage";
+import { PortalFeesPage } from "./pages/student-parent/PortalFeesPage";
+import { PortalDocumentsPage } from "./pages/student-parent/PortalDocumentsPage";
+import { PortalTimetablePage } from "./pages/student-parent/PortalTimetablePage";
+import { PortalHomeworkPage } from "./pages/student-parent/PortalHomeworkPage";
+import { PortalExamsPage } from "./pages/student-parent/PortalExamsPage";
+import { PortalProfilePage } from "./pages/student-parent/PortalProfilePage";
+import { StaffProfilePage } from "./pages/campus/StaffProfilePage";
+
+function portalRoutes() {
+  return (
+    <>
+      <Route index element={<PortalHomePage />} />
+      <Route path="profile" element={<PortalProfilePage />} />
+      <Route path="notices" element={<PortalNoticesPage />} />
+      <Route path="attendance" element={<PortalAttendancePage />} />
+      <Route path="leave" element={<PortalLeavePage />} />
+      <Route path="exams" element={<PortalExamsPage />} />
+      <Route path="timetable" element={<PortalTimetablePage />} />
+      <Route path="homework" element={<PortalHomeworkPage />} />
+      <Route path="fees" element={<PortalFeesPage />} />
+      <Route path="documents" element={<PortalDocumentsPage />} />
+    </>
+  );
+}
+
+export function App() {
+  return (
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route path="/admin/login" element={<SuperAdminLoginPage />} />
+      <Route path="/student/login" element={<Navigate to="/login" replace />} />
+      <Route path="/parent/login" element={<Navigate to="/login" replace />} />
+      <Route path="/print/documents/:id" element={<DocumentPrintPage />} />
+      <Route path="/print/fees/:id" element={<FeeReceiptPrintPage />} />
+      <Route path="/admit/:tenantSlug" element={<OnlineAdmissionPage />} />
+      <Route path="/portal" element={<PortalRedirect />} />
+      <Route path="/portal/student" element={<PortalShell />}>
+        {portalRoutes()}
+      </Route>
+      <Route path="/portal/parent" element={<PortalShell />}>
+        {portalRoutes()}
+      </Route>
+
+      <Route path="/admin" element={<PlatformShell />}>
+        <Route index element={<Navigate to="dashboard" replace />} />
+        <Route path="dashboard" element={<AdminDashboardPage />} />
+        <Route path="tenants" element={<AdminTenantsPage />} />
+        <Route path="tenants/new" element={<AdminTenantFormPage />} />
+        <Route path="tenants/:id" element={<AdminTenantDetailPage />} />
+        <Route path="tenants/:id/edit" element={<AdminTenantFormPage />} />
+        <Route path="resellers" element={<AdminResellersPage />} />
+        <Route path="resellers/new" element={<AdminResellerFormPage />} />
+        <Route path="resellers/:id" element={<AdminResellerDetailPage />} />
+        <Route path="resellers/:id/edit" element={<AdminResellerFormPage />} />
+        <Route path="users" element={<AdminUsersPage />} />
+        <Route path="audit" element={<AdminAuditPage />} />
+        <Route path="settings" element={<AdminSettingsPage />} />
+        <Route path="profile" element={<StaffProfilePage />} />
+      </Route>
+
+      <Route element={<AppShell />}>
+        <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/profile" element={<StaffProfilePage />} />
+        <Route path="/students" element={<StudentsPage />} />
+        <Route path="/academics" element={<AcademicsPage />} />
+        <Route path="/attendance" element={<AttendancePage />} />
+        <Route path="/notices" element={<NoticesPage />} />
+        <Route path="/exams" element={<ExamsPage />} />
+        <Route path="/timetable" element={<RequireProductBucket bucket="LMS"><TimetablePage /></RequireProductBucket>} />
+        <Route path="/homework" element={<RequireProductBucket bucket="LMS"><HomeworkPage /></RequireProductBucket>} />
+        <Route path="/fees" element={<RequireProductBucket bucket="CMS"><FeesPage /></RequireProductBucket>} />
+        <Route path="/hr" element={<RequireProductBucket bucket="CMS"><HrPage /></RequireProductBucket>} />
+        <Route path="/documents" element={<RequireProductBucket bucket="CMS"><DocumentsPage /></RequireProductBucket>} />
+        <Route path="/erp" element={<RequireProductBucket bucket="CMS"><ErpSettingsPage /></RequireProductBucket>} />
+        <Route path="/reports" element={<ReportsPage />} />
+        <Route path="/users" element={<UsersPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
+      </Route>
+      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+    </Routes>
+  );
+}
