@@ -37,8 +37,18 @@ import {
 import { AdminUsersPage } from "./pages/super-admin/AdminUsersPage";
 import { AdminAuditPage } from "./pages/super-admin/AdminAuditPage";
 import { AdminSettingsPage } from "./pages/super-admin/AdminSettingsPage";
-import { AdminComingSoonPage } from "./pages/super-admin/AdminComingSoonPage";
 import { AdminAccountPage } from "./pages/super-admin/AdminAccountPage";
+import { AdminTransactionsPage } from "./pages/super-admin/AdminTransactionsPage";
+import { AdminBillingPage } from "./pages/super-admin/AdminBillingPage";
+import { AdminAnalyticsPage } from "./pages/super-admin/AdminAnalyticsPage";
+import { AdminClusterHealthPage } from "./pages/super-admin/AdminClusterHealthPage";
+import { AdminDeploymentLogsPage } from "./pages/super-admin/AdminDeploymentLogsPage";
+import { AdminStoragePage } from "./pages/super-admin/AdminStoragePage";
+import { AdminEdgeFunctionsPage } from "./pages/super-admin/AdminEdgeFunctionsPage";
+import { AdminReportsPage } from "./pages/super-admin/AdminReportsPage";
+import { AdminSupportPage } from "./pages/super-admin/AdminSupportPage";
+import { AdminAnnouncementsPage } from "./pages/super-admin/AdminAnnouncementsPage";
+import { AdminPaymentGatewayPage } from "./pages/super-admin/AdminPaymentGatewayPage";
 import { PortalRedirect } from "./pages/student-parent/PortalRedirect";
 import { PortalShell } from "./pages/student-parent/PortalShell";
 import { PortalHomePage } from "./pages/student-parent/PortalHomePage";
@@ -104,10 +114,17 @@ export function App() {
         <Route path="users" element={<AdminUsersPage />} />
         <Route path="audit" element={<AdminAuditPage />} />
         <Route path="settings" element={<AdminSettingsPage />} />
-        <Route path="billing" element={<AdminComingSoonPage />} />
-        <Route path="transactions" element={<AdminComingSoonPage />} />
-        <Route path="analytics" element={<AdminComingSoonPage />} />
-        <Route path="reports" element={<AdminComingSoonPage />} />
+        <Route path="billing" element={<AdminBillingPage />} />
+        <Route path="transactions" element={<AdminTransactionsPage />} />
+        <Route path="analytics" element={<AdminAnalyticsPage />} />
+        <Route path="cluster-health" element={<AdminClusterHealthPage />} />
+        <Route path="deployment-logs" element={<AdminDeploymentLogsPage />} />
+        <Route path="storage" element={<AdminStoragePage />} />
+        <Route path="edge-functions" element={<AdminEdgeFunctionsPage />} />
+        <Route path="payment-gateway" element={<AdminPaymentGatewayPage />} />
+        <Route path="support" element={<AdminSupportPage />} />
+        <Route path="announcements" element={<AdminAnnouncementsPage />} />
+        <Route path="reports" element={<AdminReportsPage />} />
         <Route path="profile" element={<AdminAccountPage />} />
       </Route>
 

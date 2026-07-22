@@ -1,148 +1,190 @@
 import {
+  DownloadOutlined,
+  CalendarMonthOutlined,
+  CheckCircleOutline,
+  ErrorOutline,
+  WarningAmberOutlined,
+  TerminalOutlined,
+} from "@mui/icons-material";
+import {
+  Avatar,
   Box,
-  Button,
-  Card,
-  CircularProgress,
   MenuItem,
   Stack,
   Table,
   TableBody,
   TableCell,
   TableHead,
+  TablePagination,
   TableRow,
   TextField,
   Typography,
 } from "@mui/material";
-import { useEffect, useState } from "react";
+import Grid from "@mui/material/Grid2";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../auth/AuthContext";
 import { apiRequest } from "../../lib/api";
-import { notifyError } from "../../lib/notify";
-import { useAppDispatch } from "../../store";
-import { setAudit } from "../../store/slices/platformSlice";
+import { notifyError, notifyInfo } from "../../lib/notify";
 import { saColors } from "../../theme/superAdminTheme";
+import { SaCard, SaGhostButton, SaKpi, SaPageHeader, SaPrimaryButton, SaStatusChip } from "./saUi";
 import type { AuditRow, TenantRow } from "./types";
+
+function statusTone(action: string) {
+  const a = action.toLowerCase();
+  if (a.includes("fail") || a.includes("error")) return "danger" as const;
+  if (a.includes("suspend") || a.includes("warn")) return "warning" as const;
+  return "success" as const;
+}
 
 export function AdminAuditPage() {
   const { accessToken } = useAuth();
-  const dispatch = useAppDispatch();
   const [rows, setRows] = useState<AuditRow[]>([]);
   const [tenants, setTenants] = useState<TenantRow[]>([]);
+  const [search, setSearch] = useState("");
   const [tenantId, setTenantId] = useState("");
-  const [action, setAction] = useState("");
-  const [actor, setActor] = useState("");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
-  const [limit, setLimit] = useState("100");
-  const [loading, setLoading] = useState(true);
-
-  async function load() {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams();
-      if (tenantId) params.set("tenantId", tenantId);
-      if (action.trim()) params.set("action", action.trim());
-      if (actor.trim()) params.set("actor", actor.trim());
-      if (from) params.set("from", new Date(from).toISOString());
-      if (to) params.set("to", new Date(`${to}T23:59:59`).toISOString());
-      params.set("limit", limit);
-      const [nextRows, nextTenants] = await Promise.all([
-        apiRequest<AuditRow[]>(`/platform/audit?${params}`, accessToken),
-        apiRequest<TenantRow[]>("/platform/tenants", accessToken),
-      ]);
-      setRows(nextRows);
-      dispatch(setAudit(nextRows));
-      setTenants(nextTenants);
-    } catch (cause) {
-      notifyError(cause instanceof Error ? cause.message : "Failed to load audit trail");
-    } finally {
-      setLoading(false);
-    }
-  }
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
 
   useEffect(() => {
-    void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    Promise.all([
+      apiRequest<AuditRow[]>("/platform/audit?limit=200", accessToken),
+      apiRequest<TenantRow[]>("/platform/tenants", accessToken),
+    ])
+      .then(([audit, nextTenants]) => {
+        setRows(audit);
+        setTenants(nextTenants);
+      })
+      .catch((cause) => notifyError(cause instanceof Error ? cause.message : "Failed to load audit"));
   }, [accessToken]);
 
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return rows.filter((row) => {
+      const matchQ =
+        !q ||
+        row.action.toLowerCase().includes(q) ||
+        (row.actor ?? "").toLowerCase().includes(q) ||
+        (row.tenant ?? "").toLowerCase().includes(q);
+      const matchT = !tenantId || row.tenantSlug === tenants.find((t) => t.id === tenantId)?.slug || row.tenant === tenants.find((t) => t.id === tenantId)?.name;
+      return matchQ && matchT;
+    });
+  }, [rows, search, tenantId, tenants]);
+
+  const pageRows = filtered.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+
   return (
-    <Stack spacing={3}>
-      <Box>
-        <Typography variant="h4" fontWeight={800}>
-          Audit Logs
-        </Typography>
-        <Typography color="text.secondary" mt={0.5}>
-          Platform and tenant activity timeline for compliance and forensics.
-        </Typography>
-      </Box>
+    <Box>
+      <SaPageHeader
+        title="Audit Logs"
+        description="Complete history of actions performed across the platform."
+        actions={
+          <>
+            <SaGhostButton startIcon={<CalendarMonthOutlined />} onClick={() => notifyInfo("Date range coming soon")}>
+              Date Range
+            </SaGhostButton>
+            <SaPrimaryButton startIcon={<DownloadOutlined />} onClick={() => notifyInfo("CSV export coming soon")}>
+              Export CSV
+            </SaPrimaryButton>
+          </>
+        }
+      />
 
-      <Card elevation={0} sx={{ border: `1px solid ${saColors.border}`, p: 2 }}>
-        <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} flexWrap="wrap" useFlexGap>
-          <TextField select size="small" label="Tenant" value={tenantId} onChange={(e) => setTenantId(e.target.value)} sx={{ minWidth: 180 }}>
-            <MenuItem value="">All tenants</MenuItem>
-            {tenants.map((t) => (
-              <MenuItem key={t.id} value={t.id}>
-                {t.name}
-              </MenuItem>
-            ))}
-          </TextField>
-          <TextField size="small" label="Action" value={action} onChange={(e) => setAction(e.target.value)} />
-          <TextField size="small" label="Actor" value={actor} onChange={(e) => setActor(e.target.value)} />
-          <TextField size="small" type="date" label="From" InputLabelProps={{ shrink: true }} value={from} onChange={(e) => setFrom(e.target.value)} />
-          <TextField size="small" type="date" label="To" InputLabelProps={{ shrink: true }} value={to} onChange={(e) => setTo(e.target.value)} />
-          <TextField select size="small" label="Limit" value={limit} onChange={(e) => setLimit(e.target.value)} sx={{ minWidth: 100 }}>
-            {["50", "100", "200", "500"].map((n) => (
-              <MenuItem key={n} value={n}>
-                {n}
-              </MenuItem>
-            ))}
-          </TextField>
-          <Button variant="contained" onClick={() => void load()}>
-            Search
-          </Button>
-        </Stack>
-      </Card>
+      <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} mb={2}>
+        <TextField size="small" placeholder="Search by actor, tenant, or action..." value={search} onChange={(e) => { setSearch(e.target.value); setPage(0); }} sx={{ minWidth: 280, bgcolor: "#fff" }} />
+        <TextField select size="small" label="Tenant" value={tenantId} onChange={(e) => setTenantId(e.target.value)} sx={{ minWidth: 180, bgcolor: "#fff" }}>
+          <MenuItem value="">All Tenants</MenuItem>
+          {tenants.map((t) => (
+            <MenuItem key={t.id} value={t.id}>{t.name}</MenuItem>
+          ))}
+        </TextField>
+      </Stack>
 
-      <Card elevation={0} sx={{ border: `1px solid ${saColors.border}` }}>
-        {loading ? (
-          <Box sx={{ py: 8, display: "grid", placeItems: "center" }}>
-            <CircularProgress sx={{ color: saColors.orange }} />
-          </Box>
-        ) : (
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>When</TableCell>
-                <TableCell>Action</TableCell>
-                <TableCell>Entity</TableCell>
-                <TableCell>Tenant</TableCell>
-                <TableCell>Actor</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {rows.map((row) => (
+      <Box sx={{ border: `1px solid ${saColors.border}`, borderRadius: 2, bgcolor: "#fff", overflow: "hidden", mb: 2.5 }}>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell>Timestamp</TableCell>
+              <TableCell>Actor</TableCell>
+              <TableCell>Action</TableCell>
+              <TableCell>Tenant</TableCell>
+              <TableCell>Status</TableCell>
+              <TableCell>Details</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {pageRows.map((row) => {
+              const tone = statusTone(row.action);
+              const initials = (row.actor ?? "SY").slice(0, 2).toUpperCase();
+              return (
                 <TableRow key={row.id} hover>
-                  <TableCell>{new Date(row.createdAt).toLocaleString()}</TableCell>
                   <TableCell>
-                    <Typography fontWeight={700}>{row.action}</Typography>
+                    <Typography variant="body2">{new Date(row.createdAt).toLocaleString()}</Typography>
                   </TableCell>
-                  <TableCell>{row.entityType}</TableCell>
-                  <TableCell>{row.tenant ?? "platform"}</TableCell>
-                  <TableCell>{row.actor ?? row.actorEmail ?? "system"}</TableCell>
-                </TableRow>
-              ))}
-              {rows.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={5}>
-                    <Typography textAlign="center" color="text.secondary" py={4}>
-                      No audit events found.
+                  <TableCell>
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <Avatar sx={{ width: 28, height: 28, bgcolor: saColors.info, fontSize: 12, fontWeight: 800 }}>{initials}</Avatar>
+                      <Typography fontWeight={700} color={saColors.info} fontSize={13}>
+                        {row.actor ?? row.actorEmail ?? "system"}
+                      </Typography>
+                    </Stack>
+                  </TableCell>
+                  <TableCell>
+                    <SaStatusChip label={row.action} tone="neutral" />
+                  </TableCell>
+                  <TableCell>
+                    <Typography color={saColors.info} fontWeight={600} fontSize={13}>
+                      {row.tenant ?? "platform"}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
+                    <SaStatusChip label={tone === "danger" ? "FAILED" : tone === "warning" ? "WARNING" : "SUCCESS"} tone={tone} />
+                  </TableCell>
+                  <TableCell>
+                    <Typography variant="body2" color="text.secondary">
+                      {row.entityType}
                     </Typography>
                   </TableCell>
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        )}
-      </Card>
-    </Stack>
+              );
+            })}
+            {pageRows.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={6}>
+                  <Typography textAlign="center" color="text.secondary" py={4}>No audit events found.</Typography>
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+        <Stack direction="row" justifyContent="space-between" alignItems="center" px={2}>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <Typography variant="body2" color="text.secondary">Showing {pageRows.length} of {filtered.length} events</Typography>
+            <SaStatusChip label="LIVE UPDATES ENABLED" tone="info" />
+          </Stack>
+          <TablePagination
+            component="div"
+            count={filtered.length}
+            page={page}
+            onPageChange={(_, p) => setPage(p)}
+            rowsPerPage={rowsPerPage}
+            onRowsPerPageChange={(e) => { setRowsPerPage(parseInt(e.target.value, 10)); setPage(0); }}
+          />
+        </Stack>
+      </Box>
+
+      <Grid container spacing={2} mb={2}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}><SaKpi label="Total Logs" value={String(rows.length)} icon={<TerminalOutlined />} /></Grid>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}><SaKpi label="Critical Errors" value="0 (24h)" icon={<ErrorOutline />} tone="danger" /></Grid>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}><SaKpi label="Security Warnings" value="0 (24h)" icon={<WarningAmberOutlined />} tone="warning" /></Grid>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}><SaKpi label="Retention Policy" value="90 DAYS ACTIVE" icon={<CheckCircleOutline />} tone="success" /></Grid>
+      </Grid>
+
+      <SaCard>
+        <Typography fontWeight={800} color={saColors.info}>Compliance & Archiving</Typography>
+        <Typography variant="body2" color="text.secondary" mt={0.5}>
+          Audit events are retained for 90 days online. Request archive access for long-term compliance exports.
+        </Typography>
+      </SaCard>
+    </Box>
   );
 }

@@ -3,9 +3,7 @@ import {
   AssessmentOutlined,
   CampaignOutlined,
   DashboardOutlined,
-  DnsOutlined,
   FunctionsOutlined,
-  GavelOutlined,
   GroupsOutlined,
   HandshakeOutlined,
   HealthAndSafetyOutlined,
@@ -47,7 +45,6 @@ import { NavLink, Navigate, Outlet, useLocation, useNavigate } from "react-route
 import { useAuth } from "../../auth/AuthContext";
 import { isPlatformUser } from "../../components/AppShell";
 import { assetUrl } from "../../lib/api";
-import { notifyInfo } from "../../lib/notify";
 import { useAppDispatch, useAppSelector } from "../../store";
 import { setGlobalSearch } from "../../store/slices/uiSlice";
 import { saColors } from "../../theme/superAdminTheme";
@@ -57,9 +54,8 @@ const DRAWER_WIDTH = 248;
 
 type NavItem = {
   label: string;
-  to?: string;
+  to: string;
   icon: ReactNode;
-  soon?: boolean;
 };
 
 type NavGroup = { title: string; items: NavItem[] };
@@ -72,18 +68,18 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Tenants", to: "/admin/tenants", icon: <HubOutlined fontSize="small" /> },
       { label: "Resellers", to: "/admin/resellers", icon: <HandshakeOutlined fontSize="small" /> },
       { label: "User Management", to: "/admin/users", icon: <GroupsOutlined fontSize="small" /> },
-      { label: "Billing & Plans", to: "/admin/billing", icon: <ReceiptLongOutlined fontSize="small" />, soon: true },
-      { label: "Transactions", to: "/admin/transactions", icon: <PaymentOutlined fontSize="small" />, soon: true },
+      { label: "Billing & Plans", to: "/admin/billing", icon: <ReceiptLongOutlined fontSize="small" /> },
+      { label: "Transactions", to: "/admin/transactions", icon: <PaymentOutlined fontSize="small" /> },
     ],
   },
   {
     title: "Infrastructure",
     items: [
-      { label: "Advanced Analytics", to: "/admin/analytics", icon: <AnalyticsOutlined fontSize="small" />, soon: true },
-      { label: "Cluster Health", icon: <HealthAndSafetyOutlined fontSize="small" />, soon: true },
-      { label: "Deployment Logs", icon: <TerminalOutlined fontSize="small" />, soon: true },
-      { label: "Storage", icon: <StorageOutlined fontSize="small" />, soon: true },
-      { label: "Edge Functions", icon: <FunctionsOutlined fontSize="small" />, soon: true },
+      { label: "Advanced Analytics", to: "/admin/analytics", icon: <AnalyticsOutlined fontSize="small" /> },
+      { label: "Cluster Health", to: "/admin/cluster-health", icon: <HealthAndSafetyOutlined fontSize="small" /> },
+      { label: "Deployment Logs", to: "/admin/deployment-logs", icon: <TerminalOutlined fontSize="small" /> },
+      { label: "Storage", to: "/admin/storage", icon: <StorageOutlined fontSize="small" /> },
+      { label: "Edge Functions", to: "/admin/edge-functions", icon: <FunctionsOutlined fontSize="small" /> },
     ],
   },
   {
@@ -91,16 +87,15 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "System Settings", to: "/admin/settings", icon: <SettingsOutlined fontSize="small" /> },
       { label: "Audit Logs", to: "/admin/audit", icon: <HistoryOutlined fontSize="small" /> },
-      { label: "Payment Gateway", icon: <PaymentOutlined fontSize="small" />, soon: true },
-      { label: "Support Center", icon: <SupportAgentOutlined fontSize="small" />, soon: true },
-      { label: "Announcement", icon: <CampaignOutlined fontSize="small" />, soon: true },
-      { label: "Reports", to: "/admin/reports", icon: <AssessmentOutlined fontSize="small" />, soon: true },
+      { label: "Payment Gateway", to: "/admin/payment-gateway", icon: <PaymentOutlined fontSize="small" /> },
+      { label: "Support Center", to: "/admin/support", icon: <SupportAgentOutlined fontSize="small" /> },
+      { label: "Announcement", to: "/admin/announcements", icon: <CampaignOutlined fontSize="small" /> },
+      { label: "Reports", to: "/admin/reports", icon: <AssessmentOutlined fontSize="small" /> },
     ],
   },
 ];
 
-function pathActive(pathname: string, to?: string) {
-  if (!to) return false;
+function pathActive(pathname: string, to: string) {
   if (to === "/admin/dashboard") return pathname === to;
   return pathname === to || pathname.startsWith(`${to}/`);
 }
@@ -171,10 +166,6 @@ function PlatformShellInner() {
                     key={item.label}
                     selected={active}
                     onClick={() => {
-                      if (item.soon || !item.to) {
-                        notifyInfo(`${item.label} is coming soon`);
-                        return;
-                      }
                       navigate(item.to);
                       setMobileOpen(false);
                     }}
@@ -183,7 +174,6 @@ function PlatformShellInner() {
                       mb: 0.35,
                       borderRadius: 1.5,
                       color: "#fff",
-                      opacity: item.soon ? 0.72 : 1,
                       "&.Mui-selected": {
                         bgcolor: saColors.navy,
                         "&:hover": { bgcolor: saColors.navyDeep },
