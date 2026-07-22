@@ -37,6 +37,7 @@ import {
 import { AdminUsersPage } from "./pages/super-admin/AdminUsersPage";
 import { AdminAuditPage } from "./pages/super-admin/AdminAuditPage";
 import { AdminSettingsPage } from "./pages/super-admin/AdminSettingsPage";
+import { AdminComingSoonPage } from "./pages/super-admin/AdminComingSoonPage";
 import { PortalRedirect } from "./pages/student-parent/PortalRedirect";
 import { PortalShell } from "./pages/student-parent/PortalShell";
 import { PortalHomePage } from "./pages/student-parent/PortalHomePage";
@@ -102,6 +103,10 @@ export function App() {
         <Route path="users" element={<AdminUsersPage />} />
         <Route path="audit" element={<AdminAuditPage />} />
         <Route path="settings" element={<AdminSettingsPage />} />
+        <Route path="billing" element={<AdminComingSoonPage />} />
+        <Route path="transactions" element={<AdminComingSoonPage />} />
+        <Route path="analytics" element={<AdminComingSoonPage />} />
+        <Route path="reports" element={<AdminComingSoonPage />} />
         <Route path="profile" element={<StaffProfilePage />} />
       </Route>
 

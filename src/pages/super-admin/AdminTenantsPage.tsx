@@ -1,221 +1,324 @@
-import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import {
+  Add,
+  FilterList,
+  MoreVert,
+  PublicOutlined,
+  SpeedOutlined,
+  TrendingUpOutlined,
+} from "@mui/icons-material";
+import {
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Chip,
+  CircularProgress,
+  IconButton,
+  InputAdornment,
+  Menu,
+  MenuItem,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TablePagination,
+  TableRow,
+  TextField,
+  Typography,
+} from "@mui/material";
+import Grid from "@mui/material/Grid2";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import { apiRequest } from "../../lib/api";
-import { OpsPageHeader, OpsPanel, opsBtnPrimary, opsBtnSecondary, opsLink, opsLinkMuted } from "./platformUi";
-import {
-  PRODUCT_MODES,
-  TENANT_STATUSES,
-  TENANT_TYPES,
-  type ProductMode,
-  type ResellerRow,
-  type TenantRow,
-  type TenantStatus,
-} from "./types";
+import { notifyError, notifySuccess } from "../../lib/notify";
+import { useAppDispatch, useAppSelector } from "../../store";
+import { setTenants, setTenantsLoading } from "../../store/slices/platformSlice";
+import { saColors } from "../../theme/superAdminTheme";
+import type { TenantRow, TenantStatus } from "./types";
+
+const STATUS_SX: Record<string, { bg: string; color: string }> = {
+  ACTIVE: { bg: "#DCFCE7", color: "#15803D" },
+  SUSPENDED: { bg: "#FFEDD5", color: "#C2410C" },
+  ARCHIVED: { bg: "#FEE2E2", color: "#B91C1C" },
+};
+
+function moduleChips(mode: string) {
+  if (mode === "BOTH") return ["CMS", "LMS"];
+  return [mode];
+}
 
 export function AdminTenantsPage() {
   const { accessToken } = useAuth();
-  const [tenants, setTenants] = useState<TenantRow[]>([]);
-  const [resellers, setResellers] = useState<ResellerRow[]>([]);
+  const dispatch = useAppDispatch();
+  const navigate = useNavigate();
+  const tenants = useAppSelector((s) => s.platform.tenants);
+  const loading = useAppSelector((s) => s.platform.tenantsLoading);
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("");
-  const [type, setType] = useState("");
-  const [productMode, setProductMode] = useState("");
-  const [resellerId, setResellerId] = useState("");
-  const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
+  const [menuTenant, setMenuTenant] = useState<TenantRow | null>(null);
 
   async function load() {
+    dispatch(setTenantsLoading(true));
     try {
       const params = new URLSearchParams();
       if (search.trim()) params.set("search", search.trim());
-      if (status) params.set("status", status);
-      if (type) params.set("type", type);
-      if (productMode) params.set("productMode", productMode);
-      if (resellerId) params.set("resellerId", resellerId);
       const qs = params.toString() ? `?${params}` : "";
-      const [nextTenants, nextResellers] = await Promise.all([
-        apiRequest<TenantRow[]>(`/platform/tenants${qs}`, accessToken),
-        apiRequest<ResellerRow[]>("/platform/resellers", accessToken),
-      ]);
-      setTenants(nextTenants);
-      setResellers(nextResellers);
+      const data = await apiRequest<TenantRow[]>(`/platform/tenants${qs}`, accessToken);
+      dispatch(setTenants(data));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Failed to load tenants");
+      notifyError(cause instanceof Error ? cause.message : "Failed to load tenants");
+      dispatch(setTenantsLoading(false));
     }
   }
 
   useEffect(() => {
     void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken]);
 
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return tenants;
+    return tenants.filter(
+      (t) => t.name.toLowerCase().includes(q) || t.slug.toLowerCase().includes(q) || t.id.toLowerCase().includes(q),
+    );
+  }, [tenants, search]);
+
+  const pageRows = filtered.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+
   async function changeStatus(id: string, next: TenantStatus) {
-    if (!window.confirm(`Set tenant status to ${next}?`)) return;
     try {
       await apiRequest(`/platform/tenants/${id}/status`, accessToken, {
         method: "PUT",
         body: JSON.stringify({ status: next }),
       });
-      setMessage(`Tenant ${next.toLowerCase()}`);
+      notifySuccess(`Tenant marked ${next.toLowerCase()}`);
+      setMenuAnchor(null);
       await load();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Failed to update status");
-    }
-  }
-
-  async function changeMode(id: string, mode: ProductMode) {
-    try {
-      await apiRequest(`/platform/tenants/${id}`, accessToken, {
-        method: "PUT",
-        body: JSON.stringify({ productMode: mode }),
-      });
-      setMessage("Product mode updated");
-      await load();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Failed to update mode");
+      notifyError(cause instanceof Error ? cause.message : "Failed to update status");
     }
   }
 
   return (
-    <div className="space-y-6">
-      <OpsPageHeader
-        title="Tenants"
-        description={`${tenants.length} institutions on the platform`}
-        action={
-          <Link className={opsBtnPrimary} to="/admin/tenants/new">
-            New tenant
-          </Link>
-        }
-      />
+    <Stack spacing={3}>
+      <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" spacing={2}>
+        <Box>
+          <Typography variant="h4" fontWeight={800}>
+            Tenants Management
+          </Typography>
+          <Typography color="text.secondary" mt={0.5}>
+            Manage organization access, subscription lifecycle, and module licensing.
+          </Typography>
+        </Box>
+        <Button
+          component={Link}
+          to="/admin/tenants/new"
+          variant="contained"
+          startIcon={<Add />}
+          sx={{ alignSelf: { sm: "flex-start" } }}
+        >
+          Create Tenant
+        </Button>
+      </Stack>
 
-      {error && <p className="alert-error">{error}</p>}
-      {message && (
-        <p className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">{message}</p>
-      )}
+      <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} alignItems={{ md: "center" }}>
+        <TextField
+          size="small"
+          placeholder="Filter by name or ID..."
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setPage(0);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void load();
+          }}
+          sx={{ minWidth: 280, bgcolor: "#fff" }}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <FilterList fontSize="small" />
+              </InputAdornment>
+            ),
+          }}
+        />
+        <Button variant="outlined" color="inherit" onClick={() => void load()}>
+          Apply Filters
+        </Button>
+        <Box flex={1} />
+        <Typography variant="body2" color="text.secondary">
+          Sort by: Date Created
+        </Typography>
+      </Stack>
 
-      <div className="grid gap-3 rounded-lg border border-zinc-200 bg-white p-5 shadow-sm md:grid-cols-5">
-        <input className="input" placeholder="Search name or slug" value={search} onChange={(e) => setSearch(e.target.value)} />
-        <select className="input" value={status} onChange={(e) => setStatus(e.target.value)}>
-          <option value="">All statuses</option>
-          {TENANT_STATUSES.map((item) => (
-            <option key={item} value={item}>
-              {item}
-            </option>
-          ))}
-        </select>
-        <select className="input" value={type} onChange={(e) => setType(e.target.value)}>
-          <option value="">All types</option>
-          {TENANT_TYPES.map((item) => (
-            <option key={item} value={item}>
-              {item}
-            </option>
-          ))}
-        </select>
-        <select className="input" value={productMode} onChange={(e) => setProductMode(e.target.value)}>
-          <option value="">All modes</option>
-          {PRODUCT_MODES.map((item) => (
-            <option key={item} value={item}>
-              {item}
-            </option>
-          ))}
-        </select>
-        <div className="flex gap-2">
-          <select className="input" value={resellerId} onChange={(e) => setResellerId(e.target.value)}>
-            <option value="">All resellers</option>
-            {resellers.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name}
-              </option>
-            ))}
-          </select>
-          <button className={opsBtnSecondary} type="button" onClick={load}>
-            Filter
-          </button>
-        </div>
-      </div>
+      <Card elevation={0} sx={{ border: `1px solid ${saColors.border}` }}>
+        {loading && tenants.length === 0 ? (
+          <Box sx={{ py: 8, display: "grid", placeItems: "center" }}>
+            <CircularProgress sx={{ color: saColors.orange }} />
+          </Box>
+        ) : (
+          <>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Tenant Name</TableCell>
+                  <TableCell>Customer Type</TableCell>
+                  <TableCell>Modules</TableCell>
+                  <TableCell>Subscription</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell>Total Users</TableCell>
+                  <TableCell>Created</TableCell>
+                  <TableCell align="right" />
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {pageRows.map((tenant) => {
+                  const status = STATUS_SX[tenant.status] ?? STATUS_SX.ARCHIVED;
+                  return (
+                    <TableRow key={tenant.id} hover sx={{ cursor: "pointer" }} onClick={() => navigate(`/admin/tenants/${tenant.id}`)}>
+                      <TableCell>
+                        <Typography fontWeight={700}>{tenant.name}</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {tenant.slug} · {tenant.id.slice(0, 8).toUpperCase()}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>{tenant.type.replaceAll("_", " ")}</TableCell>
+                      <TableCell>
+                        <Stack direction="row" spacing={0.5}>
+                          {moduleChips(tenant.productMode).map((m) => (
+                            <Chip
+                              key={m}
+                              size="small"
+                              label={m}
+                              sx={{ bgcolor: "#DBEAFE", color: "#1D4ED8", fontWeight: 700 }}
+                            />
+                          ))}
+                        </Stack>
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          size="small"
+                          label={tenant.distributionModel.replaceAll("_", " ")}
+                          sx={{ bgcolor: "#E2E8F0", fontWeight: 700 }}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          size="small"
+                          label={tenant.status}
+                          sx={{ bgcolor: status.bg, color: status.color, fontWeight: 800 }}
+                        />
+                      </TableCell>
+                      <TableCell>{tenant.users}</TableCell>
+                      <TableCell>{new Date(tenant.createdAt).toLocaleDateString()}</TableCell>
+                      <TableCell align="right" onClick={(e) => e.stopPropagation()}>
+                        <IconButton
+                          size="small"
+                          onClick={(e) => {
+                            setMenuAnchor(e.currentTarget);
+                            setMenuTenant(tenant);
+                          }}
+                        >
+                          <MoreVert fontSize="small" />
+                        </IconButton>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+                {pageRows.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={8}>
+                      <Typography py={4} textAlign="center" color="text.secondary">
+                        No tenants found.
+                      </Typography>
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+            <TablePagination
+              component="div"
+              count={filtered.length}
+              page={page}
+              onPageChange={(_, p) => setPage(p)}
+              rowsPerPage={rowsPerPage}
+              onRowsPerPageChange={(e) => {
+                setRowsPerPage(parseInt(e.target.value, 10));
+                setPage(0);
+              }}
+              rowsPerPageOptions={[5, 10, 25]}
+            />
+          </>
+        )}
+      </Card>
 
-      <OpsPanel title="Tenant registry" code="02">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="text-left font-mono text-[10px] uppercase tracking-wider text-zinc-500">
-              <tr>
-                <th className="pb-3 pr-3">Tenant</th>
-                <th className="pb-3 pr-3">Type</th>
-                <th className="pb-3 pr-3">Mode</th>
-                <th className="pb-3 pr-3">Distribution</th>
-                <th className="pb-3 pr-3">Reseller</th>
-                <th className="pb-3 pr-3">Users</th>
-                <th className="pb-3 pr-3">Students</th>
-                <th className="pb-3 pr-3">Status</th>
-                <th className="pb-3">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-100">
-              {tenants.map((tenant) => (
-                <tr key={tenant.id}>
-                  <td className="py-3 pr-3">
-                    <Link className={opsLink} to={`/admin/tenants/${tenant.id}`}>
-                      {tenant.name}
-                    </Link>
-                    <span className="ml-2 font-mono text-xs text-zinc-400">/{tenant.slug}</span>
-                  </td>
-                  <td className="py-3 pr-3 text-zinc-700">{tenant.type}</td>
-                  <td className="py-3 pr-3">
-                    <select
-                      className="input py-1 text-xs"
-                      value={tenant.productMode}
-                      disabled={tenant.type === "INDIVIDUAL"}
-                      onChange={(e) => changeMode(tenant.id, e.target.value as ProductMode)}
-                    >
-                      {PRODUCT_MODES.map((mode) => (
-                        <option key={mode} value={mode} disabled={tenant.type === "INDIVIDUAL" && mode !== "LMS"}>
-                          {mode}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="py-3 pr-3 text-zinc-700">{tenant.distributionModel}</td>
-                  <td className="py-3 pr-3 text-zinc-700">{tenant.reseller?.name ?? "—"}</td>
-                  <td className="py-3 pr-3 text-zinc-700">{tenant.users}</td>
-                  <td className="py-3 pr-3 text-zinc-700">{tenant.students}</td>
-                  <td className="py-3 pr-3">
-                    <span className={tenant.status === "ACTIVE" ? "badge-success" : "badge-danger"}>{tenant.status}</span>
-                  </td>
-                  <td className="py-3">
-                    <div className="flex flex-wrap gap-2">
-                      <Link className={opsLinkMuted} to={`/admin/tenants/${tenant.id}/edit`}>
-                        Edit
-                      </Link>
-                      {tenant.status !== "ACTIVE" && (
-                        <button className="text-xs font-semibold text-emerald-700" type="button" onClick={() => changeStatus(tenant.id, "ACTIVE")}>
-                          Activate
-                        </button>
-                      )}
-                      {tenant.status !== "SUSPENDED" && (
-                        <button className="text-xs font-semibold text-amber-700" type="button" onClick={() => changeStatus(tenant.id, "SUSPENDED")}>
-                          Suspend
-                        </button>
-                      )}
-                      {tenant.status !== "ARCHIVED" && (
-                        <button className="text-xs font-semibold text-rose-700" type="button" onClick={() => changeStatus(tenant.id, "ARCHIVED")}>
-                          Archive
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {tenants.length === 0 && (
-                <tr>
-                  <td className="py-8 text-zinc-400" colSpan={9}>
-                    No tenants match these filters.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </OpsPanel>
-    </div>
+      <Grid container spacing={2}>
+        {[
+          { label: "Global Reach", value: `${tenants.length} Tenants`, icon: <PublicOutlined />, color: saColors.success },
+          { label: "Growth Index", value: `${tenants.filter((t) => t.status === "ACTIVE").length} Active`, icon: <TrendingUpOutlined />, color: saColors.info },
+          { label: "Sync Status", value: "99.9% Uptime", icon: <SpeedOutlined />, color: saColors.orange },
+        ].map((card) => (
+          <Grid key={card.label} size={{ xs: 12, md: 4 }}>
+            <Card elevation={0} sx={{ border: `1px solid ${saColors.border}` }}>
+              <CardContent>
+                <Stack direction="row" spacing={1.5} alignItems="center">
+                  <Box
+                    sx={{
+                      width: 42,
+                      height: 42,
+                      borderRadius: 2,
+                      bgcolor: `${card.color}18`,
+                      color: card.color,
+                      display: "grid",
+                      placeItems: "center",
+                    }}
+                  >
+                    {card.icon}
+                  </Box>
+                  <Box>
+                    <Typography variant="overline" color="text.secondary">
+                      {card.label}
+                    </Typography>
+                    <Typography variant="h6" fontWeight={800}>
+                      {card.value}
+                    </Typography>
+                  </Box>
+                </Stack>
+              </CardContent>
+            </Card>
+          </Grid>
+        ))}
+      </Grid>
+
+      <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={() => setMenuAnchor(null)}>
+        <MenuItem
+          onClick={() => {
+            if (menuTenant) navigate(`/admin/tenants/${menuTenant.id}`);
+            setMenuAnchor(null);
+          }}
+        >
+          View details
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
+            if (menuTenant) navigate(`/admin/tenants/${menuTenant.id}/edit`);
+            setMenuAnchor(null);
+          }}
+        >
+          Edit
+        </MenuItem>
+        {menuTenant?.status === "ACTIVE" && (
+          <MenuItem onClick={() => menuTenant && void changeStatus(menuTenant.id, "SUSPENDED")}>Suspend</MenuItem>
+        )}
+        {menuTenant?.status === "SUSPENDED" && (
+          <MenuItem onClick={() => menuTenant && void changeStatus(menuTenant.id, "ACTIVE")}>Activate</MenuItem>
+        )}
+      </Menu>
+    </Stack>
   );
 }

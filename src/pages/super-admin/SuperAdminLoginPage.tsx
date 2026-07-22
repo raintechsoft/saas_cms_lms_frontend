@@ -1,200 +1,203 @@
-import { useEffect, useState, type FormEvent } from "react";
+import {
+  LockOutlined,
+  ShieldOutlined,
+  Visibility,
+  VisibilityOff,
+} from "@mui/icons-material";
+import {
+  Box,
+  Button,
+  Checkbox,
+  FormControlLabel,
+  IconButton,
+  InputAdornment,
+  Link as MuiLink,
+  Paper,
+  Stack,
+  TextField,
+  Typography,
+} from "@mui/material";
+import { useState, type FormEvent } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
-import { LoginAuthExtras } from "../../components/auth/LoginAuthExtras";
 import { isPlatformUser } from "../../components/AppShell";
-import { getAuthConfig, requestLoginOtp, verifyLoginOtp } from "../../lib/api";
-
-type AuthMethod = "password" | "otp";
-const viteGoogleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
+import { notifyError, notifySuccess } from "../../lib/notify";
+import { saColors } from "../../theme/superAdminTheme";
+import { SuperAdminThemeProvider } from "./SuperAdminThemeProvider";
 
 export function SuperAdminLoginPage() {
-  const { login, loginWithGoogleToken, completeLogin, isAuthenticated, user } = useAuth();
+  return (
+    <SuperAdminThemeProvider>
+      <SuperAdminLoginInner />
+    </SuperAdminThemeProvider>
+  );
+}
+
+function SuperAdminLoginInner() {
+  const { login, isAuthenticated, user } = useAuth();
   const navigate = useNavigate();
-  const [authMethod, setAuthMethod] = useState<AuthMethod>("password");
   const [email, setEmail] = useState("admin@saas-cms-lms.local");
   const [password, setPassword] = useState("");
-  const [otpCode, setOtpCode] = useState("");
-  const [otpRequested, setOtpRequested] = useState(false);
-  const [otpInfo, setOtpInfo] = useState("");
-  const [googleClientId, setGoogleClientId] = useState<string | null>(
-    viteGoogleClientId?.trim() || null,
-  );
-  const [error, setError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [remember, setRemember] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-
-  useEffect(() => {
-    if (viteGoogleClientId?.trim()) return;
-    getAuthConfig()
-      .then((config) => setGoogleClientId(config.googleClientId))
-      .catch(() => undefined);
-  }, []);
 
   if (isAuthenticated && user && isPlatformUser(user.permissions)) {
     return <Navigate to="/admin/dashboard" replace />;
   }
   if (isAuthenticated) return <Navigate to="/dashboard" replace />;
 
-  async function handlePasswordSubmit(event: FormEvent) {
+  async function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    setError("");
     setSubmitting(true);
     try {
       await login({ email, password });
+      notifySuccess("Signed in to Admin Portal");
       navigate("/admin/dashboard", { replace: true });
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to sign in");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function handleRequestOtp() {
-    if (!email.trim()) {
-      setError("Enter your email before requesting a code");
-      return;
-    }
-    setError("");
-    setOtpInfo("");
-    setSubmitting(true);
-    try {
-      const result = await requestLoginOtp({ email });
-      setOtpRequested(true);
-      setOtpInfo(
-        result.devCode ? `${result.message} Dev code: ${result.devCode}` : result.message,
-      );
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to send code");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function handleVerifyOtp() {
-    setError("");
-    setSubmitting(true);
-    try {
-      const result = await verifyLoginOtp({ email, code: otpCode });
-      completeLogin(result);
-      navigate("/admin/dashboard", { replace: true });
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Invalid sign-in code");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function handleGoogleCredential(idToken: string) {
-    setError("");
-    setSubmitting(true);
-    try {
-      await loginWithGoogleToken({ idToken });
-      navigate("/admin/dashboard", { replace: true });
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Google sign-in failed");
+      notifyError(cause instanceof Error ? cause.message : "Unable to sign in");
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <main className="grid min-h-screen bg-[#f7f5f0] lg:grid-cols-2">
-      <section className="relative hidden overflow-hidden bg-zinc-950 p-14 text-white lg:flex lg:flex-col lg:justify-between">
-        <div
-          className="pointer-events-none absolute inset-0 opacity-[0.08]"
-          style={{
-            backgroundImage:
-              "linear-gradient(#f59e0b 1px, transparent 1px), linear-gradient(90deg, #f59e0b 1px, transparent 1px)",
-            backgroundSize: "32px 32px",
-          }}
-        />
-        <div className="relative">
-          <p className="font-mono text-[11px] font-bold uppercase tracking-[0.28em] text-amber-400">SaaS CMS LMS</p>
-          <p className="mt-2 text-sm font-semibold text-zinc-300">Ops Console</p>
-        </div>
-        <div className="relative max-w-lg">
-          <p className="mb-3 font-mono text-xs font-bold uppercase tracking-[0.22em] text-amber-400">
-            Restricted access
-          </p>
-          <h1 className="text-4xl font-semibold leading-tight tracking-tight">Platform command plane</h1>
-          <p className="mt-5 text-base leading-7 text-zinc-400">
-            Separate from campus teacher and student panels. Sign in here only for platform-wide tenant and
-            reseller operations.
-          </p>
-        </div>
-        <p className="relative font-mono text-xs text-zinc-600">super-admin · network control</p>
-      </section>
-
-      <section className="flex items-center justify-center px-6 py-12">
-        <div className="w-full max-w-md rounded-lg border border-zinc-200 bg-white p-8 shadow-sm">
-          <p className="font-mono text-[11px] font-bold uppercase tracking-[0.2em] text-amber-700">
-            Operator login
-          </p>
-          <h2 className="mt-2 text-3xl font-semibold tracking-tight text-zinc-950">Super Admin</h2>
-          <p className="mt-3 text-sm text-zinc-500">No workspace slug — platform identity only.</p>
-
-          <div className="mt-8 space-y-5">
-            <label className="block">
-              <span className="label">Email</span>
-              <input
-                className="input"
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                autoComplete="username"
-              />
-            </label>
-
-            <LoginAuthExtras
-              method={authMethod}
-              onMethodChange={(method) => {
-                setAuthMethod(method);
-                setError("");
+    <Box
+      sx={{
+        minHeight: "100vh",
+        display: "grid",
+        placeItems: "center",
+        px: 2,
+        py: 4,
+        background: `
+          radial-gradient(circle at 18% 22%, rgba(37,99,235,0.18), transparent 42%),
+          radial-gradient(circle at 82% 18%, rgba(255,107,53,0.16), transparent 40%),
+          radial-gradient(circle at 70% 78%, rgba(0,43,91,0.12), transparent 45%),
+          linear-gradient(180deg, #EEF2F6 0%, #F7F8FA 100%)
+        `,
+      }}
+    >
+      <Paper
+        elevation={0}
+        sx={{
+          width: "100%",
+          maxWidth: 440,
+          p: { xs: 3, sm: 4 },
+          borderRadius: 3,
+          border: `1px solid ${saColors.border}`,
+          boxShadow: "0 18px 50px rgba(15, 23, 42, 0.08)",
+        }}
+      >
+        <Stack spacing={0.75} alignItems="center" mb={3}>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <Box
+              sx={{
+                width: 36,
+                height: 36,
+                borderRadius: 1.5,
+                bgcolor: saColors.info,
+                display: "grid",
+                placeItems: "center",
+                color: "#fff",
               }}
-              otpCode={otpCode}
-              onOtpCodeChange={setOtpCode}
-              onRequestOtp={handleRequestOtp}
-              onVerifyOtp={handleVerifyOtp}
-              otpRequested={otpRequested}
-              otpInfo={otpInfo}
-              submitting={submitting}
-              googleClientId={googleClientId}
-              onGoogleCredential={handleGoogleCredential}
-              onGoogleError={setError}
-              forgotPasswordPath="/forgot-password?platform=1"
-              tone="light"
-            />
+            >
+              <ShieldOutlined fontSize="small" />
+            </Box>
+            <Typography fontWeight={800} color={saColors.info}>
+              SaaS Super Admin
+            </Typography>
+          </Stack>
+          <Typography variant="h5" fontWeight={800} textAlign="center" mt={1.5}>
+            Sign in to Admin Portal
+          </Typography>
+          <Typography variant="body2" color="text.secondary" textAlign="center">
+            Manage enterprise infrastructure and user access.
+          </Typography>
+        </Stack>
 
-            {authMethod === "password" && (
-              <form className="space-y-5" onSubmit={handlePasswordSubmit}>
-                <label className="block">
-                  <span className="label">Password</span>
-                  <input
-                    className="input"
-                    type="password"
-                    required
-                    minLength={8}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    autoComplete="current-password"
-                  />
-                </label>
-                {error && <p className="alert-error">{error}</p>}
-                <button
-                  className="w-full rounded-md bg-zinc-950 px-4 py-3 text-sm font-bold text-amber-400 transition hover:bg-zinc-800 disabled:opacity-60"
-                  type="submit"
-                  disabled={submitting}
-                >
-                  {submitting ? "Authenticating…" : "Enter ops console"}
-                </button>
-              </form>
-            )}
+        <Box component="form" onSubmit={handleSubmit}>
+          <Typography variant="overline" color="text.secondary" display="block" mb={0.5}>
+            Admin Email
+          </Typography>
+          <TextField
+            fullWidth
+            size="medium"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            sx={{ mb: 2 }}
+          />
 
-            {authMethod === "otp" && error && <p className="alert-error">{error}</p>}
-          </div>
-        </div>
-      </section>
-    </main>
+          <Stack direction="row" justifyContent="space-between" alignItems="center" mb={0.5}>
+            <Typography variant="overline" color="text.secondary">
+              Password
+            </Typography>
+            <MuiLink href="/forgot-password" underline="hover" variant="caption" fontWeight={600}>
+              Forgot password?
+            </MuiLink>
+          </Stack>
+          <TextField
+            fullWidth
+            size="medium"
+            type={showPassword ? "text" : "password"}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton edge="end" onClick={() => setShowPassword((v) => !v)}>
+                    {showPassword ? <VisibilityOff /> : <Visibility />}
+                  </IconButton>
+                </InputAdornment>
+              ),
+            }}
+            sx={{ mb: 1 }}
+          />
+
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={remember}
+                onChange={(e) => setRemember(e.target.checked)}
+                sx={{ color: saColors.info, "&.Mui-checked": { color: saColors.info } }}
+              />
+            }
+            label={<Typography variant="body2">Remember this device</Typography>}
+            sx={{ mb: 2 }}
+          />
+
+          <Button
+            type="submit"
+            fullWidth
+            variant="contained"
+            size="large"
+            disabled={submitting}
+            startIcon={<LockOutlined />}
+            sx={{
+              py: 1.35,
+              bgcolor: saColors.info,
+              "&:hover": { bgcolor: "#1D4ED8" },
+            }}
+          >
+            {submitting ? "Signing in…" : "Sign In to Dashboard"}
+          </Button>
+        </Box>
+
+        <Box sx={{ mt: 3, pt: 2.5, borderTop: `1px solid ${saColors.border}`, textAlign: "center" }}>
+          <Typography variant="caption" color="text.secondary" display="block">
+            System version: v4.12.0-stable
+          </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: "block", letterSpacing: 0.6 }}>
+            PRIVACY POLICY · SYSTEM STATUS
+          </Typography>
+        </Box>
+      </Paper>
+
+      <Typography variant="caption" color="text.secondary" sx={{ mt: 3, maxWidth: 480, textAlign: "center" }}>
+        Authorized access only. All actions on this system are logged and monitored for security purposes.
+      </Typography>
+    </Box>
   );
 }

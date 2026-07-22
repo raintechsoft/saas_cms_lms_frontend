@@ -1,109 +1,206 @@
+import {
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Stack,
+  Switch,
+  FormControlLabel,
+  TextField,
+  Typography,
+  CircularProgress,
+} from "@mui/material";
+import Grid from "@mui/material/Grid2";
 import { useEffect, useState, type FormEvent } from "react";
 import { useAuth } from "../../auth/AuthContext";
 import { apiRequest } from "../../lib/api";
-import { OpsPageHeader, OpsPanel, opsBtnPrimary } from "./platformUi";
-import type { PlatformSettings } from "./types";
+import { notifyError, notifySuccess } from "../../lib/notify";
+import { saColors } from "../../theme/superAdminTheme";
+import type { AuditRow, PlatformSettings } from "./types";
 
 export function AdminSettingsPage() {
-  const { accessToken } = useAuth();
+  const { accessToken, user } = useAuth();
   const [settings, setSettings] = useState<PlatformSettings | null>(null);
-  const [primaryColor, setPrimaryColor] = useState("#f59e0b");
+  const [audit, setAudit] = useState<AuditRow[]>([]);
+  const [primaryColor, setPrimaryColor] = useState("#FF6B35");
   const [logoText, setLogoText] = useState("SaaS CMS LMS");
-  const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
+  const [platformName, setPlatformName] = useState("Enterprise SaaS Super Admin");
+  const [supportEmail, setSupportEmail] = useState("infrastructure-support@enterprise.io");
+  const [maintenance, setMaintenance] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    apiRequest<PlatformSettings>("/platform/settings", accessToken)
-      .then((data) => {
+    Promise.all([
+      apiRequest<PlatformSettings>("/platform/settings", accessToken),
+      apiRequest<AuditRow[]>("/platform/audit?limit=5", accessToken),
+    ])
+      .then(([data, nextAudit]) => {
         setSettings(data);
         setPrimaryColor(data.brandingDefaults.primaryColor);
         setLogoText(data.brandingDefaults.logoText);
+        setAudit(nextAudit);
       })
-      .catch((cause) => setError(cause instanceof Error ? cause.message : "Failed to load settings"));
+      .catch((cause) => notifyError(cause instanceof Error ? cause.message : "Failed to load settings"));
   }, [accessToken]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     setSubmitting(true);
-    setError("");
-    setMessage("");
     try {
       const next = await apiRequest<PlatformSettings>("/platform/settings", accessToken, {
         method: "PUT",
         body: JSON.stringify({ branding: { primaryColor, logoText } }),
       });
       setSettings(next);
-      setMessage("Platform branding defaults saved");
+      notifySuccess("Configuration saved successfully");
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Failed to save settings");
+      notifyError(cause instanceof Error ? cause.message : "Failed to save settings");
     } finally {
       setSubmitting(false);
     }
   }
 
-  if (error && !settings) return <p className="alert-error">{error}</p>;
-  if (!settings) return <p className="text-sm text-zinc-500">Loading settings…</p>;
+  if (!settings) {
+    return (
+      <Box sx={{ py: 10, display: "grid", placeItems: "center" }}>
+        <CircularProgress sx={{ color: saColors.orange }} />
+      </Box>
+    );
+  }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
-      <OpsPageHeader title="Platform Settings" description="Default branding and environment metadata" />
-      {error && <p className="alert-error">{error}</p>}
-      {message && (
-        <p className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">{message}</p>
-      )}
+    <Grid container spacing={2}>
+      <Grid size={{ xs: 12, md: 3 }}>
+        <Card elevation={0} sx={{ border: `1px solid ${saColors.border}`, height: "100%" }}>
+          <CardContent>
+            <Typography fontWeight={800}>Platform Settings</Typography>
+            <Typography variant="body2" color="text.secondary" mb={2}>
+              Global infrastructure configuration.
+            </Typography>
+            {["General", "Notifications", "Payments", "Security", "Languages", "API Management"].map(
+              (item, idx) => (
+                <Box
+                  key={item}
+                  sx={{
+                    px: 1.5,
+                    py: 1,
+                    mb: 0.5,
+                    borderRadius: 1.5,
+                    bgcolor: idx === 0 ? "#DBEAFE" : "transparent",
+                    color: idx === 0 ? saColors.navy : saColors.text,
+                    fontWeight: idx === 0 ? 700 : 500,
+                    fontSize: 14,
+                  }}
+                >
+                  {item}
+                </Box>
+              ),
+            )}
+            <Typography variant="overline" color="text.secondary" display="block" mt={3} mb={1}>
+              Audit History
+            </Typography>
+            <Stack spacing={1.25}>
+              {audit.map((row) => (
+                <Box key={row.id} sx={{ p: 1.25, borderRadius: 1.5, bgcolor: "#F8FAFC", border: `1px solid ${saColors.border}` }}>
+                  <Typography variant="body2" fontWeight={700}>
+                    {row.action}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {row.actor ?? "system"} · {new Date(row.createdAt).toLocaleString()}
+                  </Typography>
+                </Box>
+              ))}
+            </Stack>
+          </CardContent>
+        </Card>
+      </Grid>
 
-      <OpsPanel title="Branding defaults" code="06">
-        <form className="space-y-4" onSubmit={submit}>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="text-sm font-medium text-zinc-700">
-              Primary color
-              <input className="input mt-1" type="color" value={primaryColor} onChange={(e) => setPrimaryColor(e.target.value)} />
-            </label>
-            <label className="text-sm font-medium text-zinc-700">
-              Logo text
-              <input className="input mt-1" required value={logoText} onChange={(e) => setLogoText(e.target.value)} />
-            </label>
-          </div>
-          <button className={opsBtnPrimary} type="submit" disabled={submitting}>
-            {submitting ? "Saving…" : "Save defaults"}
-          </button>
-        </form>
-      </OpsPanel>
+      <Grid size={{ xs: 12, md: 9 }}>
+        <Stack spacing={2} component="form" onSubmit={submit}>
+          <Box>
+            <Typography variant="h5" fontWeight={800}>
+              General Platform Configuration
+            </Typography>
+            <Typography color="text.secondary">Identity, accessibility, and default branding.</Typography>
+          </Box>
 
-      <OpsPanel title="Security" code="SEC">
-        <div className="space-y-3 text-sm">
-          <p>
-            JWT expiry: <strong>{settings.security.jwtExpiresIn}</strong>
-          </p>
-          <ul className="list-disc space-y-1 pl-5 text-zinc-600">
-            {settings.security.notes.map((note) => (
-              <li key={note}>{note}</li>
-            ))}
-          </ul>
-        </div>
-      </OpsPanel>
+          <Card elevation={0} sx={{ border: `1px solid ${saColors.border}` }}>
+            <CardContent>
+              <Typography fontWeight={700} mb={2}>
+                Identity & Accessibility
+              </Typography>
+              <Grid container spacing={2}>
+                <Grid size={{ xs: 12 }}>
+                  <TextField
+                    fullWidth
+                    label="Platform Name"
+                    value={platformName}
+                    onChange={(e) => setPlatformName(e.target.value)}
+                  />
+                </Grid>
+                <Grid size={{ xs: 12, md: 6 }}>
+                  <TextField
+                    fullWidth
+                    label="Support Contact Email"
+                    value={supportEmail}
+                    onChange={(e) => setSupportEmail(e.target.value)}
+                  />
+                </Grid>
+                <Grid size={{ xs: 12, md: 6 }}>
+                  <TextField fullWidth label="Logo Text" value={logoText} onChange={(e) => setLogoText(e.target.value)} />
+                </Grid>
+                <Grid size={{ xs: 12, md: 6 }}>
+                  <TextField
+                    fullWidth
+                    label="Primary Brand Color"
+                    value={primaryColor}
+                    onChange={(e) => setPrimaryColor(e.target.value)}
+                  />
+                </Grid>
+                <Grid size={{ xs: 12 }}>
+                  <FormControlLabel
+                    control={<Switch checked={maintenance} onChange={(e) => setMaintenance(e.target.checked)} />}
+                    label="Maintenance Mode — System Accessibility State"
+                  />
+                </Grid>
+              </Grid>
+            </CardContent>
+          </Card>
 
-      <OpsPanel title="Environment" code="ENV">
-        <dl className="grid gap-2 text-sm sm:grid-cols-2">
-          <div>
-            <dt className="text-zinc-500">NODE_ENV</dt>
-            <dd>{settings.environment.nodeEnv}</dd>
-          </div>
-          <div>
-            <dt className="text-zinc-500">API port</dt>
-            <dd>{settings.environment.apiPort}</dd>
-          </div>
-          <div>
-            <dt className="text-zinc-500">Web origin</dt>
-            <dd>{settings.environment.webOrigin}</dd>
-          </div>
-          <div>
-            <dt className="text-zinc-500">Version</dt>
-            <dd>{settings.environment.version}</dd>
-          </div>
-        </dl>
-      </OpsPanel>
-    </div>
+          <Card elevation={0} sx={{ border: `1px solid ${saColors.border}` }}>
+            <CardContent>
+              <Typography fontWeight={700} mb={1}>
+                Environment
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Node: {settings.environment.nodeEnv} · API Port: {settings.environment.apiPort} · Origin:{" "}
+                {settings.environment.webOrigin} · Version: {settings.environment.version}
+              </Typography>
+            </CardContent>
+          </Card>
+
+          <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ sm: "center" }} spacing={1}>
+            <Typography variant="caption" color="text.secondary">
+              Last updated by {user?.firstName} {user?.lastName}
+            </Typography>
+            <Stack direction="row" spacing={1}>
+              <Button
+                variant="outlined"
+                color="inherit"
+                onClick={() => {
+                  setPrimaryColor(settings.brandingDefaults.primaryColor);
+                  setLogoText(settings.brandingDefaults.logoText);
+                }}
+              >
+                Reset Changes
+              </Button>
+              <Button type="submit" variant="contained" disabled={submitting}>
+                {submitting ? "Saving…" : "Save Configuration"}
+              </Button>
+            </Stack>
+          </Stack>
+        </Stack>
+      </Grid>
+    </Grid>
   );
 }

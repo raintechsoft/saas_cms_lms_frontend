@@ -1,11 +1,30 @@
+import {
+  Box,
+  Button,
+  Card,
+  CircularProgress,
+  MenuItem,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  TextField,
+  Typography,
+} from "@mui/material";
 import { useEffect, useState } from "react";
 import { useAuth } from "../../auth/AuthContext";
 import { apiRequest } from "../../lib/api";
-import { OpsPageHeader, OpsPanel, opsBtnSecondary } from "./platformUi";
+import { notifyError } from "../../lib/notify";
+import { useAppDispatch } from "../../store";
+import { setAudit } from "../../store/slices/platformSlice";
+import { saColors } from "../../theme/superAdminTheme";
 import type { AuditRow, TenantRow } from "./types";
 
 export function AdminAuditPage() {
   const { accessToken } = useAuth();
+  const dispatch = useAppDispatch();
   const [rows, setRows] = useState<AuditRow[]>([]);
   const [tenants, setTenants] = useState<TenantRow[]>([]);
   const [tenantId, setTenantId] = useState("");
@@ -14,9 +33,10 @@ export function AdminAuditPage() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [limit, setLimit] = useState("100");
-  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
 
   async function load() {
+    setLoading(true);
     try {
       const params = new URLSearchParams();
       if (tenantId) params.set("tenantId", tenantId);
@@ -30,86 +50,99 @@ export function AdminAuditPage() {
         apiRequest<TenantRow[]>("/platform/tenants", accessToken),
       ]);
       setRows(nextRows);
+      dispatch(setAudit(nextRows));
       setTenants(nextTenants);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Failed to load audit trail");
+      notifyError(cause instanceof Error ? cause.message : "Failed to load audit trail");
+    } finally {
+      setLoading(false);
     }
   }
 
   useEffect(() => {
     void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken]);
 
   return (
-    <div className="space-y-6">
-      <OpsPageHeader title="Audit Trail" description="Platform and tenant activity log" />
-      {error && <p className="alert-error">{error}</p>}
+    <Stack spacing={3}>
+      <Box>
+        <Typography variant="h4" fontWeight={800}>
+          Audit Logs
+        </Typography>
+        <Typography color="text.secondary" mt={0.5}>
+          Platform and tenant activity timeline for compliance and forensics.
+        </Typography>
+      </Box>
 
-      <div className="grid gap-3 rounded-lg border border-zinc-200 bg-white p-5 shadow-sm md:grid-cols-3 xl:grid-cols-6">
-        <select className="input" value={tenantId} onChange={(e) => setTenantId(e.target.value)}>
-          <option value="">All tenants</option>
-          {tenants.map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.name}
-            </option>
-          ))}
-        </select>
-        <input className="input" placeholder="Action contains…" value={action} onChange={(e) => setAction(e.target.value)} />
-        <input className="input" placeholder="Actor name or email" value={actor} onChange={(e) => setActor(e.target.value)} />
-        <input className="input" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
-        <input className="input" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
-        <div className="flex gap-2">
-          <select className="input" value={limit} onChange={(e) => setLimit(e.target.value)}>
-            <option value="50">50</option>
-            <option value="100">100</option>
-            <option value="200">200</option>
-            <option value="300">300</option>
-          </select>
-          <button className={opsBtnSecondary} type="button" onClick={load}>
-            Filter
-          </button>
-        </div>
-      </div>
+      <Card elevation={0} sx={{ border: `1px solid ${saColors.border}`, p: 2 }}>
+        <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} flexWrap="wrap" useFlexGap>
+          <TextField select size="small" label="Tenant" value={tenantId} onChange={(e) => setTenantId(e.target.value)} sx={{ minWidth: 180 }}>
+            <MenuItem value="">All tenants</MenuItem>
+            {tenants.map((t) => (
+              <MenuItem key={t.id} value={t.id}>
+                {t.name}
+              </MenuItem>
+            ))}
+          </TextField>
+          <TextField size="small" label="Action" value={action} onChange={(e) => setAction(e.target.value)} />
+          <TextField size="small" label="Actor" value={actor} onChange={(e) => setActor(e.target.value)} />
+          <TextField size="small" type="date" label="From" InputLabelProps={{ shrink: true }} value={from} onChange={(e) => setFrom(e.target.value)} />
+          <TextField size="small" type="date" label="To" InputLabelProps={{ shrink: true }} value={to} onChange={(e) => setTo(e.target.value)} />
+          <TextField select size="small" label="Limit" value={limit} onChange={(e) => setLimit(e.target.value)} sx={{ minWidth: 100 }}>
+            {["50", "100", "200", "500"].map((n) => (
+              <MenuItem key={n} value={n}>
+                {n}
+              </MenuItem>
+            ))}
+          </TextField>
+          <Button variant="contained" onClick={() => void load()}>
+            Search
+          </Button>
+        </Stack>
+      </Card>
 
-      <OpsPanel title="Event log" code="05">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="text-left font-mono text-[10px] uppercase tracking-wider text-zinc-500">
-              <tr>
-                <th className="pb-3 pr-3">When</th>
-                <th className="pb-3 pr-3">Action</th>
-                <th className="pb-3 pr-3">Entity</th>
-                <th className="pb-3 pr-3">Tenant</th>
-                <th className="pb-3">Actor</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-100">
+      <Card elevation={0} sx={{ border: `1px solid ${saColors.border}` }}>
+        {loading ? (
+          <Box sx={{ py: 8, display: "grid", placeItems: "center" }}>
+            <CircularProgress sx={{ color: saColors.orange }} />
+          </Box>
+        ) : (
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>When</TableCell>
+                <TableCell>Action</TableCell>
+                <TableCell>Entity</TableCell>
+                <TableCell>Tenant</TableCell>
+                <TableCell>Actor</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
               {rows.map((row) => (
-                <tr key={row.id}>
-                  <td className="whitespace-nowrap py-3 pr-3">{new Date(row.createdAt).toLocaleString()}</td>
-                  <td className="py-3 pr-3 font-medium text-zinc-900">{row.action}</td>
-                  <td className="py-3 pr-3">{row.entityType}</td>
-                  <td className="py-3 pr-3">
-                    {row.tenant ?? "Platform"}
-                    {row.tenantSlug ? ` (/${row.tenantSlug})` : ""}
-                  </td>
-                  <td className="py-3">
-                    <span className="block">{row.actor ?? "—"}</span>
-                    {row.actorEmail && <span className="text-xs text-zinc-400">{row.actorEmail}</span>}
-                  </td>
-                </tr>
+                <TableRow key={row.id} hover>
+                  <TableCell>{new Date(row.createdAt).toLocaleString()}</TableCell>
+                  <TableCell>
+                    <Typography fontWeight={700}>{row.action}</Typography>
+                  </TableCell>
+                  <TableCell>{row.entityType}</TableCell>
+                  <TableCell>{row.tenant ?? "platform"}</TableCell>
+                  <TableCell>{row.actor ?? row.actorEmail ?? "system"}</TableCell>
+                </TableRow>
               ))}
               {rows.length === 0 && (
-                <tr>
-                  <td className="py-8 text-zinc-400" colSpan={5}>
-                    No audit events match these filters.
-                  </td>
-                </tr>
+                <TableRow>
+                  <TableCell colSpan={5}>
+                    <Typography textAlign="center" color="text.secondary" py={4}>
+                      No audit events found.
+                    </Typography>
+                  </TableCell>
+                </TableRow>
               )}
-            </tbody>
-          </table>
-        </div>
-      </OpsPanel>
-    </div>
+            </TableBody>
+          </Table>
+        )}
+      </Card>
+    </Stack>
   );
 }
