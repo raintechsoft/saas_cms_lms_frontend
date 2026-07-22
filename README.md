@@ -2,6 +2,8 @@
 
 React + Vite + Tailwind management UI (campus, portal, Super Admin).
 
+> **Continuing in Cursor?** Read [`PROJECT_CONTEXT.md`](./PROJECT_CONTEXT.md) first (and the backend `PROJECT_CONTEXT.md`).
+
 ## Setup
 
 ```powershell
