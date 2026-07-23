@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 
-import { Navigate, useNavigate } from "react-router-dom";
+import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 
 import { useAuth } from "../../auth/AuthContext";
 
@@ -103,16 +103,17 @@ export function LoginPage() {
   const { login, loginWithGoogleToken, completeLogin, isAuthenticated, user } = useAuth();
 
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const [selectedLogin, setSelectedLogin] = useState<LoginOption | null>(null);
 
   const [authMethod, setAuthMethod] = useState<AuthMethod>("password");
 
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(searchParams.get("email") ?? "");
 
   const [password, setPassword] = useState("");
 
-  const [tenantSlug, setTenantSlug] = useState("demo-school");
+  const [tenantSlug, setTenantSlug] = useState(searchParams.get("tenant") ?? "demo-school");
 
   const [otpCode, setOtpCode] = useState("");
 
@@ -133,16 +134,17 @@ export function LoginPage() {
 
 
   useEffect(() => {
-
     if (viteGoogleClientId?.trim()) return;
-
     getAuthConfig()
-
       .then((config) => setGoogleClientId(config.googleClientId))
-
       .catch(() => undefined);
-
   }, []);
+
+  useEffect(() => {
+    if (searchParams.get("tenant") || searchParams.get("email")) {
+      setSelectedLogin(loginOptions.find((option) => option.id === "institution-admin") ?? null);
+    }
+  }, [searchParams]);
 
 
 

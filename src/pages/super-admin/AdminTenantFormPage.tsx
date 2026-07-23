@@ -163,6 +163,18 @@ export function AdminTenantFormPage() {
 
   async function submit(event?: FormEvent) {
     event?.preventDefault();
+    if (!isEdit) {
+      if (!form.adminEmail.trim()) {
+        notifyError("Enter the institution admin email on Plan & Limits");
+        setStep(1);
+        return;
+      }
+      if (!form.name.trim() || !form.slug.trim()) {
+        notifyError("Enter tenant name and subdomain");
+        setStep(0);
+        return;
+      }
+    }
     setSubmitting(true);
     try {
       const payload = {
@@ -195,20 +207,28 @@ export function AdminTenantFormPage() {
         notifySuccess("Tenant updated");
         navigate(`/admin/tenants/${id}`);
       } else {
-        const created = await apiRequest<{ id: string; admin?: { temporaryPassword?: string } }>(
-          "/platform/tenants",
-          accessToken,
-          {
-            method: "POST",
-            body: JSON.stringify(payload),
-          },
-        );
+        const created = await apiRequest<{
+          tenant: { id: string; slug: string };
+          admin: { email: string; temporaryPassword?: string };
+        }>("/platform/tenants", accessToken, {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+        const loginPassword = form.adminPassword || created.admin.temporaryPassword || "ChangeMe123!";
         notifySuccess(
-          created.admin?.temporaryPassword
-            ? `Tenant created. Temp password: ${created.admin.temporaryPassword}`
+          created.admin.temporaryPassword
+            ? `Tenant created. Default password: ${created.admin.temporaryPassword}`
             : "Tenant created",
         );
-        navigate(`/admin/tenants/${created.id}`);
+        navigate(`/admin/tenants/${created.tenant.id}`, {
+          state: {
+            loginHint: {
+              slug: created.tenant.slug,
+              email: created.admin.email,
+              password: loginPassword,
+            },
+          },
+        });
       }
     } catch (cause) {
       notifyError(cause instanceof Error ? cause.message : "Failed to save tenant");
@@ -579,6 +599,10 @@ export function AdminTenantFormPage() {
               onClick={() => {
                 if (step === 0 && (!form.name.trim() || !form.slug.trim())) {
                   notifyError("Enter tenant name and subdomain");
+                  return;
+                }
+                if (step === 1 && !form.adminEmail.trim()) {
+                  notifyError("Enter the institution admin email");
                   return;
                 }
                 setStep((s) => s + 1);

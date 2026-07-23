@@ -29,7 +29,7 @@ import {
 } from "@mui/material";
 import Grid from "@mui/material/Grid2";
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import { apiRequest } from "../../lib/api";
 import { notifyError, notifyInfo, notifySuccess } from "../../lib/notify";
@@ -73,6 +73,9 @@ const LMS_MODULES = [
 
 export function AdminTenantDetailPage() {
   const { id } = useParams();
+  const location = useLocation();
+  const loginHint = (location.state as { loginHint?: { slug: string; email: string; password: string } } | null)
+    ?.loginHint;
   const { accessToken } = useAuth();
   const navigate = useNavigate();
   const [tenant, setTenant] = useState<TenantDetail | null>(null);
@@ -158,6 +161,15 @@ export function AdminTenantDetailPage() {
   const staffLimit = Math.max(tenant.users + 50, 250);
   const studentPct = Math.min(100, Math.round((tenant.students / studentLimit) * 100));
   const staffPct = Math.min(100, Math.round((tenant.users / staffLimit) * 100));
+  const primaryAdmin = tenant.recentUsers[0];
+
+  function openTenantLogin() {
+    if (!tenant) return;
+    const params = new URLSearchParams({ tenant: tenant.slug });
+    const email = loginHint?.email ?? primaryAdmin?.email;
+    if (email) params.set("email", email);
+    window.open(`/login?${params.toString()}`, "_blank", "noopener,noreferrer");
+  }
 
   return (
     <Stack spacing={2.5}>
@@ -211,9 +223,9 @@ export function AdminTenantDetailPage() {
               <Button
                 variant="contained"
                 startIcon={<LoginOutlined />}
-                onClick={() => notifyInfo("Impersonation will be enabled in a later release")}
+                onClick={openTenantLogin}
               >
-                Login as Tenant
+                Open Tenant Login
               </Button>
               {tenant.status === "ACTIVE" ? (
                 <Button
@@ -258,6 +270,35 @@ export function AdminTenantDetailPage() {
         </CardContent>
       </Card>
 
+      {(loginHint || primaryAdmin) && (
+        <Card elevation={0} sx={{ border: `1px solid ${saColors.border}`, bgcolor: "#F8FAFC" }}>
+          <CardContent>
+            <Typography fontWeight={800} mb={1}>
+              Campus login
+            </Typography>
+            <Typography variant="body2" color="text.secondary" mb={1.5}>
+              Use the institution login at <strong>/login</strong> with this tenant workspace slug — not the Super Admin login.
+            </Typography>
+            <Grid container spacing={2}>
+              <Grid size={{ xs: 12, sm: 4 }}>
+                <Typography variant="caption" color="text.secondary">Workspace slug</Typography>
+                <Typography fontWeight={700}>{tenant.slug}</Typography>
+              </Grid>
+              <Grid size={{ xs: 12, sm: 4 }}>
+                <Typography variant="caption" color="text.secondary">Admin email</Typography>
+                <Typography fontWeight={700}>{loginHint?.email ?? primaryAdmin?.email ?? "—"}</Typography>
+              </Grid>
+              <Grid size={{ xs: 12, sm: 4 }}>
+                <Typography variant="caption" color="text.secondary">Password</Typography>
+                <Typography fontWeight={700}>
+                  {loginHint?.password ? loginHint.password : "Use the password set during provisioning (default: ChangeMe123!)"}
+                </Typography>
+              </Grid>
+            </Grid>
+          </CardContent>
+        </Card>
+      )}
+
       {tab === 0 && (
         <Grid container spacing={2}>
           <Grid size={{ xs: 12, md: 8 }}>
@@ -282,10 +323,39 @@ export function AdminTenantDetailPage() {
                       </Grid>
                     ))}
                   </Grid>
-                </CardContent>
-              </Card>
+        </CardContent>
+      </Card>
 
-              <Card elevation={0} sx={{ border: `1px solid ${saColors.border}` }}>
+      {(loginHint || primaryAdmin) && (
+        <Card elevation={0} sx={{ border: `1px solid ${saColors.border}`, bgcolor: "#F8FAFC" }}>
+          <CardContent>
+            <Typography fontWeight={800} mb={1}>
+              Campus login
+            </Typography>
+            <Typography variant="body2" color="text.secondary" mb={1.5}>
+              Use the institution login at <strong>/login</strong> with this tenant workspace slug — not the Super Admin login.
+            </Typography>
+            <Grid container spacing={2}>
+              <Grid size={{ xs: 12, sm: 4 }}>
+                <Typography variant="caption" color="text.secondary">Workspace slug</Typography>
+                <Typography fontWeight={700}>{tenant.slug}</Typography>
+              </Grid>
+              <Grid size={{ xs: 12, sm: 4 }}>
+                <Typography variant="caption" color="text.secondary">Admin email</Typography>
+                <Typography fontWeight={700}>{loginHint?.email ?? primaryAdmin?.email ?? "—"}</Typography>
+              </Grid>
+              <Grid size={{ xs: 12, sm: 4 }}>
+                <Typography variant="caption" color="text.secondary">Password</Typography>
+                <Typography fontWeight={700}>
+                  {loginHint?.password ? loginHint.password : "Use the password set during provisioning (default: ChangeMe123!)"}
+                </Typography>
+              </Grid>
+            </Grid>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card elevation={0} sx={{ border: `1px solid ${saColors.border}` }}>
                 <CardContent>
                   <Typography fontWeight={700} mb={2}>
                     Resource Saturation
