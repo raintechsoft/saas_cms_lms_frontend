@@ -4,6 +4,10 @@ import {
   Card,
   Chip,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   MenuItem,
   Stack,
   Table,
@@ -16,6 +20,7 @@ import {
 } from "@mui/material";
 import { useEffect, useState } from "react";
 import { useAuth } from "../../auth/AuthContext";
+import { confirmDelete } from "../../lib/confirm";
 import { apiRequest } from "../../lib/api";
 import { notifyError, notifySuccess } from "../../lib/notify";
 import { useAppDispatch } from "../../store";
@@ -44,6 +49,16 @@ export function AdminUsersPage() {
   const [role, setRole] = useState("");
   const [tenantId, setTenantId] = useState("");
   const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState<PlatformUser | null>(null);
+  const [editForm, setEditForm] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    status: "ACTIVE" as UserStatus,
+    password: "",
+  });
+  const [saving, setSaving] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -83,6 +98,64 @@ export function AdminUsersPage() {
       await load();
     } catch (cause) {
       notifyError(cause instanceof Error ? cause.message : "Failed to update user");
+    }
+  }
+
+  function openEdit(user: PlatformUser) {
+    setEditing(user);
+    setEditForm({
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      phone: user.phone ?? "",
+      status: user.status,
+      password: "",
+    });
+  }
+
+  async function saveEdit() {
+    if (!editing) return;
+    setSaving(true);
+    try {
+      const body: Record<string, unknown> = {
+        firstName: editForm.firstName.trim(),
+        lastName: editForm.lastName.trim(),
+        email: editForm.email.trim(),
+        phone: editForm.phone.trim() || null,
+        status: editForm.status,
+      };
+      if (editForm.password.trim()) body.password = editForm.password;
+      await apiRequest(`/platform/users/${editing.id}`, accessToken, {
+        method: "PUT",
+        body: JSON.stringify(body),
+      });
+      notifySuccess("User updated");
+      setEditing(null);
+      await load();
+    } catch (cause) {
+      notifyError(cause instanceof Error ? cause.message : "Failed to update user");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteUser(user: PlatformUser) {
+    if (user.id === me?.id) {
+      notifyError("You cannot delete your own account");
+      return;
+    }
+    const ok = await confirmDelete({
+      title: "Delete user?",
+      text: `${user.firstName} ${user.lastName} (${user.email}) will be deleted if unused, or disabled if they have history.`,
+      confirmText: "Yes, delete",
+    });
+    if (!ok) return;
+    try {
+      await apiRequest(`/platform/users/${user.id}`, accessToken, { method: "DELETE" });
+      notifySuccess("User removed or disabled");
+      await load();
+    } catch (cause) {
+      notifyError(cause instanceof Error ? cause.message : "Failed to delete user");
     }
   }
 
@@ -179,18 +252,33 @@ export function AdminUsersPage() {
                     />
                   </TableCell>
                   <TableCell align="right">
-                    {u.id !== me?.id && (
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        color="inherit"
-                        onClick={() =>
-                          void setUserStatus(u.id, u.status === "ACTIVE" ? "DISABLED" : "ACTIVE")
-                        }
-                      >
-                        {u.status === "ACTIVE" ? "Disable" : "Enable"}
+                    <Stack direction="row" spacing={1} justifyContent="flex-end">
+                      <Button size="small" variant="outlined" color="inherit" onClick={() => openEdit(u)}>
+                        Edit
                       </Button>
-                    )}
+                      {u.id !== me?.id && (
+                        <>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            color="inherit"
+                            onClick={() =>
+                              void setUserStatus(u.id, u.status === "ACTIVE" ? "DISABLED" : "ACTIVE")
+                            }
+                          >
+                            {u.status === "ACTIVE" ? "Disable" : "Enable"}
+                          </Button>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            color="error"
+                            onClick={() => void deleteUser(u)}
+                          >
+                            Delete
+                          </Button>
+                        </>
+                      )}
+                    </Stack>
                   </TableCell>
                 </TableRow>
               ))}
@@ -207,6 +295,67 @@ export function AdminUsersPage() {
           </Table>
         )}
       </Card>
+
+      <Dialog open={Boolean(editing)} onClose={() => setEditing(null)} fullWidth maxWidth="sm">
+        <DialogTitle>Edit user</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} mt={1}>
+            <TextField
+              label="First name"
+              value={editForm.firstName}
+              onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })}
+              required
+              fullWidth
+            />
+            <TextField
+              label="Last name"
+              value={editForm.lastName}
+              onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })}
+              required
+              fullWidth
+            />
+            <TextField
+              label="Email"
+              type="email"
+              value={editForm.email}
+              onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+              required
+              fullWidth
+            />
+            <TextField
+              label="Phone"
+              value={editForm.phone}
+              onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+              fullWidth
+            />
+            <TextField
+              select
+              label="Status"
+              value={editForm.status}
+              onChange={(e) => setEditForm({ ...editForm, status: e.target.value as UserStatus })}
+              fullWidth
+              disabled={editing?.id === me?.id}
+            >
+              <MenuItem value="ACTIVE">ACTIVE</MenuItem>
+              <MenuItem value="DISABLED">DISABLED</MenuItem>
+            </TextField>
+            <TextField
+              label="New password (optional)"
+              type="password"
+              value={editForm.password}
+              onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
+              fullWidth
+              helperText="Leave blank to keep the current password"
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setEditing(null)}>Cancel</Button>
+          <Button variant="contained" disabled={saving} onClick={() => void saveEdit()}>
+            {saving ? "Saving…" : "Save"}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Stack>
   );
 }

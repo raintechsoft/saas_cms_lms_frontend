@@ -2,10 +2,11 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import { PageHeader } from "../../components/AppShell";
+import { confirmDelete } from "../../lib/confirm";
 import { apiRequest } from "../../lib/api";
 
 interface Named { id: string; name: string }
-interface FeeType extends Named { code: string | null }
+interface FeeType extends Named { code: string | null; isActive?: boolean }
 interface FeeGroup extends Named { items: Array<{ feeType: FeeType }> }
 interface Student { id: string; admissionNumber: string; firstName: string; lastName: string | null }
 interface Enrollment { id: string; student: Student }
@@ -781,10 +782,14 @@ function FeeSetupPanel({ setup, token, onSaved, onError }: {
   onError: (message: string) => void;
 }) {
   const [typeName, setTypeName] = useState("");
+  const [editingTypeId, setEditingTypeId] = useState<string | null>(null);
   const [group, setGroup] = useState({ name: "", feeTypeId: "" });
+  const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const [master, setMaster] = useState({
     classSectionId: "", feeGroupId: "", feeTypeId: "", amount: "", dueDate: today,
   });
+  const [editingMasterId, setEditingMasterId] = useState<string | null>(null);
+
   async function create(path: string, payload: unknown, reset: () => void) {
     try {
       await apiRequest(path, token, { method: "POST", body: JSON.stringify(payload) });
@@ -792,57 +797,230 @@ function FeeSetupPanel({ setup, token, onSaved, onError }: {
       await onSaved();
     } catch (cause) { onError(cause instanceof Error ? cause.message : "Unable to save fee setup"); }
   }
-  async function createMaster(event: FormEvent) {
+
+  async function saveType(event: FormEvent) {
+    event.preventDefault();
+    try {
+      if (editingTypeId) {
+        await apiRequest(`/fees/types/${editingTypeId}`, token, {
+          method: "PUT",
+          body: JSON.stringify({ name: typeName }),
+        });
+      } else {
+        await apiRequest("/fees/types", token, {
+          method: "POST",
+          body: JSON.stringify({ name: typeName }),
+        });
+      }
+      setTypeName("");
+      setEditingTypeId(null);
+      await onSaved();
+    } catch (cause) {
+      onError(cause instanceof Error ? cause.message : "Unable to save fee type");
+    }
+  }
+
+  async function removeType(item: FeeType) {
+    const ok = await confirmDelete({
+      title: "Delete fee type?",
+      text: `"${item.name}" will be deleted if unused, or disabled if it is already linked.`,
+      confirmText: "Yes, delete",
+    });
+    if (!ok) return;
+    try {
+      await apiRequest(`/fees/types/${item.id}`, token, { method: "DELETE" });
+      if (editingTypeId === item.id) {
+        setEditingTypeId(null);
+        setTypeName("");
+      }
+      await onSaved();
+    } catch (cause) {
+      onError(cause instanceof Error ? cause.message : "Unable to delete fee type");
+    }
+  }
+
+  async function saveGroup(event: FormEvent) {
+    event.preventDefault();
+    try {
+      const payload = { name: group.name, feeTypeIds: [group.feeTypeId] };
+      if (editingGroupId) {
+        await apiRequest(`/fees/groups/${editingGroupId}`, token, {
+          method: "PUT",
+          body: JSON.stringify(payload),
+        });
+      } else {
+        await apiRequest("/fees/groups", token, {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+      }
+      setGroup({ name: "", feeTypeId: "" });
+      setEditingGroupId(null);
+      await onSaved();
+    } catch (cause) {
+      onError(cause instanceof Error ? cause.message : "Unable to save fee group");
+    }
+  }
+
+  async function removeGroup(item: FeeGroup) {
+    const ok = await confirmDelete({
+      title: "Delete fee group?",
+      text: `"${item.name}" will be permanently removed if it is not used by fee masters.`,
+      confirmText: "Yes, delete",
+    });
+    if (!ok) return;
+    try {
+      await apiRequest(`/fees/groups/${item.id}`, token, { method: "DELETE" });
+      if (editingGroupId === item.id) {
+        setEditingGroupId(null);
+        setGroup({ name: "", feeTypeId: "" });
+      }
+      await onSaved();
+    } catch (cause) {
+      onError(cause instanceof Error ? cause.message : "Unable to delete fee group");
+    }
+  }
+
+  async function saveMaster(event: FormEvent) {
     event.preventDefault();
     if (!setup.currentSession) return;
     try {
-      const result = await apiRequest<{ id: string }>("/fees/masters", token, {
-        method: "POST",
-        body: JSON.stringify({
-          ...master,
-          academicSessionId: setup.currentSession.id,
-          amount: Number(master.amount),
-          fineType: "NONE",
-        }),
-      });
-      await apiRequest(`/fees/masters/${result.id}/assign`, token, {
-        method: "POST",
-        body: JSON.stringify({}),
-      });
+      const payload = {
+        ...master,
+        academicSessionId: setup.currentSession.id,
+        amount: Number(master.amount),
+        fineType: "NONE",
+      };
+      if (editingMasterId) {
+        await apiRequest(`/fees/masters/${editingMasterId}`, token, {
+          method: "PUT",
+          body: JSON.stringify(payload),
+        });
+      } else {
+        const result = await apiRequest<{ id: string }>("/fees/masters", token, {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+        await apiRequest(`/fees/masters/${result.id}/assign`, token, {
+          method: "POST",
+          body: JSON.stringify({}),
+        });
+      }
       setMaster({ classSectionId: "", feeGroupId: "", feeTypeId: "", amount: "", dueDate: today });
+      setEditingMasterId(null);
       await onSaved();
-    } catch (cause) { onError(cause instanceof Error ? cause.message : "Unable to create fee master"); }
+    } catch (cause) {
+      onError(cause instanceof Error ? cause.message : "Unable to save fee master");
+    }
   }
+
+  async function removeMaster(item: FeeMaster) {
+    const ok = await confirmDelete({
+      title: "Delete fee master?",
+      text: `"${item.feeType.name}" will be deleted only if no payments are linked.`,
+      confirmText: "Yes, delete",
+    });
+    if (!ok) return;
+    try {
+      await apiRequest(`/fees/masters/${item.id}`, token, { method: "DELETE" });
+      if (editingMasterId === item.id) {
+        setEditingMasterId(null);
+        setMaster({ classSectionId: "", feeGroupId: "", feeTypeId: "", amount: "", dueDate: today });
+      }
+      await onSaved();
+    } catch (cause) {
+      onError(cause instanceof Error ? cause.message : "Unable to delete fee master");
+    }
+  }
+
   return (
     <section className="mt-6 grid gap-5 xl:grid-cols-3">
-      <form className="card p-5" onSubmit={(e) => {
-        e.preventDefault();
-        void create("/fees/types", { name: typeName }, () => setTypeName(""));
-      }}>
-        <h2 className="font-semibold">Fee type</h2>
+      <form className="card p-5" onSubmit={(e) => void saveType(e)}>
+        <h2 className="font-semibold">{editingTypeId ? "Edit fee type" : "Fee type"}</h2>
         <input className="input mt-4" placeholder="e.g. Transport Fee" required value={typeName}
           onChange={(e) => setTypeName(e.target.value)} />
-        <button className="button-primary mt-4" type="submit">Add type</button>
-        <div className="mt-4 flex flex-wrap gap-2">{setup.types.map((item) =>
-          <span className="badge" key={item.id}>{item.name}</span>)}</div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button className="button-primary" type="submit">
+            {editingTypeId ? "Save type" : "Add type"}
+          </button>
+          {editingTypeId && (
+            <button className="button-secondary" type="button" onClick={() => {
+              setEditingTypeId(null);
+              setTypeName("");
+            }}>
+              Cancel
+            </button>
+          )}
+        </div>
+        <div className="mt-4 space-y-2">
+          {setup.types.map((item) => (
+            <div className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2" key={item.id}>
+              <span className={`text-sm ${item.isActive === false ? "text-slate-400 line-through" : ""}`}>
+                {item.name}
+              </span>
+              <div className="flex gap-2">
+                <button className="button-secondary" type="button" onClick={() => {
+                  setEditingTypeId(item.id);
+                  setTypeName(item.name);
+                }}>Edit</button>
+                <button className="button-secondary" type="button" onClick={() => void removeType(item)}>
+                  Delete
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
       </form>
-      <form className="card p-5" onSubmit={(e) => {
-        e.preventDefault();
-        void create("/fees/groups", { name: group.name, feeTypeIds: [group.feeTypeId] },
-          () => setGroup({ name: "", feeTypeId: "" }));
-      }}>
-        <h2 className="font-semibold">Fee group</h2>
+
+      <form className="card p-5" onSubmit={(e) => void saveGroup(e)}>
+        <h2 className="font-semibold">{editingGroupId ? "Edit fee group" : "Fee group"}</h2>
         <input className="input mt-4" placeholder="Group name" required value={group.name}
           onChange={(e) => setGroup({ ...group, name: e.target.value })} />
         <select className="input mt-3" required value={group.feeTypeId}
           onChange={(e) => setGroup({ ...group, feeTypeId: e.target.value })}>
           <option value="">Select fee type</option>
-          {setup.types.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+          {setup.types.filter((item) => item.isActive !== false).map((item) => (
+            <option key={item.id} value={item.id}>{item.name}</option>
+          ))}
         </select>
-        <button className="button-primary mt-4" type="submit">Add group</button>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button className="button-primary" type="submit">
+            {editingGroupId ? "Save group" : "Add group"}
+          </button>
+          {editingGroupId && (
+            <button className="button-secondary" type="button" onClick={() => {
+              setEditingGroupId(null);
+              setGroup({ name: "", feeTypeId: "" });
+            }}>
+              Cancel
+            </button>
+          )}
+        </div>
+        <div className="mt-4 space-y-2">
+          {setup.groups.map((item) => (
+            <div className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2" key={item.id}>
+              <span className="text-sm">{item.name}</span>
+              <div className="flex gap-2">
+                <button className="button-secondary" type="button" onClick={() => {
+                  setEditingGroupId(item.id);
+                  setGroup({
+                    name: item.name,
+                    feeTypeId: item.items[0]?.feeType.id ?? "",
+                  });
+                }}>Edit</button>
+                <button className="button-secondary" type="button" onClick={() => void removeGroup(item)}>
+                  Delete
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
       </form>
-      <form className="card p-5 xl:row-span-2" onSubmit={createMaster}>
-        <h2 className="font-semibold">Fee master and class assignment</h2>
+
+      <form className="card p-5 xl:row-span-2" onSubmit={(e) => void saveMaster(e)}>
+        <h2 className="font-semibold">
+          {editingMasterId ? "Edit fee master" : "Fee master and class assignment"}
+        </h2>
         <select className="input mt-4" required value={master.classSectionId}
           onChange={(e) => setMaster({ ...master, classSectionId: e.target.value })}>
           <option value="">Class and section</option>
@@ -865,18 +1043,53 @@ function FeeSetupPanel({ setup, token, onSaved, onError }: {
           value={master.amount} onChange={(e) => setMaster({ ...master, amount: e.target.value })} />
         <input className="input mt-3" type="date" required value={master.dueDate}
           onChange={(e) => setMaster({ ...master, dueDate: e.target.value })} />
-        <button className="button-primary mt-4" type="submit">Create and assign</button>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button className="button-primary" type="submit">
+            {editingMasterId ? "Save master" : "Create and assign"}
+          </button>
+          {editingMasterId && (
+            <button className="button-secondary" type="button" onClick={() => {
+              setEditingMasterId(null);
+              setMaster({ classSectionId: "", feeGroupId: "", feeTypeId: "", amount: "", dueDate: today });
+            }}>
+              Cancel
+            </button>
+          )}
+        </div>
       </form>
+
       <div className="card p-5 xl:col-span-2">
         <h2 className="font-semibold">Current fee masters</h2>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          {setup.masters.map((item) => <div className="rounded-xl bg-slate-50 p-4" key={item.id}>
-            <p className="font-medium">{item.feeType.name}</p>
-            <p className="mt-1 text-sm text-slate-500">
-              {item.classSection?.academicClass.name} {item.classSection?.section.name} ·
-              {" "}{formatMoney(item.amount)} · {item._count.assignments} assigned
-            </p>
-          </div>)}
+          {setup.masters.map((item) => (
+            <div className="rounded-xl bg-slate-50 p-4" key={item.id}>
+              <p className="font-medium">{item.feeType.name}</p>
+              <p className="mt-1 text-sm text-slate-500">
+                {item.classSection?.academicClass.name} {item.classSection?.section.name} ·
+                {" "}{formatMoney(item.amount)} · {item._count.assignments} assigned
+              </p>
+              <div className="mt-3 flex gap-2">
+                <button className="button-secondary" type="button" onClick={() => {
+                  setEditingMasterId(item.id);
+                  setMaster({
+                    classSectionId: item.classSection?.id ?? "",
+                    feeGroupId: item.feeGroup.id,
+                    feeTypeId: item.feeType.id,
+                    amount: String(Number(item.amount)),
+                    dueDate: item.dueDate.slice(0, 10),
+                  });
+                }}>
+                  Edit
+                </button>
+                <button className="button-secondary" type="button" onClick={() => void removeMaster(item)}>
+                  Delete
+                </button>
+              </div>
+            </div>
+          ))}
+          {setup.masters.length === 0 && (
+            <p className="text-sm text-slate-500">No fee masters yet.</p>
+          )}
         </div>
       </div>
     </section>

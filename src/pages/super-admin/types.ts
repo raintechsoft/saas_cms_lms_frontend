@@ -105,6 +105,7 @@ export interface PlatformUser {
   email: string;
   firstName: string;
   lastName: string;
+  phone?: string | null;
   status: UserStatus;
   tenant: { id: string; name: string; slug: string } | null;
   reseller: { id: string; name: string } | null;

@@ -86,6 +86,9 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!response.ok) {
     throw new Error(body?.error?.message ?? `Request failed (${response.status})`);
   }
+  if (response.status === 204 || !text) {
+    return undefined as T;
+  }
   if (!body?.data) {
     throw new Error("Server returned an empty response");
   }

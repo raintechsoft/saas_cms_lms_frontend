@@ -172,3 +172,54 @@
     color: #0f766e;
   }
 }
+
+/* SweetAlert2 confirm dialog */
+.swal-popup {
+  border-radius: 1rem !important;
+  font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif !important;
+  padding: 1.5rem !important;
+}
+
+.swal-title {
+  font-size: 1.25rem !important;
+  font-weight: 800 !important;
+  color: #0f172a !important;
+}
+
+.swal-text {
+  font-size: 0.95rem !important;
+  color: #475569 !important;
+}
+
+.swal-actions {
+  gap: 0.75rem !important;
+  margin-top: 1.25rem !important;
+}
+
+.swal-confirm {
+  background: #e11d48 !important;
+  color: #fff !important;
+  border: 0 !important;
+  border-radius: 0.75rem !important;
+  font-weight: 700 !important;
+  padding: 0.65rem 1.1rem !important;
+  cursor: pointer !important;
+}
+
+.swal-confirm:hover {
+  background: #be123c !important;
+}
+
+.swal-cancel {
+  background: #f1f5f9 !important;
+  color: #334155 !important;
+  border: 0 !important;
+  border-radius: 0.75rem !important;
+  font-weight: 700 !important;
+  padding: 0.65rem 1.1rem !important;
+  cursor: pointer !important;
+}
+
+.swal-cancel:hover {
+  background: #e2e8f0 !important;
+}
