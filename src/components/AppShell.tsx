@@ -1,4 +1,24 @@
+import type { ComponentType } from "react";
 import { useEffect, type ReactNode } from "react";
+import {
+  AssignmentOutlined,
+  BadgeOutlined,
+  CalendarMonthOutlined,
+  CampaignOutlined,
+  DashboardOutlined,
+  EventNoteOutlined,
+  GroupsOutlined,
+  LogoutOutlined,
+  MenuBookOutlined,
+  PaymentsOutlined,
+  PersonOutlined,
+  QuizOutlined,
+  SchoolOutlined,
+  SettingsOutlined,
+  SummarizeOutlined,
+  TuneOutlined,
+  WorkOutlineOutlined,
+} from "@mui/icons-material";
 import { NavLink, Navigate, Outlet } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { applyBrandingToDocument, parseBranding } from "../lib/branding";
@@ -7,6 +27,11 @@ import { getCampusNavForMode } from "../lib/productMode";
 
 const PORTAL_ROLES = ["STUDENT", "PARENT"];
 const STAFF_ROLES = ["INSTITUTION_ADMIN", "TEACHER", "ACCOUNTANT", "STAFF", "UNIVERSE_SUPER_ADMIN", "RESELLER_ADMIN"];
+
+/** Thumb-friendly icon size (~44px hit area with padding). */
+const NAV_ICON_SX = { fontSize: 28 };
+
+type NavIcon = ComponentType<{ sx?: { fontSize?: number }; className?: string }>;
 
 export function isPortalUser(roles: string[] = []) {
   return roles.some((role) => PORTAL_ROLES.includes(role)) && !roles.some((role) => STAFF_ROLES.includes(role));
@@ -17,29 +42,29 @@ export function isPlatformUser(permissions: string[] = []) {
 }
 
 function staffPanelTitle(roles: string[] = []) {
-  if (roles.includes("TEACHER")) return "Teacher Panel";
-  if (roles.includes("ACCOUNTANT")) return "Accountant Panel";
-  if (roles.includes("INSTITUTION_ADMIN")) return "Admin Panel";
-  return "Staff Panel";
+  if (roles.includes("TEACHER")) return "Teacher";
+  if (roles.includes("ACCOUNTANT")) return "Accounts";
+  if (roles.includes("INSTITUTION_ADMIN")) return "Admin";
+  return "Staff";
 }
 
-const navIcons: Record<string, string> = {
-  "/dashboard": "HM",
-  "/profile": "PR",
-  "/students": "ST",
-  "/academics": "AC",
-  "/attendance": "AT",
-  "/notices": "NT",
-  "/exams": "EX",
-  "/timetable": "TT",
-  "/homework": "HW",
-  "/fees": "FE",
-  "/hr": "HR",
-  "/documents": "DC",
-  "/erp": "ER",
-  "/reports": "RP",
-  "/users": "US",
-  "/settings": "SE",
+const navIcons: Record<string, NavIcon> = {
+  "/dashboard": DashboardOutlined,
+  "/profile": PersonOutlined,
+  "/students": SchoolOutlined,
+  "/academics": MenuBookOutlined,
+  "/attendance": EventNoteOutlined,
+  "/notices": CampaignOutlined,
+  "/exams": QuizOutlined,
+  "/timetable": CalendarMonthOutlined,
+  "/homework": AssignmentOutlined,
+  "/fees": PaymentsOutlined,
+  "/hr": WorkOutlineOutlined,
+  "/documents": BadgeOutlined,
+  "/erp": TuneOutlined,
+  "/reports": SummarizeOutlined,
+  "/users": GroupsOutlined,
+  "/settings": SettingsOutlined,
 };
 
 export function AppShell() {
@@ -66,98 +91,102 @@ export function AppShell() {
   );
 
   const panelTitle = staffPanelTitle(user.roles);
+  const schoolName = branding.logoText || user.tenant?.name || "SaaS CMS LMS";
 
   return (
-    <div className="min-h-screen bg-[#eef2f7] text-slate-900 lg:flex">
-      <aside className="border-b border-[#0b1c33] bg-[#0f2744] text-white lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col lg:border-b-0">
-        <div className="flex h-16 items-center gap-3 border-b border-white/10 px-5">
+    <div className="min-h-screen bg-[#edf1f7] text-slate-900 lg:flex">
+      {/* Desktop-style fixed sidebar */}
+      <aside className="border-b border-[#0b1c33] bg-[#0b1f36] text-white lg:fixed lg:inset-y-0 lg:flex lg:w-60 lg:flex-col lg:border-b-0 lg:border-r lg:border-[#071526]">
+        <div className="flex h-14 items-center gap-2.5 border-b border-white/10 px-3">
           {branding.logoUrl ? (
-            <img src={branding.logoUrl} alt="" className="size-9 rounded-full object-cover ring-2 ring-teal-400/40" />
+            <img src={branding.logoUrl} alt="" className="size-9 rounded object-cover" />
           ) : (
-            <div className="grid size-9 place-items-center rounded-full bg-teal-500 font-bold text-white shadow-lg shadow-teal-500/30">
-              {(branding.logoText || user.tenant?.name || "U").slice(0, 1).toUpperCase()}
+            <div className="grid size-9 place-items-center rounded bg-[#2563eb] text-sm font-bold text-white">
+              {schoolName.slice(0, 1).toUpperCase()}
             </div>
           )}
-          <div>
-            <p className="text-sm font-semibold tracking-wide">{panelTitle}</p>
-            <p className="text-[11px] text-slate-300">{branding.logoText || user.tenant?.name || "SaaS CMS LMS"}</p>
+          <div className="min-w-0">
+            <p className="truncate text-[13px] font-semibold leading-tight">{schoolName}</p>
+            <p className="truncate text-[10px] text-slate-400">{panelTitle} panel</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-3 border-b border-white/10 px-5 py-4">
+        <div className="flex items-center gap-2.5 border-b border-white/10 px-3 py-3">
           {user.avatarUrl ? (
-            <img
-              src={assetUrl(user.avatarUrl)}
-              alt=""
-              className="size-11 rounded-full object-cover ring-2 ring-teal-400/50"
-            />
+            <img src={assetUrl(user.avatarUrl)} alt="" className="size-10 rounded object-cover" />
           ) : (
-            <div className="grid size-11 place-items-center rounded-full bg-gradient-to-br from-slate-200 to-slate-400 text-sm font-bold text-slate-700">
+            <div className="grid size-10 place-items-center rounded bg-slate-600 text-sm font-bold text-white">
               {user.firstName[0]}
               {user.lastName?.[0] ?? ""}
             </div>
           )}
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold">
+            <p className="truncate text-[13px] font-medium">
               {user.lastName}, {user.firstName}
             </p>
-            <p className="truncate text-[11px] text-slate-300">
+            <p className="truncate text-[11px] text-slate-400">
               {user.roles[0]?.replaceAll("_", " ") ?? "Staff"}
             </p>
           </div>
         </div>
 
-        <nav className="flex flex-1 gap-1 overflow-x-auto p-3 lg:block lg:space-y-1 lg:overflow-y-auto">
-          {links.map(({ to, label }) => (
-            <NavLink
-              key={to}
-              to={to}
-              className={({ isActive }) =>
-                `flex items-center gap-3 whitespace-nowrap rounded-lg px-3 py-2.5 text-sm font-medium transition ${
-                  isActive
-                    ? "bg-teal-500 text-white shadow-md shadow-teal-500/25"
-                    : "text-slate-200 hover:bg-white/10 hover:text-white"
-                }`
-              }
-            >
-              <span className="grid size-7 place-items-center rounded-md bg-white/10 text-[10px] font-bold">
-                {navIcons[to] ?? label.slice(0, 1)}
-              </span>
-              {label}
-            </NavLink>
-          ))}
+        <nav className="flex flex-1 gap-1 overflow-x-auto p-2 lg:block lg:space-y-1 lg:overflow-y-auto">
+          {links.map(({ to, label }) => {
+            const Icon = navIcons[to] ?? DashboardOutlined;
+            return (
+              <NavLink
+                key={to}
+                to={to}
+                className={({ isActive }) =>
+                  `flex min-h-11 items-center gap-3 whitespace-nowrap rounded-md px-2.5 py-2 text-[13px] font-medium transition ${
+                    isActive
+                      ? "bg-[#2563eb] text-white"
+                      : "text-slate-300 hover:bg-white/10 hover:text-white"
+                  }`
+                }
+              >
+                <Icon sx={NAV_ICON_SX} className="shrink-0 opacity-95" />
+                {label}
+              </NavLink>
+            );
+          })}
         </nav>
 
-        <div className="border-t border-white/10 p-3">
+        <div className="border-t border-white/10 p-2">
           <button
             type="button"
             onClick={logout}
-            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-200 transition hover:bg-white/10 hover:text-white"
+            className="flex min-h-11 w-full items-center gap-3 rounded-md px-2.5 py-2 text-[13px] font-medium text-slate-300 transition hover:bg-white/10 hover:text-white"
           >
-            <span className="grid size-7 place-items-center rounded-md bg-white/10 text-[10px] font-bold">OUT</span>
+            <LogoutOutlined sx={NAV_ICON_SX} className="shrink-0" />
             Logout
           </button>
         </div>
       </aside>
 
-      <div className="min-w-0 flex-1 lg:ml-64">
-        <header className="flex h-16 items-center justify-between border-b border-slate-200/80 bg-[#f4f7fb] px-6">
-          <div className="inline-flex items-center gap-2.5 rounded-xl bg-[#0f2744] px-3.5 py-2 text-white shadow-sm shadow-slate-900/10">
-            <span className="grid size-7 place-items-center rounded-lg bg-teal-500 text-[10px] font-bold">
-              {(user.tenant?.name ?? "U").slice(0, 1).toUpperCase()}
+      <div className="min-w-0 flex-1 lg:ml-60">
+        {/* Flat top toolbar */}
+        <header className="sticky top-0 z-20 flex h-12 items-center justify-between border-b border-slate-200 bg-white px-4">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="hidden text-[11px] font-semibold uppercase tracking-wide text-slate-400 sm:inline">
+              Campus
             </span>
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-teal-300">Campus</p>
-              <p className="text-sm font-bold leading-tight">
-                {user.tenant?.name ?? "Campus Management System"}
-              </p>
-            </div>
-          </div>
-          <div className="hidden rounded-xl bg-white px-3.5 py-2 text-right shadow-sm ring-1 ring-slate-200/80 sm:block">
-            <p className="text-sm font-semibold text-slate-900">
-              {user.firstName} {user.lastName}
+            <span className="hidden text-slate-300 sm:inline">|</span>
+            <p className="truncate text-[13px] font-semibold text-slate-800">
+              {user.tenant?.name ?? "Campus Management System"}
             </p>
-            <p className="text-xs text-slate-500">{user.email}</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="hidden text-right sm:block">
+              <p className="text-[12px] font-semibold leading-tight text-slate-800">
+                {user.firstName} {user.lastName}
+              </p>
+              <p className="text-[10px] text-slate-500">{user.email}</p>
+            </div>
+            <div className="grid size-9 place-items-center rounded bg-[#2563eb] text-xs font-bold text-white">
+              {user.firstName[0]}
+              {user.lastName?.[0] ?? ""}
+            </div>
           </div>
         </header>
         <Outlet />
@@ -166,6 +195,7 @@ export function AppShell() {
   );
 }
 
+/** Compact desktop page title bar (Vyapar-style density). */
 export function PageHeader({
   eyebrow,
   title,
@@ -178,13 +208,15 @@ export function PageHeader({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-      <div>
-        <p className="text-sm font-semibold text-teal-600">{eyebrow}</p>
-        <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-900">{title}</h1>
-        <p className="mt-2 text-sm text-slate-600">{description}</p>
+    <div className="flex flex-col justify-between gap-2 border-b border-slate-200 pb-3 sm:flex-row sm:items-center">
+      <div className="min-w-0">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">{eyebrow}</p>
+        <h1 className="text-lg font-semibold leading-tight text-slate-900">{title}</h1>
+        {description ? (
+          <p className="mt-0.5 truncate text-[12px] text-slate-500">{description}</p>
+        ) : null}
       </div>
-      {action}
+      {action ? <div className="shrink-0">{action}</div> : null}
     </div>
   );
 }

@@ -62,7 +62,7 @@ export function DocumentsPage() {
   useEffect(() => { void load(); }, [accessToken]);
 
   return (
-    <main className="mx-auto max-w-7xl px-6 py-10">
+    <main className="page-main">
       <PageHeader
         eyebrow="Certificates and ID cards"
         title="Document design studio"

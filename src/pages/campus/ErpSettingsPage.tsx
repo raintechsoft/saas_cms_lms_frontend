@@ -39,7 +39,7 @@ export function ErpSettingsPage() {
     try { await action(); setMessage(success); await load(); }
     catch (cause) { setError(cause instanceof Error ? cause.message : "ERP setting could not be saved"); }
   };
-  return <main className="mx-auto max-w-7xl px-6 py-10">
+  return <main className="page-main">
     <PageHeader eyebrow="ERP settings" title="CMS control center" description="Configure providers, payment methods, panel modules, fields, holidays, documents, and recoverable tenant settings." />
     {error && <p className="alert-error mt-6">{error}</p>}{message && <p className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">{message}</p>}
     <div className="mt-8 flex flex-wrap gap-2 border-b border-slate-200">{(["integrations", "access", "fields", "calendar", "documents", "backups"] as Tab[]).map((item) => <button className={`tab ${tab === item ? "tab-active" : ""}`} key={item} onClick={() => setTab(item)}>{item === "access" ? "Modules & languages" : item[0].toUpperCase() + item.slice(1)}</button>)}</div>

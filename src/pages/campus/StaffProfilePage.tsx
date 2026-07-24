@@ -177,7 +177,7 @@ export function StaffProfilePage() {
   );
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className={isOps ? "mx-auto max-w-3xl space-y-6" : "page-main space-y-3"}>
       {Header}
       {isOps ? (
         <div className="space-y-6">
@@ -189,7 +189,7 @@ export function StaffProfilePage() {
           </OpsPanel>
         </div>
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-3">
           <PanelCard title="Profile photo">{photoBody}</PanelCard>
           <PanelCard title="Personal details">{formBody}</PanelCard>
         </div>

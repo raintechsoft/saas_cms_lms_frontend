@@ -293,7 +293,7 @@ export function AcademicsPage() {
 
   if (loading && !setup) {
     return (
-      <main className="mx-auto max-w-7xl px-6 py-10">
+      <main className="page-main">
         <PageHeader eyebrow="Shared core" title="Academic structure" description="Loading your academic setup…" />
         <p className="mt-8 text-sm text-slate-500">Please wait…</p>
       </main>
@@ -301,7 +301,7 @@ export function AcademicsPage() {
   }
 
   return (
-    <main className="mx-auto max-w-7xl px-6 py-10">
+    <main className="page-main">
       <PageHeader
         eyebrow="Shared core"
         title="Academic structure"

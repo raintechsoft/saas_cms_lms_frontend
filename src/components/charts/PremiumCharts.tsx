@@ -249,32 +249,30 @@ interface MetricCardProps {
 }
 
 const toneClasses: Record<MetricCardProps["tone"], string> = {
-  teal: "from-teal-500 to-cyan-600",
-  green: "from-emerald-500 to-green-600",
-  rose: "from-rose-500 to-red-600",
-  blue: "from-sky-500 to-blue-600",
-  amber: "from-amber-500 to-orange-600",
-  violet: "from-violet-500 to-indigo-600",
+  teal: "border-l-blue-600",
+  green: "border-l-emerald-600",
+  rose: "border-l-rose-600",
+  blue: "border-l-blue-600",
+  amber: "border-l-amber-500",
+  violet: "border-l-indigo-600",
 };
 
 export function MetricCard({ label, value, tone, icon }: MetricCardProps) {
   return (
     <article
-      className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${toneClasses[tone]} p-5 text-white shadow-lg shadow-slate-900/10`}
+      className={`rounded border border-slate-200 border-l-4 bg-white px-3 py-2.5 ${toneClasses[tone]}`}
     >
-      <div className="relative z-10 flex items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-2">
         <div>
-          <p className="text-3xl font-bold tracking-tight">{value}</p>
-          <p className="mt-1 text-sm font-medium text-white/90">{label}</p>
+          <p className="text-[11px] font-medium text-slate-500">{label}</p>
+          <p className="mt-0.5 text-xl font-semibold tracking-tight text-slate-900">{value}</p>
         </div>
         {icon && (
-          <span className="grid size-11 place-items-center rounded-xl bg-white/20 text-xs font-bold tracking-wide backdrop-blur-sm">
+          <span className="grid size-7 place-items-center rounded bg-slate-100 text-[10px] font-bold text-slate-600">
             {icon}
           </span>
         )}
       </div>
-      <div className="pointer-events-none absolute -right-6 -top-6 size-28 rounded-full bg-white/10" />
-      <div className="pointer-events-none absolute -bottom-8 -left-4 size-24 rounded-full bg-black/10" />
     </article>
   );
 }
@@ -289,12 +287,12 @@ export function PanelCard({
   children: ReactNode;
 }) {
   return (
-    <section className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_10px_40px_rgb(15_23_42/0.06)]">
-      <div className="flex items-center justify-between border-b border-white/10 bg-gradient-to-r from-slate-900 to-slate-800 px-5 py-3.5">
-        <h2 className="text-sm font-semibold tracking-wide text-white">{title}</h2>
+    <section className="overflow-hidden rounded border border-slate-200 bg-white">
+      <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-3 py-2">
+        <h2 className="text-[13px] font-semibold text-slate-800">{title}</h2>
         {action}
       </div>
-      <div className="p-5 sm:p-6">{children}</div>
+      <div className="p-3">{children}</div>
     </section>
   );
 }
