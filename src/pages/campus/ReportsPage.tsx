@@ -53,7 +53,7 @@ export function ReportsPage() {
   }
 
   return (
-    <main className="mx-auto max-w-7xl px-6 py-10">
+    <main className="page-main">
       <PageHeader
         eyebrow="Data reports"
         title="Consolidated report hub"

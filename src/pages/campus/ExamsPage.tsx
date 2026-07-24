@@ -182,7 +182,7 @@ export function ExamsPage() {
   }
 
   return (
-    <main className="mx-auto max-w-7xl px-6 py-10">
+    <main className="page-main">
       <PageHeader
         eyebrow="Examination management"
         title="Exams and results"

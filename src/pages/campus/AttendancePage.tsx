@@ -107,7 +107,7 @@ export function AttendancePage() {
   }
 
   return (
-    <main className="mx-auto max-w-7xl px-6 py-10">
+    <main className="page-main">
       <PageHeader
         eyebrow="CMS + LMS shared core"
         title="Student attendance"
