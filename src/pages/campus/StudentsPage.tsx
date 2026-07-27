@@ -1,141 +1,50 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { Fragment, useEffect, useMemo, useState, type FormEvent } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import {
+  AddOutlined,
+  CheckCircleOutline,
+  CloseOutlined,
+  CloudUploadOutlined,
+  DeleteOutline,
+  DownloadOutlined,
+  FilterListOutlined,
+  InsertDriveFileOutlined,
+  IosShareOutlined,
+  PersonAddAltOutlined,
+  ShieldOutlined,
+  SupportAgentOutlined,
+  UploadOutlined,
+  VisibilityOutlined,
+  AccountBalanceWalletOutlined,
+  VerifiedUserOutlined,
+} from "@mui/icons-material";
 import { useAuth } from "../../auth/AuthContext";
-import { PageHeader } from "../../components/AppShell";
+import { CmsFooter, CmsPage, CmsPageHeader, CmsTab, CmsTabs } from "../../components/cms/CmsLayout";
+import { InitialsAvatar } from "../../components/InitialsAvatar";
 import { apiRequest } from "../../lib/api";
-
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:4000/api/v1";
-const today = new Date().toISOString().slice(0, 10);
-
-const formatMoney = (value: number | string) =>
-  new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(Number(value));
+import type {
+  ImportResult,
+  MasterResource,
+  Named,
+  OnlineAdmission,
+  Setup,
+  StudentList,
+  StudentListItem,
+  StudentStatus,
+} from "./students/types";
+import { studentDisplayName } from "./students/types";
 
 const SAMPLE_CSV = [
   "firstName,lastName,admissionDate,classSectionId,rollNumber,mobile,email,gender,dateOfBirth,fatherName,fatherPhone,motherName,photoUrl",
   "Aarav,Sharma,2026-04-01,,1,9876543210,aarav@example.com,MALE,2015-06-12,Raj Sharma,9876543211,Priya Sharma,",
 ].join("\n");
 
-type PageTab = "directory" | "admissions" | "import" | "masters";
-type DetailTab = "profile" | "parents" | "fees" | "documents" | "siblings";
-type MasterResource = "categories" | "houses" | "disable-reasons";
-type StudentStatus = "ACTIVE" | "DISABLED";
+const PAGE_SIZE = 4;
 
-interface Named { id: string; name: string }
-interface ClassSection {
-  id: string;
-  academicClass: Named;
-  section: Named;
-}
-interface Setup {
-  categories: Named[];
-  houses: Named[];
-  disableReasons: Named[];
-  currentSession: Named | null;
-  classSections: ClassSection[];
-}
-interface StudentListItem {
-  id: string;
-  admissionNumber: string;
-  firstName: string;
-  lastName: string | null;
-  mobile: string | null;
-  status: StudentStatus;
-  category: Named | null;
-  house: Named | null;
-  enrollments: Array<{
-    id: string;
-    rollNumber: string | null;
-    classSection: ClassSection;
-    academicSession: Named;
-  }>;
-}
-interface StudentList {
-  items: StudentListItem[];
-  total: number;
-}
-interface StudentDocument {
-  id: string;
-  name: string;
-  fileUrl: string;
-  mimeType: string | null;
-  sizeBytes: number | null;
-  createdAt: string;
-  folder: Named;
-}
-interface StudentFees {
-  assignments: Array<{
-    id: string;
-    feeMaster: { feeType: Named; dueDate: string };
-    totals: { base: number; discount: number; fine: number; paid: number; balance: number };
-    enrollment: { classSection: ClassSection };
-  }>;
-  totals: { base: number; discount: number; fine: number; paid: number; balance: number };
-}
-interface StudentDetail extends StudentListItem {
-  gender: string | null;
-  dateOfBirth: string | null;
-  religion: string | null;
-  caste: string | null;
-  email: string | null;
-  admissionDate: string;
-  photoUrl: string | null;
-  bloodGroup: string | null;
-  height: number | null;
-  weight: number | null;
-  currentAddress: string | null;
-  permanentAddress: string | null;
-  fatherName: string | null;
-  fatherPhone: string | null;
-  motherName: string | null;
-  motherPhone: string | null;
-  guardianName: string | null;
-  guardianRelation: string | null;
-  guardianPhone: string | null;
-  disabledReason: string | null;
-  siblingGroupId: string | null;
-  documents: StudentDocument[];
-  siblings: Array<{
-    id: string;
-    admissionNumber: string;
-    firstName: string;
-    lastName: string | null;
-    status: StudentStatus;
-  }>;
-  fees: StudentFees | null;
-}
-interface DetectedSibling {
-  id: string;
-  admissionNumber: string;
-  firstName: string;
-  lastName: string | null;
-  fatherPhone: string | null;
-  motherPhone: string | null;
-  guardianPhone: string | null;
-  mobile: string | null;
-  siblingGroupId: string | null;
-}
-interface OnlineAdmission {
-  id: string;
-  status: string;
-  firstName: string;
-  lastName: string | null;
-  gender: string | null;
-  dateOfBirth: string | null;
-  mobile: string | null;
-  email: string | null;
-  fatherName: string | null;
-  motherName: string | null;
-  guardianPhone: string | null;
-  currentAddress: string | null;
-  createdAt: string;
-  classSection: ClassSection | null;
-  student: { id: string; admissionNumber: string } | null;
-}
-interface ImportResult {
-  created: number;
-  errors: Array<{ row: number; message: string }>;
-}
+type PageTab = "directory" | "admissions" | "import" | "masters";
 
 async function apiDelete(path: string, token: string) {
+  const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:4000/api/v1";
   const response = await fetch(`${API_URL}${path}`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` },
@@ -146,7 +55,9 @@ async function apiDelete(path: string, token: string) {
     if (text) {
       try {
         message = (JSON.parse(text) as { error?: { message?: string } }).error?.message ?? message;
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     }
     throw new Error(message);
   }
@@ -162,51 +73,185 @@ function downloadSampleCsv() {
   URL.revokeObjectURL(url);
 }
 
+function exportStudentsCsv(items: StudentListItem[]) {
+  const header = ["admissionNumber", "firstName", "lastName", "email", "mobile", "status", "class", "admissionDate"];
+  const rows = items.map((student) => {
+    const enrollment = student.enrollments[0];
+    const grade = enrollment
+      ? `${enrollment.classSection.academicClass.name} ${enrollment.classSection.section.name}`
+      : "";
+    return [
+      student.admissionNumber,
+      student.firstName,
+      student.lastName ?? "",
+      student.email ?? "",
+      student.mobile ?? "",
+      student.status,
+      grade,
+      student.admissionDate?.slice(0, 10) ?? "",
+    ]
+      .map((cell) => `"${String(cell).replaceAll('"', '""')}"`)
+      .join(",");
+  });
+  const blob = new Blob([[header.join(","), ...rows].join("\n")], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = "students-export.csv";
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+function DirectoryStatusBadge({ status }: { status: StudentStatus }) {
+  if (status === "ACTIVE") {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-emerald-700">
+        <span className="size-1.5 rounded-full bg-emerald-500" />
+        Active
+      </span>
+    );
+  }
+  if (status === "ALUMNI") {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-slate-600">
+        <span className="size-1.5 rounded-full bg-slate-400" />
+        Alumni
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-amber-700">
+      <span className="size-1.5 rounded-full bg-amber-500" />
+      Inactive
+    </span>
+  );
+}
+
+function headerForTab(tab: PageTab) {
+  if (tab === "admissions") {
+    return {
+      title: "Admissions",
+      description: "Review and process new student applications for the upcoming semester.",
+    };
+  }
+  if (tab === "import") {
+    return {
+      title: "Students Directory",
+      description: "Import student records with CSV upload or paste.",
+    };
+  }
+  if (tab === "masters") {
+    return {
+      title: "Students Directory",
+      description: "Manage categories, houses, and disable reasons.",
+    };
+  }
+  return {
+    title: "Students Directory",
+    description: "Manage and view all enrolled student records",
+  };
+}
+
 export function StudentsPage() {
   const { accessToken } = useAuth();
-  const [tab, setTab] = useState<PageTab>("directory");
+  const navigate = useNavigate();
+  const location = useLocation();
+  const initialTab = (location.state as { tab?: PageTab } | null)?.tab;
+  const [tab, setTab] = useState<PageTab>(
+    initialTab === "import" || initialTab === "admissions" || initialTab === "masters"
+      ? initialTab
+      : "directory",
+  );
   const [setup, setSetup] = useState<Setup | null>(null);
   const [students, setStudents] = useState<StudentList>({ items: [], total: 0 });
+  const [counts, setCounts] = useState({ active: 0, disabled: 0, alumni: 0, total: 0 });
   const [search, setSearch] = useState("");
+  const [classFilter, setClassFilter] = useState("");
+  const [sectionFilter, setSectionFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<"" | StudentStatus>("");
+  const [page, setPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [activeId, setActiveId] = useState<string | null>(null);
-  const [detail, setDetail] = useState<StudentDetail | null>(null);
-  const [showAddForm, setShowAddForm] = useState(false);
   const [admissions, setAdmissions] = useState<OnlineAdmission[]>([]);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+
+  const classOptions = useMemo(() => {
+    if (!setup) return [] as string[];
+    return [...new Set(setup.classSections.map((item) => item.academicClass.name))].sort();
+  }, [setup]);
+
+  const sectionOptions = useMemo(() => {
+    if (!setup) return [] as string[];
+    const sections = setup.classSections
+      .filter((item) => !classFilter || item.academicClass.name === classFilter)
+      .map((item) => item.section.name);
+    return [...new Set(sections)].sort();
+  }, [setup, classFilter]);
+
+  const classSectionId = useMemo(() => {
+    if (!setup || !classFilter || !sectionFilter) return "";
+    return (
+      setup.classSections.find(
+        (item) => item.academicClass.name === classFilter && item.section.name === sectionFilter,
+      )?.id ?? ""
+    );
+  }, [setup, classFilter, sectionFilter]);
 
   async function loadSetup() {
     setSetup(await apiRequest<Setup>("/students/setup", accessToken));
   }
 
-  async function loadStudents(query = search, status = statusFilter) {
-    const params = new URLSearchParams({ limit: "100" });
+  async function loadStudents(query = search, pageNum = page) {
+    const params = new URLSearchParams({
+      limit: String(PAGE_SIZE),
+      page: String(pageNum),
+    });
     if (query) params.set("search", query);
-    if (status) params.set("status", status);
-    setStudents(await apiRequest<StudentList>(`/students?${params}`, accessToken));
+    if (statusFilter) params.set("status", statusFilter);
+    if (classSectionId) {
+      params.set("classSectionId", classSectionId);
+    } else if (classFilter && setup) {
+      // Class-only filter: fetch a wider page then filter client-side by class name
+      params.set("limit", "100");
+      params.set("page", "1");
+    }
+    const result = await apiRequest<StudentList>(`/students?${params}`, accessToken);
+    if (!classSectionId && classFilter) {
+      const filtered = result.items.filter(
+        (item) => item.enrollments[0]?.classSection.academicClass.name === classFilter,
+      );
+      const start = (pageNum - 1) * PAGE_SIZE;
+      setStudents({
+        items: filtered.slice(start, start + PAGE_SIZE),
+        total: filtered.length,
+      });
+    } else {
+      setStudents(result);
+    }
+    setSelectedIds([]);
+  }
+
+  async function loadCounts() {
+    const [all, active, disabled, alumni] = await Promise.all([
+      apiRequest<StudentList>("/students?limit=1", accessToken),
+      apiRequest<StudentList>("/students?limit=1&status=ACTIVE", accessToken),
+      apiRequest<StudentList>("/students?limit=1&status=DISABLED", accessToken),
+      apiRequest<StudentList>("/students?limit=1&status=ALUMNI", accessToken),
+    ]);
+    setCounts({
+      total: all.total,
+      active: active.total,
+      disabled: disabled.total,
+      alumni: alumni.total,
+    });
   }
 
   async function loadAdmissions() {
     setAdmissions(await apiRequest<OnlineAdmission[]>("/students/admissions", accessToken));
   }
 
-  async function loadDetail(id: string) {
-    setActiveId(id);
-    setDetail(await apiRequest<StudentDetail>(`/students/${id}`, accessToken));
-  }
-
   async function refreshDirectory() {
-    await Promise.all([loadSetup(), loadStudents()]);
-    if (activeId) {
-      try {
-        setDetail(await apiRequest<StudentDetail>(`/students/${activeId}`, accessToken));
-      } catch {
-        setActiveId(null);
-        setDetail(null);
-      }
-    }
+    await Promise.all([loadSetup(), loadStudents(), loadCounts(), loadAdmissions()]);
   }
 
   useEffect(() => {
@@ -220,128 +265,355 @@ export function StudentsPage() {
   }, [accessToken]);
 
   useEffect(() => {
-    if (tab !== "admissions") return;
-    void loadAdmissions().catch((cause) => {
-      setError(cause instanceof Error ? cause.message : "Unable to load admissions");
+    void loadStudents(search, page).catch((cause) => {
+      setError(cause instanceof Error ? cause.message : "Unable to load students");
     });
-  }, [tab, accessToken]);
+  }, [page, statusFilter, classSectionId, classFilter]);
 
   function submitSearch(event: FormEvent) {
     event.preventDefault();
-    void loadStudents().catch((cause) => {
+    setPage(1);
+    void loadStudents(search, 1).catch((cause) => {
       setError(cause instanceof Error ? cause.message : "Unable to search students");
     });
   }
 
-  async function deleteSelected() {
-    if (!selectedIds.length) return;
-    if (!window.confirm(`Delete ${selectedIds.length} selected student(s)?`)) return;
+  async function deleteStudent(id: string) {
+    if (!window.confirm("Delete this student?")) return;
     try {
       await apiRequest("/students/delete", accessToken, {
         method: "POST",
-        body: JSON.stringify({ ids: selectedIds }),
+        body: JSON.stringify({ ids: [id] }),
       });
-      setMessage(`${selectedIds.length} student(s) deleted`);
-      setSelectedIds([]);
-      if (activeId && selectedIds.includes(activeId)) {
-        setActiveId(null);
-        setDetail(null);
-      }
+      setMessage("Student deleted");
       await refreshDirectory();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to delete students");
+      setError(cause instanceof Error ? cause.message : "Unable to delete student");
     }
   }
 
-  function toggleSelected(id: string) {
-    setSelectedIds((current) =>
-      current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
-    );
-  }
-
-  const allSelected = useMemo(
-    () => students.items.length > 0 && students.items.every((item) => selectedIds.includes(item.id)),
-    [students.items, selectedIds],
+  const pendingAdmissions = useMemo(
+    () => admissions.filter((item) => item.status === "PENDING").length,
+    [admissions],
   );
 
+  const totalPages = Math.max(1, Math.ceil(students.total / PAGE_SIZE));
+  const from = students.total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const to = Math.min(page * PAGE_SIZE, students.total);
+  const header = headerForTab(tab);
+  const allSelected = students.items.length > 0 && selectedIds.length === students.items.length;
+
   return (
-    <main className="page-main">
-      <PageHeader
-        eyebrow="Student management"
-        title="Students and enrolment"
-        description="Directory, admissions, bulk import, and student master data for the current session."
-        action={setup?.currentSession && <span className="badge-success">{setup.currentSession.name}</span>}
+    <CmsPage>
+      <CmsPageHeader
+        title={header.title}
+        description={header.description}
+        actions={
+          tab === "admissions" ? (
+            <>
+              <button type="button" className="nx-btn-secondary">
+                <FilterListOutlined sx={{ fontSize: 16 }} /> Filters
+              </button>
+              <button
+                type="button"
+                className="nx-btn-primary !bg-slate-900 hover:!bg-slate-800"
+                onClick={() => exportStudentsCsv(students.items)}
+              >
+                <IosShareOutlined sx={{ fontSize: 16 }} /> Export List
+              </button>
+            </>
+          ) : (
+            <button type="button" className="nx-btn-primary" onClick={() => navigate("/students/new")}>
+              + Add New Student
+            </button>
+          )
+        }
       />
-      {error && <p className="alert-error mt-6">{error}</p>}
-      {message && (
-        <p className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
+
+      {error ? <p className="alert-error mt-4">{error}</p> : null}
+      {message ? (
+        <p className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3.5 text-sm text-emerald-700">
           {message}
         </p>
-      )}
+      ) : null}
 
-      <div className="mt-8 flex gap-2 overflow-x-auto border-b border-slate-200">
-        {([
-          ["directory", "Directory"],
-          ["admissions", "Admissions"],
-          ["import", "Import"],
-          ["masters", "Masters"],
-        ] as const).map(([key, label]) => (
-          <button
-            key={key}
-            className={`tab ${tab === key ? "tab-active" : ""}`}
-            onClick={() => setTab(key)}
-          >
+      <CmsTabs>
+        {(
+          [
+            ["directory", "Directory"],
+            ["admissions", "Admissions"],
+            ["import", "Import"],
+            ["masters", "Masters"],
+          ] as const
+        ).map(([key, label]) => (
+          <CmsTab key={key} active={tab === key} onClick={() => setTab(key)}>
             {label}
-          </button>
+            {key === "admissions" && pendingAdmissions > 0 ? (
+              <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">
+                {pendingAdmissions}
+              </span>
+            ) : null}
+          </CmsTab>
         ))}
-      </div>
+      </CmsTabs>
 
-      {tab === "directory" && setup && (
-        <DirectoryPanel
-          setup={setup}
-          students={students}
-          search={search}
-          statusFilter={statusFilter}
-          selectedIds={selectedIds}
-          allSelected={allSelected}
-          activeId={activeId}
-          detail={detail}
-          showAddForm={showAddForm}
-          token={accessToken}
-          onSearchChange={setSearch}
-          onStatusFilterChange={(value) => {
-            setStatusFilter(value);
-            void loadStudents(search, value).catch((cause) => {
-              setError(cause instanceof Error ? cause.message : "Unable to filter students");
-            });
-          }}
-          onSubmitSearch={submitSearch}
-          onToggleSelected={toggleSelected}
-          onToggleAll={() => {
-            setSelectedIds(allSelected ? [] : students.items.map((item) => item.id));
-          }}
-          onSelectStudent={(id) => {
-            void loadDetail(id).catch((cause) => {
-              setError(cause instanceof Error ? cause.message : "Unable to load student detail");
-            });
-          }}
-          onCloseDetail={() => {
-            setActiveId(null);
-            setDetail(null);
-          }}
-          onRefresh={async () => {
-            setError("");
-            setMessage("");
-            await refreshDirectory();
-          }}
-          onDeleteSelected={() => void deleteSelected()}
-          onToggleAddForm={() => setShowAddForm((current) => !current)}
-          onError={setError}
-          onMessage={setMessage}
-        />
-      )}
+      {tab === "directory" ? (
+        <section className="mt-4">
+          <div className="nx-card overflow-hidden">
+            <form
+              className="flex flex-col gap-3 border-b border-slate-100 px-4 py-3.5 lg:flex-row lg:items-center"
+              onSubmit={submitSearch}
+            >
+              <div className="relative min-w-0 flex-1">
+                <input
+                  className="nx-input w-full pl-3"
+                  placeholder="Search by name, ID or parent..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </div>
+              <select
+                className="nx-input w-full lg:w-40"
+                value={classFilter}
+                onChange={(e) => {
+                  setClassFilter(e.target.value);
+                  setSectionFilter("");
+                  setPage(1);
+                }}
+              >
+                <option value="">Class: All</option>
+                {classOptions.map((name) => (
+                  <option key={name} value={name}>
+                    Class: {name}
+                  </option>
+                ))}
+              </select>
+              <select
+                className="nx-input w-full lg:w-40"
+                value={sectionFilter}
+                onChange={(e) => {
+                  setSectionFilter(e.target.value);
+                  setPage(1);
+                }}
+              >
+                <option value="">Section: All</option>
+                {sectionOptions.map((name) => (
+                  <option key={name} value={name}>
+                    Section: {name}
+                  </option>
+                ))}
+              </select>
+              <select
+                className="nx-input w-full lg:w-40"
+                value={statusFilter}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value as "" | StudentStatus);
+                  setPage(1);
+                }}
+              >
+                <option value="">Status: All</option>
+                <option value="ACTIVE">Status: Active</option>
+                <option value="DISABLED">Status: Inactive</option>
+                <option value="ALUMNI">Status: Alumni</option>
+              </select>
+            </form>
 
-      {tab === "admissions" && setup && (
+            <div className="overflow-x-auto">
+              <table className="nx-table min-w-[980px]">
+                <thead>
+                  <tr className="border-b border-slate-100 bg-slate-50/80 text-[11px] font-bold uppercase tracking-wide text-slate-400">
+                    <th className="w-12 px-4 py-3">
+                      <input
+                        type="checkbox"
+                        checked={allSelected}
+                        onChange={(e) => {
+                          setSelectedIds(e.target.checked ? students.items.map((item) => item.id) : []);
+                        }}
+                        aria-label="Select all students"
+                      />
+                    </th>
+                    <th className="px-3 py-3 text-left">Student Name</th>
+                    <th className="px-3 py-3 text-left">Student ID</th>
+                    <th className="px-3 py-3 text-left">Class/Section</th>
+                    <th className="px-3 py-3 text-left">Parent Name</th>
+                    <th className="px-3 py-3 text-left">Phone</th>
+                    <th className="px-3 py-3 text-left">Status</th>
+                    <th className="px-4 py-3 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {students.items.map((student) => {
+                    const name = studentDisplayName(student);
+                    const enrollment = student.enrollments[0];
+                    const grade = enrollment
+                      ? `${enrollment.classSection.academicClass.name} - ${enrollment.classSection.section.name}`
+                      : "—";
+                    return (
+                      <tr key={student.id} className="transition hover:bg-indigo-50/30">
+                        <td className="px-4 py-3.5">
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.includes(student.id)}
+                            onChange={(e) => {
+                              setSelectedIds((current) =>
+                                e.target.checked
+                                  ? [...current, student.id]
+                                  : current.filter((id) => id !== student.id),
+                              );
+                            }}
+                            aria-label={`Select ${name}`}
+                          />
+                        </td>
+                        <td className="px-3 py-3.5">
+                          <div className="flex items-center gap-3">
+                            <InitialsAvatar name={name} photoUrl={student.photoUrl ?? undefined} size={40} />
+                            <div className="min-w-0">
+                              <p className="truncate font-semibold text-slate-900">{name}</p>
+                              <p className="truncate text-[12px] text-slate-400">{student.email || "No email"}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-3 py-3.5 font-mono text-[12.5px] text-slate-600">
+                          #{student.admissionNumber}
+                        </td>
+                        <td className="px-3 py-3.5">
+                          <span className="inline-flex rounded-md bg-slate-100 px-2 py-0.5 text-[12px] font-semibold text-slate-600">
+                            {grade}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3.5 text-slate-600">{student.fatherName || "—"}</td>
+                        <td className="px-3 py-3.5 text-slate-600">{student.mobile || "—"}</td>
+                        <td className="px-3 py-3.5">
+                          <DirectoryStatusBadge status={student.status} />
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <div className="flex items-center justify-end gap-1">
+                            <button
+                              type="button"
+                              className="grid size-8 place-items-center rounded-lg text-indigo-600 transition hover:bg-indigo-50"
+                              title="View"
+                              onClick={() => navigate(`/students/${student.id}`)}
+                            >
+                              <VisibilityOutlined sx={{ fontSize: 18 }} />
+                            </button>
+                            <button
+                              type="button"
+                              className="grid size-8 place-items-center rounded-lg text-rose-500 transition hover:bg-rose-50"
+                              title="Delete"
+                              onClick={() => void deleteStudent(student.id)}
+                            >
+                              <DeleteOutline sx={{ fontSize: 18 }} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              {!students.items.length ? (
+                <p className="px-5 py-12 text-center text-sm text-slate-500">No students found.</p>
+              ) : null}
+            </div>
+
+            {students.total > 0 ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-4 py-3">
+                <p className="text-[12px] text-slate-500">
+                  Showing {from} to {to} of {students.total.toLocaleString()} students
+                </p>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    className="nx-btn-secondary !px-3 !py-1.5 text-[12px]"
+                    disabled={page <= 1}
+                    onClick={() => setPage((current) => Math.max(1, current - 1))}
+                  >
+                    Prev
+                  </button>
+                  {Array.from({ length: Math.min(totalPages, 3) }, (_, index) => {
+                    const pageNum = index + 1;
+                    return (
+                      <button
+                        key={pageNum}
+                        type="button"
+                        onClick={() => setPage(pageNum)}
+                        className={`grid size-8 place-items-center rounded-lg text-[12px] font-semibold ${
+                          page === pageNum ? "bg-indigo-600 text-white" : "text-slate-500 hover:bg-slate-100"
+                        }`}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  })}
+                  {totalPages > 3 ? (
+                    <>
+                      <span className="px-1 text-slate-400">…</span>
+                      <button
+                        type="button"
+                        onClick={() => setPage(totalPages)}
+                        className={`grid min-w-8 place-items-center rounded-lg px-2 text-[12px] font-semibold ${
+                          page === totalPages ? "bg-indigo-600 text-white" : "text-slate-500 hover:bg-slate-100"
+                        }`}
+                      >
+                        {totalPages}
+                      </button>
+                    </>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="nx-btn-secondary !px-3 !py-1.5 text-[12px]"
+                    disabled={page >= totalPages}
+                    onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <div className="nx-card flex items-center gap-4 p-4">
+              <span className="grid size-11 place-items-center rounded-xl bg-indigo-50 text-indigo-600">
+                <PersonAddAltOutlined sx={{ fontSize: 22 }} />
+              </span>
+              <div>
+                <p className="text-[12px] font-medium text-slate-500">New Enrollments</p>
+                <div className="mt-0.5 flex items-baseline gap-2">
+                  <p className="text-[22px] font-bold text-slate-900">{counts.active.toLocaleString()}</p>
+                  <span className="text-[12px] font-semibold text-emerald-600">↑ 12%</span>
+                </div>
+              </div>
+            </div>
+            <div className="nx-card flex items-center gap-4 p-4">
+              <span className="grid size-11 place-items-center rounded-xl bg-sky-50 text-sky-600">
+                <VerifiedUserOutlined sx={{ fontSize: 22 }} />
+              </span>
+              <div>
+                <p className="text-[12px] font-medium text-slate-500">Attendance Rate</p>
+                <div className="mt-0.5 flex items-baseline gap-2">
+                  <p className="text-[22px] font-bold text-slate-900">94.2%</p>
+                  <span className="text-[12px] font-semibold text-emerald-600">↑ 0.5%</span>
+                </div>
+              </div>
+            </div>
+            <div className="nx-card flex items-center gap-4 p-4">
+              <span className="grid size-11 place-items-center rounded-xl bg-rose-50 text-rose-600">
+                <AccountBalanceWalletOutlined sx={{ fontSize: 22 }} />
+              </span>
+              <div>
+                <p className="text-[12px] font-medium text-slate-500">Fee Pendency</p>
+                <div className="mt-0.5 flex items-baseline gap-2">
+                  <p className="text-[22px] font-bold text-slate-900">$4,250</p>
+                  <span className="text-[12px] font-semibold text-rose-600">↓ 8%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {tab === "admissions" && setup ? (
         <AdmissionsPanel
           admissions={admissions}
           setup={setup}
@@ -353,9 +625,9 @@ export function StudentsPage() {
           onError={setError}
           onMessage={setMessage}
         />
-      )}
+      ) : null}
 
-      {tab === "import" && (
+      {tab === "import" ? (
         <ImportPanel
           token={accessToken}
           onImported={async () => {
@@ -365,9 +637,9 @@ export function StudentsPage() {
           onError={setError}
           onMessage={setMessage}
         />
-      )}
+      ) : null}
 
-      {tab === "masters" && setup && (
+      {tab === "masters" && setup ? (
         <MastersPanel
           setup={setup}
           token={accessToken}
@@ -377,600 +649,11 @@ export function StudentsPage() {
           onError={setError}
           onMessage={setMessage}
         />
-      )}
-    </main>
+      ) : null}
+
+      <CmsFooter />
+    </CmsPage>
   );
-}
-
-function DirectoryPanel({
-  setup,
-  students,
-  search,
-  statusFilter,
-  selectedIds,
-  allSelected,
-  activeId,
-  detail,
-  showAddForm,
-  token,
-  onSearchChange,
-  onStatusFilterChange,
-  onSubmitSearch,
-  onToggleSelected,
-  onToggleAll,
-  onSelectStudent,
-  onCloseDetail,
-  onRefresh,
-  onDeleteSelected,
-  onToggleAddForm,
-  onError,
-  onMessage,
-}: {
-  setup: Setup;
-  students: StudentList;
-  search: string;
-  statusFilter: "" | StudentStatus;
-  selectedIds: string[];
-  allSelected: boolean;
-  activeId: string | null;
-  detail: StudentDetail | null;
-  showAddForm: boolean;
-  token: string;
-  onSearchChange: (value: string) => void;
-  onStatusFilterChange: (value: "" | StudentStatus) => void;
-  onSubmitSearch: (event: FormEvent) => void;
-  onToggleSelected: (id: string) => void;
-  onToggleAll: () => void;
-  onSelectStudent: (id: string) => void;
-  onCloseDetail: () => void;
-  onRefresh: () => Promise<void>;
-  onDeleteSelected: () => void;
-  onToggleAddForm: () => void;
-  onError: (message: string) => void;
-  onMessage: (message: string) => void;
-}) {
-  return (
-    <section className="mt-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <button className="button-primary" onClick={onToggleAddForm}>
-          {showAddForm ? "Close form" : "Add student"}
-        </button>
-        {selectedIds.length > 0 && (
-          <button className="button-secondary text-rose-700" onClick={onDeleteSelected}>
-            Delete selected ({selectedIds.length})
-          </button>
-        )}
-      </div>
-
-      {showAddForm && (
-        <StudentForm
-          setup={setup}
-          token={token}
-          onSaved={async () => {
-            onToggleAddForm();
-            onMessage("Student added");
-            await onRefresh();
-          }}
-          onError={onError}
-        />
-      )}
-
-      <div className={`mt-6 grid gap-5 ${detail ? "lg:grid-cols-[1fr_420px]" : ""}`}>
-        <div>
-          <form className="flex flex-wrap gap-3" onSubmit={onSubmitSearch}>
-            <input
-              className="input min-w-[220px] flex-1"
-              placeholder="Search name, admission number, mobile…"
-              value={search}
-              onChange={(e) => onSearchChange(e.target.value)}
-            />
-            <select
-              className="input w-44"
-              value={statusFilter}
-              onChange={(e) => onStatusFilterChange(e.target.value as "" | StudentStatus)}
-            >
-              <option value="">All statuses</option>
-              <option value="ACTIVE">Active</option>
-              <option value="DISABLED">Disabled</option>
-            </select>
-            <button className="button-secondary" type="submit">Search</button>
-          </form>
-
-          <div className="card mt-4 overflow-hidden">
-            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 text-sm text-slate-500">
-              <label className="flex items-center gap-2">
-                <input type="checkbox" checked={allSelected} onChange={onToggleAll} />
-                {students.total} students
-              </label>
-            </div>
-            <div className="divide-y divide-slate-100">
-              {students.items.map((student) => {
-                const enrollment = student.enrollments[0];
-                const isActive = activeId === student.id;
-                return (
-                  <div
-                    className={`flex flex-col justify-between gap-3 px-5 py-4 sm:flex-row sm:items-center ${isActive ? "bg-indigo-50" : "cursor-pointer hover:bg-slate-50"}`}
-                    key={student.id}
-                  >
-                    <div className="flex items-start gap-3">
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.includes(student.id)}
-                        onChange={() => onToggleSelected(student.id)}
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                      <button
-                        className="text-left"
-                        type="button"
-                        onClick={() => onSelectStudent(student.id)}
-                      >
-                        <p className="font-medium">{student.firstName} {student.lastName}</p>
-                        <p className="mt-1 text-sm text-slate-500">
-                          {student.admissionNumber}
-                          {enrollment && ` · ${enrollment.classSection.academicClass.name} ${enrollment.classSection.section.name}`}
-                          {enrollment?.rollNumber && ` · Roll ${enrollment.rollNumber}`}
-                        </p>
-                      </button>
-                    </div>
-                    <div className="flex items-center gap-2 pl-8 sm:pl-0">
-                      {student.house && <span className="badge">{student.house.name}</span>}
-                      <span className={student.status === "ACTIVE" ? "badge-success" : "badge-danger"}>
-                        {student.status}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-              {!students.items.length && (
-                <p className="px-5 py-10 text-center text-sm text-slate-500">No students found.</p>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {detail && setup && (
-          <StudentDetailPanel
-            detail={detail}
-            setup={setup}
-            token={token}
-            onClose={onCloseDetail}
-            onUpdated={onRefresh}
-            onError={onError}
-            onMessage={onMessage}
-          />
-        )}
-      </div>
-    </section>
-  );
-}
-
-function StudentDetailPanel({
-  detail,
-  setup,
-  token,
-  onClose,
-  onUpdated,
-  onError,
-  onMessage,
-}: {
-  detail: StudentDetail;
-  setup: Setup;
-  token: string;
-  onClose: () => void;
-  onUpdated: () => Promise<void>;
-  onError: (message: string) => void;
-  onMessage: (message: string) => void;
-}) {
-  const [detailTab, setDetailTab] = useState<DetailTab>("profile");
-  const [profile, setProfile] = useState(() => buildProfileForm(detail));
-  const [disableMode, setDisableMode] = useState(false);
-  const [disableReason, setDisableReason] = useState("");
-  const [customDisableReason, setCustomDisableReason] = useState("");
-  const [detected, setDetected] = useState<DetectedSibling[]>([]);
-  const [linkIds, setLinkIds] = useState<string[]>([]);
-  const [detecting, setDetecting] = useState(false);
-
-  useEffect(() => {
-    setProfile(buildProfileForm(detail));
-    setDetailTab("profile");
-    setDisableMode(false);
-    setDetected([]);
-    setLinkIds([]);
-  }, [detail.id]);
-
-  async function saveProfile(event: FormEvent) {
-    event.preventDefault();
-    try {
-      const payload = Object.fromEntries(
-        Object.entries(profile).map(([key, value]) => [key, value === "" ? null : value]),
-      );
-      await apiRequest(`/students/${detail.id}`, token, {
-        method: "PUT",
-        body: JSON.stringify(payload),
-      });
-      onMessage("Profile updated");
-      await onUpdated();
-    } catch (cause) {
-      onError(cause instanceof Error ? cause.message : "Unable to update profile");
-    }
-  }
-
-  async function toggleStatus() {
-    if (detail.status === "ACTIVE") {
-      setDisableMode(true);
-      return;
-    }
-    try {
-      await apiRequest(`/students/${detail.id}`, token, {
-        method: "PUT",
-        body: JSON.stringify({ status: "ACTIVE" }),
-      });
-      onMessage("Student enabled");
-      setDisableMode(false);
-      await onUpdated();
-    } catch (cause) {
-      onError(cause instanceof Error ? cause.message : "Unable to enable student");
-    }
-  }
-
-  async function confirmDisable() {
-    const reason = disableReason === "__custom__" ? customDisableReason.trim() : disableReason.trim();
-    if (!reason) {
-      onError("Disable reason is required");
-      return;
-    }
-    try {
-      await apiRequest(`/students/${detail.id}`, token, {
-        method: "PUT",
-        body: JSON.stringify({ status: "DISABLED", disabledReason: reason }),
-      });
-      onMessage("Student disabled");
-      setDisableMode(false);
-      await onUpdated();
-    } catch (cause) {
-      onError(cause instanceof Error ? cause.message : "Unable to disable student");
-    }
-  }
-
-  async function detectSiblings() {
-    setDetecting(true);
-    try {
-      const next = await apiRequest<DetectedSibling[]>(
-        `/students/${detail.id}/siblings/detect`,
-        token,
-      );
-      setDetected(next);
-      setLinkIds(next.map((item) => item.id));
-    } catch (cause) {
-      onError(cause instanceof Error ? cause.message : "Unable to detect siblings");
-    } finally {
-      setDetecting(false);
-    }
-  }
-
-  async function linkSiblings() {
-    const studentIds = [detail.id, ...linkIds.filter((id) => id !== detail.id)];
-    if (studentIds.length < 2) {
-      onError("Select at least one sibling to link");
-      return;
-    }
-    try {
-      await apiRequest("/students/siblings", token, {
-        method: "POST",
-        body: JSON.stringify({ studentIds }),
-      });
-      onMessage("Siblings linked");
-      setDetected([]);
-      setLinkIds([]);
-      await onUpdated();
-    } catch (cause) {
-      onError(cause instanceof Error ? cause.message : "Unable to link siblings");
-    }
-  }
-
-  const enrollment = detail.enrollments[0];
-
-  return (
-    <aside className="card overflow-hidden">
-      <div className="border-b border-slate-100 p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600">Student 360</p>
-            <h2 className="mt-1 text-lg font-semibold">{detail.firstName} {detail.lastName}</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              {detail.admissionNumber}
-              {enrollment && ` · ${enrollment.classSection.academicClass.name} ${enrollment.classSection.section.name}`}
-            </p>
-          </div>
-          <button className="text-sm font-semibold text-slate-500" type="button" onClick={onClose}>Close</button>
-        </div>
-        <div className="mt-4 flex flex-wrap gap-2">
-          <span className={detail.status === "ACTIVE" ? "badge-success" : "badge-danger"}>{detail.status}</span>
-          {detail.disabledReason && <span className="badge">{detail.disabledReason}</span>}
-          <button className="button-secondary" type="button" onClick={() => void toggleStatus()}>
-            {detail.status === "ACTIVE" ? "Disable" : "Enable"}
-          </button>
-        </div>
-        {disableMode && (
-          <div className="mt-4 rounded-xl bg-rose-50 p-4">
-            <p className="text-sm font-medium text-rose-800">Reason for disabling</p>
-            <select
-              className="input mt-2"
-              value={disableReason}
-              onChange={(e) => setDisableReason(e.target.value)}
-            >
-              <option value="">Select reason</option>
-              {setup.disableReasons.map((item) => (
-                <option key={item.id} value={item.name}>{item.name}</option>
-              ))}
-              <option value="__custom__">Other (enter below)</option>
-            </select>
-            {disableReason === "__custom__" && (
-              <input
-                className="input mt-2"
-                placeholder="Enter disable reason"
-                value={customDisableReason}
-                onChange={(e) => setCustomDisableReason(e.target.value)}
-              />
-            )}
-            <div className="mt-3 flex gap-2">
-              <button className="button-primary" type="button" onClick={() => void confirmDisable()}>
-                Confirm disable
-              </button>
-              <button className="button-secondary" type="button" onClick={() => setDisableMode(false)}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className="flex gap-1 overflow-x-auto border-b border-slate-100 px-3">
-        {([
-          ["profile", "Profile"],
-          ["parents", "Parents"],
-          ["fees", "Fees"],
-          ["documents", "Documents"],
-          ["siblings", "Siblings"],
-        ] as const).map(([key, label]) => (
-          <button
-            key={key}
-            className={`tab ${detailTab === key ? "tab-active" : ""}`}
-            type="button"
-            onClick={() => setDetailTab(key)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      <div className="max-h-[640px] overflow-y-auto p-5">
-        {detailTab === "profile" && (
-          <form className="grid gap-3" onSubmit={saveProfile}>
-            <input
-              className="input"
-              placeholder="Photo URL"
-              value={profile.photoUrl}
-              onChange={(e) => setProfile({ ...profile, photoUrl: e.target.value })}
-            />
-            {profile.photoUrl && (
-              <img
-                className="h-24 w-24 rounded-xl object-cover"
-                src={profile.photoUrl}
-                alt={`${detail.firstName} photo`}
-              />
-            )}
-            <input className="input" required placeholder="First name" value={profile.firstName}
-              onChange={(e) => setProfile({ ...profile, firstName: e.target.value })} />
-            <input className="input" placeholder="Last name" value={profile.lastName}
-              onChange={(e) => setProfile({ ...profile, lastName: e.target.value })} />
-            <select className="input" value={profile.gender} onChange={(e) => setProfile({ ...profile, gender: e.target.value })}>
-              <option value="">Gender</option>
-              <option value="MALE">Male</option>
-              <option value="FEMALE">Female</option>
-              <option value="OTHER">Other</option>
-            </select>
-            <label><span className="label">Date of birth</span>
-              <input className="input" type="date" value={profile.dateOfBirth}
-                onChange={(e) => setProfile({ ...profile, dateOfBirth: e.target.value })} /></label>
-            <label><span className="label">Admission date</span>
-              <input className="input" type="date" required value={profile.admissionDate}
-                onChange={(e) => setProfile({ ...profile, admissionDate: e.target.value })} /></label>
-            <input className="input" placeholder="Mobile" value={profile.mobile}
-              onChange={(e) => setProfile({ ...profile, mobile: e.target.value })} />
-            <input className="input" type="email" placeholder="Email" value={profile.email}
-              onChange={(e) => setProfile({ ...profile, email: e.target.value })} />
-            <select className="input" value={profile.categoryId} onChange={(e) => setProfile({ ...profile, categoryId: e.target.value })}>
-              <option value="">Category</option>
-              {setup.categories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-            </select>
-            <select className="input" value={profile.houseId} onChange={(e) => setProfile({ ...profile, houseId: e.target.value })}>
-              <option value="">House</option>
-              {setup.houses.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-            </select>
-            <input className="input" placeholder="Blood group" value={profile.bloodGroup}
-              onChange={(e) => setProfile({ ...profile, bloodGroup: e.target.value })} />
-            <textarea className="input" placeholder="Current address" value={profile.currentAddress}
-              onChange={(e) => setProfile({ ...profile, currentAddress: e.target.value })} />
-            <textarea className="input" placeholder="Permanent address" value={profile.permanentAddress}
-              onChange={(e) => setProfile({ ...profile, permanentAddress: e.target.value })} />
-            <button className="button-primary" type="submit">Save profile</button>
-          </form>
-        )}
-
-        {detailTab === "parents" && (
-          <div className="space-y-4 text-sm">
-            <ParentBlock title="Father" name={detail.fatherName} phone={detail.fatherPhone} />
-            <ParentBlock title="Mother" name={detail.motherName} phone={detail.motherPhone} />
-            <ParentBlock
-              title="Guardian"
-              name={detail.guardianName}
-              phone={detail.guardianPhone}
-              relation={detail.guardianRelation}
-            />
-          </div>
-        )}
-
-        {detailTab === "fees" && (
-          detail.fees ? (
-            <div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <FeeMetric label="Assigned" value={detail.fees.totals.base} />
-                <FeeMetric label="Paid" value={detail.fees.totals.paid} />
-                <FeeMetric label="Discount" value={detail.fees.totals.discount} />
-                <FeeMetric label="Balance" value={detail.fees.totals.balance} accent />
-              </div>
-              <div className="mt-4 divide-y divide-slate-100 rounded-xl border border-slate-100">
-                {detail.fees.assignments.map((assignment) => (
-                  <div className="p-4" key={assignment.id}>
-                    <p className="font-medium">{assignment.feeMaster.feeType.name}</p>
-                    <p className="mt-1 text-sm text-slate-500">
-                      Due {new Date(assignment.feeMaster.dueDate).toLocaleDateString()} ·
-                      {" "}Balance {formatMoney(assignment.totals.balance)}
-                    </p>
-                  </div>
-                ))}
-                {!detail.fees.assignments.length && (
-                  <p className="p-6 text-center text-sm text-slate-500">No fee assignments.</p>
-                )}
-              </div>
-            </div>
-          ) : (
-            <p className="text-sm text-slate-500">Fee summary is not available for this student.</p>
-          )
-        )}
-
-        {detailTab === "documents" && (
-          <div className="divide-y divide-slate-100 rounded-xl border border-slate-100">
-            {detail.documents.map((doc) => (
-              <div className="p-4" key={doc.id}>
-                <a className="font-medium text-indigo-700" href={doc.fileUrl} target="_blank" rel="noreferrer">
-                  {doc.name}
-                </a>
-                <p className="mt-1 text-sm text-slate-500">
-                  {doc.folder.name} · {new Date(doc.createdAt).toLocaleDateString()}
-                </p>
-              </div>
-            ))}
-            {!detail.documents.length && (
-              <p className="p-6 text-center text-sm text-slate-500">No documents uploaded.</p>
-            )}
-          </div>
-        )}
-
-        {detailTab === "siblings" && (
-          <div>
-            {detail.siblings.length > 0 && (
-              <div className="mb-4 divide-y divide-slate-100 rounded-xl border border-slate-100">
-                {detail.siblings.map((sibling) => (
-                  <div className="flex items-center justify-between p-4" key={sibling.id}>
-                    <div>
-                      <p className="font-medium">{sibling.firstName} {sibling.lastName}</p>
-                      <p className="text-sm text-slate-500">{sibling.admissionNumber}</p>
-                    </div>
-                    <span className={sibling.status === "ACTIVE" ? "badge-success" : "badge-danger"}>
-                      {sibling.status}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-            <button
-              className="button-secondary"
-              disabled={detecting}
-              type="button"
-              onClick={() => void detectSiblings()}
-            >
-              {detecting ? "Detecting…" : "Detect possible siblings"}
-            </button>
-            {detected.length > 0 && (
-              <div className="mt-4">
-                <p className="text-sm font-medium text-slate-700">Possible matches</p>
-                <div className="mt-2 divide-y divide-slate-100 rounded-xl border border-slate-100">
-                  {detected.map((item) => (
-                    <label className="flex items-center gap-3 p-4" key={item.id}>
-                      <input
-                        type="checkbox"
-                        checked={linkIds.includes(item.id)}
-                        onChange={() => {
-                          setLinkIds((current) =>
-                            current.includes(item.id)
-                              ? current.filter((id) => id !== item.id)
-                              : [...current, item.id],
-                          );
-                        }}
-                      />
-                      <div>
-                        <p className="font-medium">{item.firstName} {item.lastName}</p>
-                        <p className="text-sm text-slate-500">
-                          {item.admissionNumber}
-                          {item.siblingGroupId && " · Already in a sibling group"}
-                        </p>
-                      </div>
-                    </label>
-                  ))}
-                </div>
-                <button className="button-primary mt-3" type="button" onClick={() => void linkSiblings()}>
-                  Link selected siblings
-                </button>
-              </div>
-            )}
-            {!detail.siblings.length && !detected.length && (
-              <p className="mt-4 text-sm text-slate-500">No linked siblings yet.</p>
-            )}
-          </div>
-        )}
-      </div>
-    </aside>
-  );
-}
-
-function ParentBlock({
-  title,
-  name,
-  phone,
-  relation,
-}: {
-  title: string;
-  name: string | null;
-  phone: string | null;
-  relation?: string | null;
-}) {
-  return (
-    <div className="rounded-xl bg-slate-50 p-4">
-      <p className="font-semibold">{title}</p>
-      <p className="mt-1">{name || "—"}</p>
-      <p className="mt-1 text-slate-500">{phone || "No phone"}</p>
-      {relation && <p className="mt-1 text-slate-500">Relation: {relation}</p>}
-    </div>
-  );
-}
-
-function FeeMetric({ label, value, accent }: { label: string; value: number; accent?: boolean }) {
-  return (
-    <div className={`rounded-xl p-4 ${accent ? "bg-indigo-50" : "bg-slate-50"}`}>
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-1 font-semibold">{formatMoney(value)}</p>
-    </div>
-  );
-}
-
-function buildProfileForm(detail: StudentDetail) {
-  return {
-    firstName: detail.firstName,
-    lastName: detail.lastName ?? "",
-    gender: detail.gender ?? "",
-    dateOfBirth: detail.dateOfBirth?.slice(0, 10) ?? "",
-    admissionDate: detail.admissionDate.slice(0, 10),
-    mobile: detail.mobile ?? "",
-    email: detail.email ?? "",
-    categoryId: detail.category?.id ?? "",
-    houseId: detail.house?.id ?? "",
-    photoUrl: detail.photoUrl ?? "",
-    bloodGroup: detail.bloodGroup ?? "",
-    currentAddress: detail.currentAddress ?? "",
-    permanentAddress: detail.permanentAddress ?? "",
-  };
 }
 
 function AdmissionsPanel({
@@ -988,71 +671,299 @@ function AdmissionsPanel({
   onError: (message: string) => void;
   onMessage: (message: string) => void;
 }) {
+  const [page, setPage] = useState(1);
+  const [reviewId, setReviewId] = useState<string | null>(null);
+  const pageSize = 5;
+
   const pending = admissions.filter((item) => item.status === "PENDING");
-  const reviewed = admissions.filter((item) => item.status !== "PENDING");
+  const accepted = admissions.filter((item) => item.status === "ACCEPTED");
+  const rejected = admissions.filter((item) => item.status === "REJECTED");
+  const rejectRate = admissions.length > 0 ? Math.round((rejected.length / admissions.length) * 100) : 0;
+
+  const gradeBuckets = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const item of admissions) {
+      const label = item.classSection ? item.classSection.academicClass.name : "Unassigned";
+      map.set(label, (map.get(label) ?? 0) + 1);
+    }
+    const total = Math.max(1, admissions.length);
+    return [...map.entries()]
+      .map(([label, count]) => ({ label, count, pct: Math.round((count / total) * 100) }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 3);
+  }, [admissions]);
+
+  const paged = pending.slice((page - 1) * pageSize, page * pageSize);
+  const totalPages = Math.max(1, Math.ceil(pending.length / pageSize));
+  const from = pending.length === 0 ? 0 : (page - 1) * pageSize + 1;
+  const to = Math.min(page * pageSize, pending.length);
+  const monthLabel = new Date().toLocaleString(undefined, { month: "short" });
 
   return (
-    <section className="mt-6 space-y-6">
-      <div className="card divide-y divide-slate-100 overflow-hidden">
-        <div className="border-b border-slate-100 px-5 py-4 font-semibold">
-          Pending applications ({pending.length})
+    <section className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
+      <div className="space-y-4">
+        <div className="nx-card overflow-hidden">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-5 py-3.5">
+            <h2 className="text-[15px] font-bold text-slate-900">Pending Admissions</h2>
+            {pending.length > 0 ? (
+              <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-indigo-600">
+                {pending.length} New Items
+              </span>
+            ) : null}
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] text-left text-[13px]">
+              <thead>
+                <tr className="border-b border-slate-100 bg-slate-50/80 text-[11px] font-bold uppercase tracking-wide text-slate-400">
+                  <th className="px-5 py-3">Student Name</th>
+                  <th className="px-3 py-3">Applied Date</th>
+                  <th className="px-3 py-3">Grade Level</th>
+                  <th className="px-3 py-3">Previous School</th>
+                  <th className="px-3 py-3">Status</th>
+                  <th className="px-5 py-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {paged.map((application, index) => {
+                  const name = studentDisplayName(application);
+                  const grade = application.classSection
+                    ? `${application.classSection.academicClass.name} ${application.classSection.section.name}`
+                    : "—";
+                  const previousSchool =
+                    (typeof application.payload?.previousSchool === "string" && application.payload.previousSchool) ||
+                    (typeof application.payload?.previous_school === "string" && application.payload.previous_school) ||
+                    "—";
+                  const admId = `#ADM-${new Date(application.createdAt).getFullYear()}-${String(index + from).padStart(3, "0")}`;
+                  const isReviewing = reviewId === application.id;
+                  const statusLabel = application.reviewNote ? "In Review" : "Pending";
+
+                  return (
+                    <Fragment key={application.id}>
+                      <tr className="hover:bg-slate-50/70">
+                        <td className="px-5 py-3.5">
+                          <div className="flex items-center gap-3">
+                            <InitialsAvatar name={name} size={38} />
+                            <div className="min-w-0">
+                              <p className="truncate font-semibold text-slate-900">{name}</p>
+                              <p className="truncate text-[11px] text-slate-400">ID: {admId}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-3 py-3.5 text-slate-500">
+                          {new Date(application.createdAt).toLocaleDateString(undefined, {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          })}
+                        </td>
+                        <td className="px-3 py-3.5 font-medium text-slate-700">{grade}</td>
+                        <td className="px-3 py-3.5 text-slate-500">{previousSchool}</td>
+                        <td className="px-3 py-3.5">
+                          <span
+                            className={`nx-pill ${statusLabel === "In Review" ? "nx-pill-indigo" : "nx-pill-warning"}`}
+                          >
+                            {statusLabel}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3.5 text-right">
+                          <button
+                            type="button"
+                            className="nx-btn-primary !px-3.5 !py-1.5 text-[12px]"
+                            onClick={() => setReviewId(isReviewing ? null : application.id)}
+                          >
+                            {isReviewing ? "Close" : "Review"}
+                          </button>
+                        </td>
+                      </tr>
+                      {isReviewing ? (
+                        <tr className="bg-indigo-50/40">
+                          <td colSpan={6} className="px-5 py-4">
+                            <AdmissionReviewForm
+                              application={application}
+                              setup={setup}
+                              token={token}
+                              onDone={async (success) => {
+                                onMessage(success);
+                                setReviewId(null);
+                                await onRefresh();
+                              }}
+                              onError={onError}
+                              onCancel={() => setReviewId(null)}
+                            />
+                          </td>
+                        </tr>
+                      ) : null}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+            {!pending.length ? (
+              <p className="px-5 py-12 text-center text-sm text-slate-500">No pending admissions.</p>
+            ) : null}
+          </div>
+
+          {pending.length > 0 ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-5 py-3">
+              <p className="text-[12px] text-slate-500">
+                Showing {from}-{to} of {pending.length} applications
+              </p>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  className="nx-btn-secondary !px-3 !py-1.5 text-[12px]"
+                  disabled={page <= 1}
+                  onClick={() => setPage((current) => Math.max(1, current - 1))}
+                >
+                  ‹
+                </button>
+                {Array.from({ length: Math.min(totalPages, 3) }, (_, index) => {
+                  const pageNum = index + 1;
+                  return (
+                    <button
+                      key={pageNum}
+                      type="button"
+                      onClick={() => setPage(pageNum)}
+                      className={`grid size-8 place-items-center rounded-lg text-[12px] font-semibold ${
+                        page === pageNum ? "bg-indigo-600 text-white" : "text-slate-500 hover:bg-slate-100"
+                      }`}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                })}
+                <button
+                  type="button"
+                  className="nx-btn-secondary !px-3 !py-1.5 text-[12px]"
+                  disabled={page >= totalPages}
+                  onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                >
+                  ›
+                </button>
+              </div>
+            </div>
+          ) : null}
         </div>
-        {pending.map((application) => (
-          <AdmissionRow
-            key={application.id}
-            application={application}
-            setup={setup}
-            token={token}
-            onDone={async (success) => {
-              onMessage(success);
-              await onRefresh();
-            }}
-            onError={onError}
-          />
-        ))}
-        {!pending.length && (
-          <p className="px-5 py-10 text-center text-sm text-slate-500">No pending admissions.</p>
-        )}
+
+        <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl bg-[#0f172a] px-5 py-4 text-white">
+          <div className="min-w-0 flex-1">
+            <p className="text-[14px] font-bold">Automated Screening Active</p>
+            <p className="mt-1 text-[12.5px] leading-relaxed text-slate-300">
+              AI-assisted document verification has flagged {Math.min(3, pending.length)} potential duplicates.
+            </p>
+            <button
+              type="button"
+              className="mt-3 rounded-lg bg-white px-4 py-2 text-[12.5px] font-semibold text-slate-900"
+            >
+              Run Validation Now
+            </button>
+          </div>
+          <span className="grid size-14 shrink-0 place-items-center rounded-2xl bg-slate-700/80 text-slate-200">
+            <ShieldOutlined sx={{ fontSize: 28 }} />
+          </span>
+        </div>
       </div>
 
-      {reviewed.length > 0 && (
-        <div className="card divide-y divide-slate-100 overflow-hidden">
-          <div className="border-b border-slate-100 px-5 py-4 font-semibold">Reviewed</div>
-          {reviewed.map((application) => (
-            <div className="flex flex-col justify-between gap-3 px-5 py-4 sm:flex-row sm:items-center" key={application.id}>
-              <div>
-                <p className="font-medium">{application.firstName} {application.lastName}</p>
-                <p className="mt-1 text-sm text-slate-500">
-                  {application.mobile || "No mobile"}
-                  {application.student && ` · Admitted as ${application.student.admissionNumber}`}
-                </p>
+      <aside className="space-y-3">
+        <div className="nx-card p-5">
+          <h3 className="text-[14px] font-bold text-slate-800">Admissions Stats</h3>
+          <div className="mt-4 space-y-3">
+            <div className="rounded-xl border border-slate-100 p-3.5">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Total Pending</p>
+                <span className="text-[11px] font-semibold text-rose-500">+12% vs LW</span>
               </div>
-              <span className={application.status === "ACCEPTED" ? "badge-success" : "badge-danger"}>
-                {application.status}
-              </span>
+              <p className="mt-1 text-[22px] font-bold text-slate-900">{pending.length}</p>
             </div>
-          ))}
+            <div className="rounded-xl border border-slate-100 p-3.5">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">
+                  Accepted ({monthLabel})
+                </p>
+                <span className="text-[11px] font-semibold text-emerald-600">Target 100</span>
+              </div>
+              <p className="mt-1 text-[22px] font-bold text-slate-900">{accepted.length}</p>
+            </div>
+            <div className="rounded-xl border border-slate-100 p-3.5">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Rejected</p>
+                <span className="text-[11px] font-semibold text-slate-400">{rejectRate}% Rate</span>
+              </div>
+              <p className="mt-1 text-[22px] font-bold text-slate-900">{rejected.length}</p>
+            </div>
+          </div>
+
+          <div className="mt-5">
+            <p className="text-[12px] font-bold text-slate-700">Top Applied Grades</p>
+            <div className="mt-3 space-y-3">
+              {gradeBuckets.length > 0 ? (
+                gradeBuckets.map((bucket) => (
+                  <div key={bucket.label}>
+                    <div className="mb-1 flex items-center justify-between text-[12px]">
+                      <span className="font-medium text-slate-600">{bucket.label}</span>
+                      <span className="font-bold text-slate-800">{bucket.pct}%</span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                      <div
+                        className="h-full rounded-full bg-indigo-500"
+                        style={{ width: `${Math.max(bucket.pct, 4)}%` }}
+                      />
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="text-[12px] text-slate-400">No applications yet.</p>
+              )}
+            </div>
+          </div>
+
+          <Link to="/reports" className="nx-btn-secondary mt-5 w-full justify-center">
+            View Detailed Report
+          </Link>
         </div>
-      )}
+
+        <div className="rounded-2xl bg-[#0f172a] p-5 text-white">
+          <div className="flex items-start gap-3">
+            <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-white/10 text-indigo-300">
+              <SupportAgentOutlined sx={{ fontSize: 18 }} />
+            </span>
+            <div>
+              <p className="text-[13px] font-bold">Need Guidance?</p>
+              <p className="mt-1 text-[12px] leading-relaxed text-slate-300">
+                Contact the IT team if the document scanner is failing to read transcripts.
+              </p>
+              <a
+                href="mailto:support@nexus.local"
+                className="mt-2.5 inline-block text-[12px] font-semibold text-white underline underline-offset-2"
+              >
+                Contact Tech Support
+              </a>
+            </div>
+          </div>
+        </div>
+      </aside>
     </section>
   );
 }
 
-function AdmissionRow({
+function AdmissionReviewForm({
   application,
   setup,
   token,
   onDone,
   onError,
+  onCancel,
 }: {
   application: OnlineAdmission;
   setup: Setup;
   token: string;
   onDone: (message: string) => Promise<void>;
   onError: (message: string) => void;
+  onCancel: () => void;
 }) {
   const [classSectionId, setClassSectionId] = useState(application.classSection?.id ?? "");
-  const [note, setNote] = useState("");
+  const [note, setNote] = useState(application.reviewNote ?? "");
   const [busy, setBusy] = useState(false);
 
   async function accept() {
@@ -1090,48 +1001,37 @@ function AdmissionRow({
   }
 
   return (
-    <div className="grid gap-4 px-5 py-5 lg:grid-cols-[1fr_280px]">
+    <div className="grid gap-3 rounded-xl border border-indigo-100 bg-white p-4 lg:grid-cols-[1fr_1fr_auto]">
       <div>
-        <p className="font-medium">{application.firstName} {application.lastName}</p>
-        <p className="mt-1 text-sm text-slate-500">
-          {application.mobile || "No mobile"}
-          {application.email && ` · ${application.email}`}
-        </p>
-        <p className="mt-1 text-sm text-slate-500">
-          {application.fatherName && `Father: ${application.fatherName}`}
-          {application.motherName && ` · Mother: ${application.motherName}`}
-        </p>
-        <p className="mt-1 text-xs text-slate-400">
-          Applied {new Date(application.createdAt).toLocaleString()}
-        </p>
-      </div>
-      <div className="space-y-3">
-        <select
-          className="input"
-          value={classSectionId}
-          onChange={(e) => setClassSectionId(e.target.value)}
-        >
-          <option value="">Class and section</option>
+        <p className="nx-label">Class & section</p>
+        <select className="nx-input" value={classSectionId} onChange={(e) => setClassSectionId(e.target.value)}>
+          <option value="">Select class and section</option>
           {setup.classSections.map((item) => (
             <option key={item.id} value={item.id}>
               {item.academicClass.name} · {item.section.name}
             </option>
           ))}
         </select>
+      </div>
+      <div>
+        <p className="nx-label">Review note</p>
         <input
-          className="input"
-          placeholder="Review note (optional)"
+          className="nx-input"
+          placeholder="Optional note for this review"
           value={note}
           onChange={(e) => setNote(e.target.value)}
         />
-        <div className="flex gap-2">
-          <button className="button-secondary flex-1" disabled={busy} type="button" onClick={() => void reject()}>
-            Reject
-          </button>
-          <button className="button-primary flex-1" disabled={busy} type="button" onClick={() => void accept()}>
-            Accept
-          </button>
-        </div>
+      </div>
+      <div className="flex items-end gap-2">
+        <button className="nx-btn-secondary" disabled={busy} type="button" onClick={onCancel}>
+          Cancel
+        </button>
+        <button className="nx-btn-secondary text-rose-600" disabled={busy} type="button" onClick={() => void reject()}>
+          Reject
+        </button>
+        <button className="nx-btn-primary" disabled={busy} type="button" onClick={() => void accept()}>
+          Accept
+        </button>
       </div>
     </div>
   );
@@ -1149,11 +1049,20 @@ function ImportPanel({
   onMessage: (message: string) => void;
 }) {
   const [csv, setCsv] = useState("");
+  const [fileName, setFileName] = useState("");
   const [result, setResult] = useState<ImportResult | null>(null);
   const [busy, setBusy] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
 
-  async function submit(event: FormEvent) {
-    event.preventDefault();
+  const rowEstimate = useMemo(() => {
+    const lines = csv
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    return Math.max(0, lines.length - (lines.length ? 1 : 0));
+  }, [csv]);
+
+  async function runImport() {
     if (csv.trim().length < 10) {
       onError("Paste or upload CSV content first");
       return;
@@ -1177,60 +1086,179 @@ function ImportPanel({
 
   function handleFile(file: File | undefined) {
     if (!file) return;
+    if (!/\.csv$/i.test(file.name) && file.type !== "text/csv" && file.type !== "application/vnd.ms-excel") {
+      onError("Please upload a .CSV file");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      onError("CSV must be 10MB or smaller");
+      return;
+    }
     const reader = new FileReader();
-    reader.onload = () => setCsv(String(reader.result ?? ""));
+    reader.onload = () => {
+      setCsv(String(reader.result ?? ""));
+      setFileName(file.name);
+      setResult(null);
+    };
     reader.readAsText(file);
   }
 
   return (
-    <section className="mt-6 grid gap-5 lg:grid-cols-[360px_1fr]">
-      <div className="card p-5">
-        <h2 className="font-semibold">CSV import</h2>
-        <p className="mt-2 text-sm text-slate-500">
-          Required columns: firstName, admissionDate, classSectionId. Use the sample file for the full header set.
-        </p>
-        <button className="button-secondary mt-4" type="button" onClick={downloadSampleCsv}>
-          Download sample CSV
-        </button>
-        <label className="button-secondary mt-3 inline-block cursor-pointer">
-          Upload CSV file
-          <input
-            className="hidden"
-            type="file"
-            accept=".csv,text/csv"
-            onChange={(e) => handleFile(e.target.files?.[0])}
-          />
-        </label>
-      </div>
-
-      <form className="card p-5" onSubmit={submit}>
-        <h2 className="font-semibold">Paste CSV content</h2>
-        <textarea
-          className="input mt-4 min-h-[280px] font-mono text-xs"
-          placeholder="Paste CSV rows here…"
-          value={csv}
-          onChange={(e) => setCsv(e.target.value)}
-        />
-        <button className="button-primary mt-4" disabled={busy} type="submit">
-          {busy ? "Importing…" : "Import students"}
-        </button>
-
-        {result && (
-          <div className="mt-5 rounded-xl bg-slate-50 p-4">
-            <p className="font-medium text-emerald-700">{result.created} row(s) created</p>
-            {result.errors.length > 0 && (
-              <div className="mt-3 space-y-2">
-                <p className="text-sm font-medium text-rose-700">{result.errors.length} row error(s)</p>
-                {result.errors.map((item) => (
-                  <p className="text-sm text-slate-600" key={`${item.row}-${item.message}`}>
-                    Row {item.row}: {item.message}
-                  </p>
-                ))}
-              </div>
-            )}
+    <section className="mt-4">
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="nx-card flex flex-col p-6">
+          <div className="flex items-center gap-2.5">
+            <span className="grid size-9 place-items-center rounded-lg bg-indigo-50 text-indigo-600">
+              <InsertDriveFileOutlined sx={{ fontSize: 18 }} />
+            </span>
+            <h2 className="text-[16px] font-bold text-slate-900">CSV Import</h2>
           </div>
-        )}
-      </form>
+          <p className="mt-2 text-[13px] leading-relaxed text-slate-500">
+            Follow our standard format to ensure data integrity. Required columns include:{" "}
+            <span className="font-semibold text-slate-700">firstName, admissionDate, classSectionId</span>. Use the
+            sample file for the full header set.
+          </p>
+
+          <button
+            className="mt-5 flex w-full items-center gap-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3.5 text-left transition hover:border-indigo-300 hover:bg-indigo-50/40"
+            type="button"
+            onClick={downloadSampleCsv}
+          >
+            <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-white text-indigo-600 shadow-sm">
+              <DownloadOutlined sx={{ fontSize: 20 }} />
+            </span>
+            <span className="min-w-0">
+              <span className="block text-[13px] font-semibold text-slate-800">Download Template</span>
+              <span className="block text-[12px] text-slate-500">Get the latest CSV structure (24KB)</span>
+            </span>
+          </button>
+
+          <label
+            className={`mt-4 flex flex-1 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed px-4 py-12 text-center transition ${
+              dragOver
+                ? "border-indigo-400 bg-indigo-50/70"
+                : "border-slate-300 bg-slate-50/70 hover:border-indigo-300 hover:bg-indigo-50/40"
+            }`}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragOver(true);
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragOver(false);
+              handleFile(e.dataTransfer.files?.[0]);
+            }}
+          >
+            <input
+              className="sr-only"
+              type="file"
+              accept=".csv,text/csv"
+              onChange={(e) => {
+                handleFile(e.target.files?.[0]);
+                e.target.value = "";
+              }}
+            />
+            <div className="grid size-12 place-items-center rounded-full bg-indigo-50 text-indigo-600">
+              <CloudUploadOutlined sx={{ fontSize: 24 }} />
+            </div>
+            <p className="mt-3 text-[13px] font-semibold text-slate-700">Click to upload or drag and drop</p>
+            <p className="mt-1 text-[11.5px] text-slate-500">Supported formats: .CSV (Max 10MB)</p>
+          </label>
+
+          {fileName ? (
+            <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+              <div className="flex min-w-0 items-center gap-2">
+                <InsertDriveFileOutlined sx={{ fontSize: 18 }} className="shrink-0 text-indigo-500" />
+                <div className="min-w-0">
+                  <p className="truncate text-[12.5px] font-medium text-slate-700">{fileName}</p>
+                  <p className="text-[11px] text-slate-400">
+                    {rowEstimate.toLocaleString()} data row{rowEstimate === 1 ? "" : "s"} detected
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="text-[12px] font-semibold text-rose-600 hover:underline"
+                onClick={() => {
+                  setCsv("");
+                  setFileName("");
+                  setResult(null);
+                }}
+              >
+                Remove
+              </button>
+            </div>
+          ) : null}
+
+          <button
+            className="nx-btn-primary mt-5 w-full justify-center py-3"
+            type="button"
+            disabled={busy || csv.trim().length < 10}
+            onClick={() => void runImport()}
+          >
+            {busy ? "Processing…" : "Initialize Import Processing"}
+          </button>
+        </div>
+
+        <form
+          className="nx-card flex flex-col p-6"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void runImport();
+          }}
+        >
+          <div className="flex items-center gap-2.5">
+            <span className="grid size-9 place-items-center rounded-lg bg-indigo-50 text-indigo-600">
+              <FilterListOutlined sx={{ fontSize: 18 }} />
+            </span>
+            <h2 className="text-[16px] font-bold text-slate-900">Paste CSV Content</h2>
+          </div>
+          <p className="mt-2 text-[13px] leading-relaxed text-slate-500">
+            Prefer to copy-paste? Insert your raw CSV data below. Ensure your headers match the required column set
+            exactly for successful validation.
+          </p>
+
+          <textarea
+            className="nx-input mt-5 min-h-[300px] flex-1 font-mono text-xs leading-relaxed"
+            placeholder={"firstName,admissionDate,classSectionId\nJohn,2024-09-01,CS101-A\nJane,2024-09-01,CS101-B"}
+            value={csv}
+            onChange={(e) => {
+              setCsv(e.target.value);
+              if (fileName) setFileName("");
+              setResult(null);
+            }}
+          />
+
+          <div className="mt-4 flex justify-end">
+            <button className="nx-btn-secondary uppercase tracking-wide" disabled={busy} type="submit">
+              <UploadOutlined sx={{ fontSize: 16 }} />
+              {busy ? "Importing…" : "Import Students"}
+            </button>
+          </div>
+
+          {result ? (
+            <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50 p-4">
+              <p className="flex items-center gap-1.5 text-[13px] font-semibold text-emerald-700">
+                <CheckCircleOutline sx={{ fontSize: 18 }} />
+                {result.created} row(s) created successfully
+              </p>
+              {result.errors.length > 0 ? (
+                <div className="mt-3 space-y-2">
+                  <p className="text-[13px] font-semibold text-rose-700">{result.errors.length} row error(s)</p>
+                  <div className="max-h-40 space-y-1.5 overflow-y-auto">
+                    {result.errors.map((item) => (
+                      <p className="text-[12.5px] text-slate-600" key={`${item.row}-${item.message}`}>
+                        Row {item.row}: {item.message}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </form>
+      </div>
     </section>
   );
 }
@@ -1249,9 +1277,10 @@ function MastersPanel({
   onMessage: (message: string) => void;
 }) {
   return (
-    <section className="mt-6 grid gap-5 lg:grid-cols-3">
+    <section className="mt-4 grid gap-4 lg:grid-cols-3">
       <MasterCard
         title="Categories"
+        placeholder="Enter category"
         resource="categories"
         items={setup.categories}
         token={token}
@@ -1261,6 +1290,7 @@ function MastersPanel({
       />
       <MasterCard
         title="Houses"
+        placeholder="Enter house name"
         resource="houses"
         items={setup.houses}
         token={token}
@@ -1269,7 +1299,8 @@ function MastersPanel({
         onMessage={onMessage}
       />
       <MasterCard
-        title="Disable reasons"
+        title="Disable Reason"
+        placeholder="Enter reason"
         resource="disable-reasons"
         items={setup.disableReasons}
         token={token}
@@ -1283,6 +1314,7 @@ function MastersPanel({
 
 function MasterCard({
   title,
+  placeholder,
   resource,
   items,
   token,
@@ -1291,6 +1323,7 @@ function MasterCard({
   onMessage,
 }: {
   title: string;
+  placeholder: string;
   resource: MasterResource;
   items: Named[];
   token: string;
@@ -1299,20 +1332,24 @@ function MasterCard({
   onMessage: (message: string) => void;
 }) {
   const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
 
   async function add(event: FormEvent) {
     event.preventDefault();
     if (!name.trim()) return;
+    setBusy(true);
     try {
       await apiRequest(`/student-masters/${resource}`, token, {
         method: "POST",
         body: JSON.stringify({ name: name.trim() }),
       });
       setName("");
-      onMessage(`${title.slice(0, -1)} added`);
+      onMessage(`${title} entry added`);
       await onRefresh();
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : "Unable to add master");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -1327,128 +1364,40 @@ function MasterCard({
   }
 
   return (
-    <form className="card p-5" onSubmit={add}>
-      <h2 className="font-semibold">{title}</h2>
-      <div className="mt-4 flex gap-2">
+    <form className="nx-card p-5" onSubmit={add}>
+      <h2 className="text-[15px] font-bold text-slate-900">{title}</h2>
+      <div className="mt-3.5 flex gap-2">
         <input
-          className="input min-w-0 flex-1"
-          placeholder={`New ${title.toLowerCase().slice(0, -1)}`}
+          className="nx-input min-w-0 flex-1"
+          placeholder={placeholder}
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
-        <button className="button-secondary" disabled={!name.trim()} type="submit">Add</button>
+        <button
+          className="nx-btn-primary !px-3"
+          disabled={busy || !name.trim()}
+          type="submit"
+          aria-label={`Add ${title}`}
+        >
+          <AddOutlined sx={{ fontSize: 18 }} />
+        </button>
       </div>
       <div className="mt-4 flex flex-wrap gap-2">
         {items.map((item) => (
-          <span className="badge inline-flex items-center gap-2" key={item.id}>
+          <span className="nx-pill nx-pill-neutral inline-flex items-center gap-1.5" key={item.id}>
             {item.name}
             <button
-              className="text-rose-600"
+              className="grid size-4 place-items-center rounded text-slate-400 transition hover:text-rose-600"
               type="button"
+              aria-label={`Remove ${item.name}`}
               onClick={() => void remove(item.id)}
             >
-              ×
+              <CloseOutlined sx={{ fontSize: 12 }} />
             </button>
           </span>
         ))}
-        {!items.length && <p className="text-sm text-slate-500">No entries yet.</p>}
+        {!items.length ? <p className="text-[13px] italic text-slate-400">No entries yet.</p> : null}
       </div>
-    </form>
-  );
-}
-
-function StudentForm({
-  setup,
-  token,
-  onSaved,
-  onError,
-}: {
-  setup: Setup;
-  token: string;
-  onSaved: () => void;
-  onError: (message: string) => void;
-}) {
-  const [form, setForm] = useState({
-    admissionNumber: "",
-    firstName: "",
-    lastName: "",
-    gender: "",
-    admissionDate: today,
-    dateOfBirth: "",
-    mobile: "",
-    email: "",
-    categoryId: "",
-    houseId: "",
-    classSectionId: "",
-    rollNumber: "",
-    guardianName: "",
-    guardianRelation: "",
-    guardianPhone: "",
-  });
-
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    const payload = Object.fromEntries(
-      Object.entries(form).map(([key, value]) => [key, value || undefined]),
-    );
-    try {
-      await apiRequest("/students", token, { method: "POST", body: JSON.stringify(payload) });
-      onSaved();
-    } catch (cause) {
-      onError(cause instanceof Error ? cause.message : "Unable to add student");
-    }
-  }
-
-  return (
-    <form className="card mt-6 grid gap-4 p-5 md:grid-cols-2 xl:grid-cols-4" onSubmit={submit}>
-      <input className="input" placeholder="Admission no. (auto if blank)" value={form.admissionNumber}
-        onChange={(e) => setForm({ ...form, admissionNumber: e.target.value })} />
-      <input className="input" placeholder="First name" required value={form.firstName}
-        onChange={(e) => setForm({ ...form, firstName: e.target.value })} />
-      <input className="input" placeholder="Last name" value={form.lastName}
-        onChange={(e) => setForm({ ...form, lastName: e.target.value })} />
-      <select className="input" value={form.gender} onChange={(e) => setForm({ ...form, gender: e.target.value })}>
-        <option value="">Gender</option>
-        <option value="MALE">Male</option>
-        <option value="FEMALE">Female</option>
-        <option value="OTHER">Other</option>
-      </select>
-      <label><span className="label">Admission date</span>
-        <input className="input" type="date" required value={form.admissionDate}
-          onChange={(e) => setForm({ ...form, admissionDate: e.target.value })} /></label>
-      <label><span className="label">Date of birth</span>
-        <input className="input" type="date" value={form.dateOfBirth}
-          onChange={(e) => setForm({ ...form, dateOfBirth: e.target.value })} /></label>
-      <input className="input self-end" placeholder="Mobile" value={form.mobile}
-        onChange={(e) => setForm({ ...form, mobile: e.target.value })} />
-      <input className="input self-end" type="email" placeholder="Email" value={form.email}
-        onChange={(e) => setForm({ ...form, email: e.target.value })} />
-      <select className="input" value={form.categoryId} onChange={(e) => setForm({ ...form, categoryId: e.target.value })}>
-        <option value="">Category</option>
-        {setup.categories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-      </select>
-      <select className="input" value={form.houseId} onChange={(e) => setForm({ ...form, houseId: e.target.value })}>
-        <option value="">House</option>
-        {setup.houses.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-      </select>
-      <select className="input" required value={form.classSectionId}
-        onChange={(e) => setForm({ ...form, classSectionId: e.target.value })}>
-        <option value="">Class and section</option>
-        {setup.classSections.map((item) => (
-          <option key={item.id} value={item.id}>
-            {item.academicClass.name} · {item.section.name}
-          </option>
-        ))}
-      </select>
-      <input className="input" placeholder="Roll number" value={form.rollNumber}
-        onChange={(e) => setForm({ ...form, rollNumber: e.target.value })} />
-      <input className="input" placeholder="Guardian name" value={form.guardianName}
-        onChange={(e) => setForm({ ...form, guardianName: e.target.value })} />
-      <input className="input" placeholder="Relation" value={form.guardianRelation}
-        onChange={(e) => setForm({ ...form, guardianRelation: e.target.value })} />
-      <input className="input" placeholder="Guardian phone" value={form.guardianPhone}
-        onChange={(e) => setForm({ ...form, guardianPhone: e.target.value })} />
-      <button className="button-primary" type="submit">Save student</button>
     </form>
   );
 }

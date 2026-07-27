@@ -6,6 +6,8 @@ import { ResetPasswordPage } from "./pages/auth/ResetPasswordPage";
 import { AcademicsPage } from "./pages/campus/AcademicsPage";
 import { SettingsPage } from "./pages/campus/SettingsPage";
 import { StudentsPage } from "./pages/campus/StudentsPage";
+import { AddStudentPage } from "./pages/campus/students/AddStudentPage";
+import { StudentProfilePage } from "./pages/campus/students/StudentProfilePage";
 import { UsersPage } from "./pages/campus/UsersPage";
 import { FeesPage } from "./pages/campus/FeesPage";
 import { AttendancePage } from "./pages/campus/AttendancePage";
@@ -24,7 +26,6 @@ import { NoticesPage } from "./pages/campus/NoticesPage";
 import { OnlineAdmissionPage } from "./pages/public/OnlineAdmissionPage";
 import { PlatformShell } from "./pages/super-admin/PlatformShell";
 import { SuperAdminLoginPage } from "./pages/super-admin/SuperAdminLoginPage";
-import { StudentLoginPage, ParentLoginPage } from "./pages/student-parent/PortalLoginPage";
 import { AdminDashboardPage } from "./pages/super-admin/AdminDashboardPage";
 import { AdminTenantsPage } from "./pages/super-admin/AdminTenantsPage";
 import { AdminTenantFormPage } from "./pages/super-admin/AdminTenantFormPage";
@@ -132,6 +133,8 @@ export function App() {
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/profile" element={<StaffProfilePage />} />
         <Route path="/students" element={<StudentsPage />} />
+        <Route path="/students/new" element={<AddStudentPage />} />
+        <Route path="/students/:id" element={<StudentProfilePage />} />
         <Route path="/academics" element={<AcademicsPage />} />
         <Route path="/attendance" element={<AttendancePage />} />
         <Route path="/notices" element={<NoticesPage />} />
