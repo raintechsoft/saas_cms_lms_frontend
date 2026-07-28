@@ -6,6 +6,7 @@ import { apiRequest, assetUrl } from "../../lib/api";
 import { applyBrandingToDocument, parseBranding } from "../../lib/branding";
 import { isProductBucketAllowed } from "../../lib/productMode";
 import { PortalProvider } from "./PortalContext";
+import { PortalPushPrompt } from "./PortalPushPrompt";
 import { PORTAL_CHILD_STORAGE_KEY, type PortalOverview } from "./portalTypes";
 
 function getNavItems(basePath: string, productMode: PortalOverview["productMode"]) {
@@ -238,6 +239,9 @@ export function PortalShell() {
 
           <main className="mx-auto max-w-7xl px-6 py-8">
             {error && <p className="alert-error mb-4">{error}</p>}
+            {!loading && overview ? (
+              <PortalPushPrompt accessToken={accessToken} userId={user.id} />
+            ) : null}
             {loading && !overview ? (
               <p className="text-sm text-slate-500">Loading your portal…</p>
             ) : (

@@ -58,10 +58,26 @@ export interface ReceiptBook extends Named {
   isDefault: boolean;
 }
 
+export interface FeeReminderStep {
+  id?: string;
+  days: number;
+  when: "before" | "after";
+  notice: string;
+  email: boolean;
+  sms: boolean;
+}
+
 export interface FeeSetting {
   autoReminder: boolean;
   reminderDaysBefore: number;
   reminderDaysAfter: number;
+  reminderEmailEnabled?: boolean;
+  reminderSmsEnabled?: boolean;
+  reminderExecutionTime?: string;
+  reminderSkipWeekends?: boolean;
+  reminderMinBalance?: boolean;
+  reminderSteps?: FeeReminderStep[] | null;
+  lastReminderRunAt?: string | null;
 }
 
 export interface FeeSetup {

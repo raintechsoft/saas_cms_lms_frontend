@@ -1,8 +1,14 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import {
+  CampaignOutlined,
+  NotificationsActiveOutlined,
+  PaymentsOutlined,
+} from "@mui/icons-material";
 import { useAuth } from "../../auth/AuthContext";
 import { ListPagination, paginateItems } from "../../components/ListPagination";
 import { CmsFooter, CmsPage, CmsPageHeader } from "../../components/cms/CmsLayout";
 import { apiRequest } from "../../lib/api";
+import { useSearchParams } from "react-router-dom";
 
 const PAGE_SIZE = 8;
 
@@ -22,6 +28,7 @@ type CampusNotification = {
 };
 
 type AcademicSession = { id: string; name: string };
+type NotificationOption = "broadcast" | "fees" | "push";
 
 const notificationTypeOptions: NotificationTypeKey[] = [
   "ANNOUNCEMENT",
@@ -71,8 +78,16 @@ function readStatusPill(isRead: boolean) {
   return isRead ? "nx-pill nx-pill-success" : "nx-pill nx-pill-warning";
 }
 
+function urlBase64ToUint8Array(base64String: string) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = window.atob(base64);
+  return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)));
+}
+
 export function NotificationsPage() {
   const { accessToken, user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const canManageNotifications = user?.permissions.includes("notifications.manage") ?? false;
   const canManageFees = user?.permissions.includes("fees.manage") ?? false;
@@ -80,6 +95,8 @@ export function NotificationsPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [remindersBusy, setRemindersBusy] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushEnabled, setPushEnabled] = useState(false);
   const [notifications, setNotifications] = useState<CampusNotification[]>([]);
   const [page, setPage] = useState(1);
   const [sessions, setSessions] = useState<AcademicSession[]>([]);
@@ -93,6 +110,10 @@ export function NotificationsPage() {
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [activeOption, setActiveOption] = useState<NotificationOption>(() => {
+    const panel = searchParams.get("panel");
+    return panel === "fees" || panel === "push" ? panel : "broadcast";
+  });
 
   const previewBody = useMemo(() => {
     if (!body.trim()) return "";
@@ -136,6 +157,18 @@ export function NotificationsPage() {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken]);
+
+  useEffect(() => {
+    if (!("Notification" in window)) return;
+    setPushEnabled(Notification.permission === "granted");
+  }, []);
+
+  useEffect(() => {
+    const panel = searchParams.get("panel");
+    if (panel === "fees" || panel === "push" || panel === "broadcast") {
+      setActiveOption(panel);
+    }
+  }, [searchParams]);
 
   async function refreshNotifications() {
     const notifs = await apiRequest<CampusNotification[]>(
@@ -190,6 +223,8 @@ export function NotificationsPage() {
         count: number;
         smsSent?: number;
         smsFailed?: number;
+        pushSent?: number;
+        pushFailed?: number;
         smsErrors?: string[];
       }>("/notifications/fee-overdue", accessToken, {
         method: "POST",
@@ -197,19 +232,116 @@ export function NotificationsPage() {
       });
       const smsSent = result?.smsSent ?? 0;
       const smsFailed = result?.smsFailed ?? 0;
+      const pushSent = result?.pushSent ?? 0;
+      const pushFailed = result?.pushFailed ?? 0;
       const smsNote =
         smsSent || smsFailed
           ? ` · SMS sent ${smsSent}, failed ${smsFailed}${
               result?.smsErrors?.length ? ` (${result.smsErrors[0]})` : ""
             }`
           : " · no SMS numbers found on overdue students";
-      setMessage(`Fee overdue reminders sent: ${result?.count ?? 0}${smsNote}`);
+      const pushNote = ` · Push delivered ${pushSent}, failed ${pushFailed}`;
+      setMessage(`Fee overdue reminders sent: ${result?.count ?? 0}${smsNote}${pushNote}`);
       await refreshNotifications();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to send fee overdue reminders");
     } finally {
       setRemindersBusy(false);
     }
+  }
+
+  async function enablePush() {
+    const vapidPublicKey = import.meta.env.VITE_PUSH_VAPID_PUBLIC_KEY as string | undefined;
+    if (!vapidPublicKey) {
+      setError("VITE_PUSH_VAPID_PUBLIC_KEY is missing in frontend .env");
+      return;
+    }
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+      setError("This browser does not support push notifications.");
+      return;
+    }
+
+    setPushBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") {
+        throw new Error("Notification permission was not granted.");
+      }
+
+      const registration = await navigator.serviceWorker.ready;
+      const subscription =
+        (await registration.pushManager.getSubscription()) ??
+        (await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+        }));
+
+      await apiRequest("/notifications/push/subscribe", accessToken, {
+        method: "POST",
+        body: JSON.stringify(subscription),
+      });
+      setPushEnabled(true);
+      setMessage("Push notifications enabled on this browser.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to enable push notifications");
+    } finally {
+      setPushBusy(false);
+    }
+  }
+
+  async function disablePush() {
+    if (!("serviceWorker" in navigator)) return;
+    setPushBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      const subscription = await registration.pushManager.getSubscription();
+      if (!subscription) {
+        setPushEnabled(false);
+        setMessage("Push notifications already disabled on this browser.");
+        return;
+      }
+
+      await apiRequest("/notifications/push/unsubscribe", accessToken, {
+        method: "DELETE",
+        body: JSON.stringify({ endpoint: subscription.endpoint }),
+      });
+      await subscription.unsubscribe();
+      setPushEnabled(false);
+      setMessage("Push notifications disabled for this browser.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to disable push notifications");
+    } finally {
+      setPushBusy(false);
+    }
+  }
+
+  async function sendPushTest() {
+    setPushBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const result = await apiRequest<{ delivered: number; failed: number }>(
+        "/notifications/push/test",
+        accessToken,
+        { method: "POST", body: JSON.stringify({}) },
+      );
+      setMessage(`Push test sent: delivered ${result?.delivered ?? 0}, failed ${result?.failed ?? 0}`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to send test push");
+    } finally {
+      setPushBusy(false);
+    }
+  }
+
+  function selectOption(option: NotificationOption) {
+    setActiveOption(option);
+    const next = new URLSearchParams(searchParams);
+    next.set("panel", option);
+    setSearchParams(next, { replace: true });
   }
 
   return (
@@ -302,7 +434,50 @@ export function NotificationsPage() {
         </div>
 
         <aside className="space-y-6">
-          <div className="nx-card p-5">
+          <div className="nx-card p-3">
+            <p className="px-2 pb-2 text-[11px] font-bold uppercase tracking-wide text-slate-400">Notification options</p>
+            <div className="space-y-1">
+              <button
+                type="button"
+                className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[13px] font-medium transition ${
+                  activeOption === "broadcast"
+                    ? "bg-indigo-50 text-indigo-700"
+                    : "text-slate-600 hover:bg-slate-50"
+                }`}
+                onClick={() => selectOption("broadcast")}
+              >
+                <CampaignOutlined sx={{ fontSize: 18 }} />
+                <span>Send notification</span>
+              </button>
+              <button
+                type="button"
+                className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[13px] font-medium transition ${
+                  activeOption === "fees"
+                    ? "bg-indigo-50 text-indigo-700"
+                    : "text-slate-600 hover:bg-slate-50"
+                }`}
+                onClick={() => selectOption("fees")}
+              >
+                <PaymentsOutlined sx={{ fontSize: 18 }} />
+                <span>Fee overdue reminders</span>
+              </button>
+              <button
+                type="button"
+                className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[13px] font-medium transition ${
+                  activeOption === "push"
+                    ? "bg-indigo-50 text-indigo-700"
+                    : "text-slate-600 hover:bg-slate-50"
+                }`}
+                onClick={() => selectOption("push")}
+              >
+                <NotificationsActiveOutlined sx={{ fontSize: 18 }} />
+                <span>Browser push notifications</span>
+              </button>
+            </div>
+          </div>
+
+          {activeOption === "broadcast" ? (
+            <div className="nx-card p-5">
             <h2 className="text-[15px] font-bold text-slate-900">Send notification</h2>
             <p className="mt-1 text-[12.5px] text-slate-500">Broadcast messages to staff, students, or parents.</p>
 
@@ -381,8 +556,10 @@ export function NotificationsPage() {
               ) : null}
             </form>
           </div>
+          ) : null}
 
-          <div className="nx-card p-5">
+          {activeOption === "fees" ? (
+            <div className="nx-card p-5">
             <h2 className="text-[15px] font-bold text-slate-900">Fee overdue reminders</h2>
             <p className="mt-1 text-[12.5px] text-slate-500">Generate reminder notifications for students with balances.</p>
 
@@ -422,6 +599,43 @@ export function NotificationsPage() {
               ) : null}
             </div>
           </div>
+          ) : null}
+
+          {activeOption === "push" ? (
+            <div className="nx-card p-5">
+            <h2 className="text-[15px] font-bold text-slate-900">Browser push notifications</h2>
+            <p className="mt-1 text-[12.5px] text-slate-500">
+              Enable push on this device and send a quick test.
+            </p>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="nx-btn-primary"
+                onClick={() => void enablePush()}
+                disabled={pushBusy || pushEnabled}
+              >
+                {pushBusy ? "Working..." : pushEnabled ? "Push enabled" : "Enable push"}
+              </button>
+              <button
+                type="button"
+                className="nx-btn-secondary"
+                onClick={() => void sendPushTest()}
+                disabled={pushBusy || !pushEnabled}
+              >
+                Send test push
+              </button>
+              <button
+                type="button"
+                className="nx-btn-secondary"
+                onClick={() => void disablePush()}
+                disabled={pushBusy || !pushEnabled}
+              >
+                Disable push
+              </button>
+            </div>
+          </div>
+          ) : null}
         </aside>
       </section>
 

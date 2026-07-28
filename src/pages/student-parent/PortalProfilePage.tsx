@@ -2,6 +2,13 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useAuth } from "../../auth/AuthContext";
 import { PanelCard } from "../../components/charts/PremiumCharts";
 import { assetUrl, updateStudentProfile, uploadStudentPhoto } from "../../lib/api";
+import {
+  disableBrowserPush,
+  enableBrowserPush,
+  getPushPermission,
+  isPushSupported,
+  setPortalPushChoice,
+} from "../../lib/push";
 import { usePortal } from "./PortalContext";
 
 export function PortalProfilePage() {
@@ -17,6 +24,10 @@ export function PortalProfilePage() {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushEnabled, setPushEnabled] = useState(false);
+  const [pushMessage, setPushMessage] = useState("");
+  const [pushError, setPushError] = useState("");
 
   useEffect(() => {
     if (!child) return;
@@ -29,6 +40,44 @@ export function PortalProfilePage() {
     setMessage("");
     setError("");
   }, [child]);
+
+  useEffect(() => {
+    setPushEnabled(getPushPermission() === "granted");
+  }, []);
+
+  async function handleEnablePush() {
+    if (!user) return;
+    setPushBusy(true);
+    setPushError("");
+    setPushMessage("");
+    try {
+      await enableBrowserPush(accessToken);
+      setPortalPushChoice(user.id, "enabled");
+      setPushEnabled(true);
+      setPushMessage("Browser notifications enabled.");
+    } catch (cause) {
+      setPushError(cause instanceof Error ? cause.message : "Unable to enable notifications");
+    } finally {
+      setPushBusy(false);
+    }
+  }
+
+  async function handleDisablePush() {
+    if (!user) return;
+    setPushBusy(true);
+    setPushError("");
+    setPushMessage("");
+    try {
+      await disableBrowserPush(accessToken);
+      setPortalPushChoice(user.id, "dismissed");
+      setPushEnabled(false);
+      setPushMessage("Browser notifications disabled.");
+    } catch (cause) {
+      setPushError(cause instanceof Error ? cause.message : "Unable to disable notifications");
+    } finally {
+      setPushBusy(false);
+    }
+  }
 
   if (!child) {
     return (
@@ -106,6 +155,41 @@ export function PortalProfilePage() {
           Update contact details and profile photo for {child.student.firstName}.
         </p>
       </div>
+
+      {isPushSupported() ? (
+        <PanelCard title="Browser notifications">
+          <p className="text-sm text-slate-600">
+            Allow alerts for fees, notices, and important updates when the portal is closed.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="button-primary"
+              disabled={pushBusy || pushEnabled}
+              onClick={() => void handleEnablePush()}
+            >
+              {pushBusy ? "Working…" : pushEnabled ? "Notifications on" : "Allow notifications"}
+            </button>
+            <button
+              type="button"
+              className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-60"
+              disabled={pushBusy || !pushEnabled}
+              onClick={() => void handleDisablePush()}
+            >
+              Turn off
+            </button>
+          </div>
+          {getPushPermission() === "denied" ? (
+            <p className="mt-3 text-[12px] font-medium text-amber-700">
+              Browser blocked notifications. Enable them in browser site settings, then click Allow again.
+            </p>
+          ) : null}
+          {pushMessage ? (
+            <p className="mt-3 rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{pushMessage}</p>
+          ) : null}
+          {pushError ? <p className="alert-error mt-3">{pushError}</p> : null}
+        </PanelCard>
+      ) : null}
 
       <PanelCard title="Profile photo">
         <div className="flex flex-col items-start gap-5 sm:flex-row sm:items-center">

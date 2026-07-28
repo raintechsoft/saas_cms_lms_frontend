@@ -18,6 +18,23 @@ import "./styles.css";
   }
 }
 
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.addEventListener("message", (event) => {
+    if (event.data?.type === "PUSH_NAVIGATE") {
+      window.location.hash = event.data.hash || "#/notifications";
+    }
+  });
+
+  window.addEventListener("load", () => {
+    void navigator.serviceWorker
+      .register("/sw.js")
+      .then((registration) => registration.update())
+      .catch((error) => {
+        console.error("Service worker registration failed:", error);
+      });
+  });
+}
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <Provider store={store}>

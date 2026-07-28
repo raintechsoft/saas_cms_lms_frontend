@@ -5,38 +5,32 @@ import {
   DeleteOutline,
   InfoOutlined,
   MailOutline,
+  PlayArrowOutlined,
   SaveOutlined,
   SmsOutlined,
 } from "@mui/icons-material";
 import { apiRequest } from "../../../lib/api";
-import type { FeeSetting } from "./types";
+import type { FeeReminderStep, FeeSetting } from "./types";
 
-type Step = {
-  id: string;
-  days: number;
-  when: "before" | "after";
-  notice: string;
-  email: boolean;
-  sms: boolean;
-};
+type Step = FeeReminderStep & { id: string };
 
 function uid() {
   return Math.random().toString(36).slice(2, 9);
 }
 
-export function RemindersPanel({
-  setting,
-  token,
-  onSaved,
-  onError,
-}: {
-  setting?: FeeSetting | null;
-  token: string;
-  onSaved: () => Promise<void>;
-  onError: (message: string) => void;
-}) {
-  const [autoReminder, setAutoReminder] = useState(setting?.autoReminder ?? false);
-  const [steps, setSteps] = useState<Step[]>([
+function defaultSteps(setting?: FeeSetting | null): Step[] {
+  const saved = setting?.reminderSteps;
+  if (Array.isArray(saved) && saved.length) {
+    return saved.map((step) => ({
+      id: step.id || uid(),
+      days: step.days,
+      when: step.when === "before" ? "before" : "after",
+      notice: step.notice || "Fee reminder",
+      email: Boolean(step.email),
+      sms: Boolean(step.sms),
+    }));
+  }
+  return [
     {
       id: uid(),
       days: setting?.reminderDaysBefore ?? 5,
@@ -53,23 +47,48 @@ export function RemindersPanel({
       email: true,
       sms: true,
     },
-  ]);
-  const [executionTime, setExecutionTime] = useState("09:00");
-  const [weekendSilencer, setWeekendSilencer] = useState(true);
-  const [minBalance, setMinBalance] = useState(true);
+  ];
+}
+
+function formatLastRun(value?: string | null) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+export function RemindersPanel({
+  setting,
+  token,
+  onSaved,
+  onError,
+}: {
+  setting?: FeeSetting | null;
+  token: string;
+  onSaved: () => Promise<void>;
+  onError: (message: string) => void;
+}) {
+  const [autoReminder, setAutoReminder] = useState(setting?.autoReminder ?? false);
+  const [steps, setSteps] = useState<Step[]>(() => defaultSteps(setting));
+  const [executionTime, setExecutionTime] = useState(setting?.reminderExecutionTime ?? "09:00");
+  const [weekendSilencer, setWeekendSilencer] = useState(setting?.reminderSkipWeekends ?? true);
+  const [minBalance, setMinBalance] = useState(setting?.reminderMinBalance ?? true);
   const [saving, setSaving] = useState(false);
+  const [running, setRunning] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [runNote, setRunNote] = useState<string | null>(null);
 
   useEffect(() => {
     setAutoReminder(setting?.autoReminder ?? false);
-    setSteps((prev) => {
-      const before = prev.find((s) => s.when === "before") ?? prev[0];
-      const after = prev.find((s) => s.when === "after") ?? prev[1];
-      return [
-        { ...before, days: setting?.reminderDaysBefore ?? before.days },
-        { ...after, days: setting?.reminderDaysAfter ?? after.days },
-      ].filter(Boolean) as Step[];
-    });
+    setSteps(defaultSteps(setting));
+    setExecutionTime(setting?.reminderExecutionTime ?? "09:00");
+    setWeekendSilencer(setting?.reminderSkipWeekends ?? true);
+    setMinBalance(setting?.reminderMinBalance ?? true);
   }, [setting]);
 
   function updateStep(id: string, patch: Partial<Step>) {
@@ -83,12 +102,25 @@ export function RemindersPanel({
     setSaving(true);
     try {
       onError("");
+      setRunNote(null);
       await apiRequest("/fees/reminders", token, {
         method: "PUT",
         body: JSON.stringify({
           autoReminder,
           reminderDaysBefore: before,
           reminderDaysAfter: after,
+          reminderEmailEnabled: steps.some((s) => s.email),
+          reminderSmsEnabled: steps.some((s) => s.sms),
+          reminderExecutionTime: executionTime,
+          reminderSkipWeekends: weekendSilencer,
+          reminderMinBalance: minBalance,
+          reminderSteps: steps.map(({ days, when, notice, email, sms }) => ({
+            days,
+            when,
+            notice,
+            email,
+            sms,
+          })),
         }),
       });
       setSavedAt(
@@ -102,34 +134,54 @@ export function RemindersPanel({
     }
   }
 
+  async function runNow() {
+    setRunning(true);
+    try {
+      onError("");
+      const result = await apiRequest<{
+        count: number;
+        smsSent: number;
+        smsFailed: number;
+        pushSent?: number;
+        pushFailed?: number;
+        sessionName?: string;
+      }>("/fees/reminders/run", token, {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+      setRunNote(
+        `Sent ${result?.count ?? 0} notices` +
+          (result?.smsSent || result?.smsFailed
+            ? ` · SMS ${result?.smsSent ?? 0} ok / ${result?.smsFailed ?? 0} failed`
+            : "") +
+          ` · Push ${result?.pushSent ?? 0} ok / ${result?.pushFailed ?? 0} failed` +
+          (result?.sessionName ? ` · ${result.sessionName}` : ""),
+      );
+      await onSaved();
+    } catch (cause) {
+      onError(cause instanceof Error ? cause.message : "Unable to run reminders");
+    } finally {
+      setRunning(false);
+    }
+  }
+
   function reset() {
     setAutoReminder(setting?.autoReminder ?? false);
-    setSteps([
-      {
-        id: uid(),
-        days: setting?.reminderDaysBefore ?? 5,
-        when: "before",
-        notice: "Initial Due Notice",
-        email: true,
-        sms: false,
-      },
-      {
-        id: uid(),
-        days: setting?.reminderDaysAfter ?? 2,
-        when: "after",
-        notice: "Urgent Payment Reminder",
-        email: true,
-        sms: true,
-      },
-    ]);
-    setExecutionTime("09:00");
-    setWeekendSilencer(true);
-    setMinBalance(true);
+    setSteps(defaultSteps(setting));
+    setExecutionTime(setting?.reminderExecutionTime ?? "09:00");
+    setWeekendSilencer(setting?.reminderSkipWeekends ?? true);
+    setMinBalance(setting?.reminderMinBalance ?? true);
+    setRunNote(null);
   }
+
+  const lastRun = formatLastRun(setting?.lastReminderRunAt);
 
   return (
     <section className="mt-5 space-y-5">
-      <div className="flex justify-end">
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        {lastRun ? (
+          <p className="text-[12px] text-slate-500">Last automatic run: {lastRun}</p>
+        ) : null}
         <div className="nx-card flex items-center gap-3 px-4 py-2.5">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Status</p>
@@ -271,7 +323,7 @@ export function RemindersPanel({
             />
           </div>
           <p className="mt-3 text-[12px] text-slate-400">
-            Recommended: Morning hours (8:00 AM - 10:00 AM) for better engagement.
+            Server checks every minute and runs once per day at this time (local server clock).
           </p>
         </div>
 
@@ -329,17 +381,35 @@ export function RemindersPanel({
       </div>
 
       <div className="nx-card flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
-        <div className="flex items-center gap-3">
-          <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700">
-            Draft Mode
-          </span>
-          <span className="text-[12px] text-slate-500">
-            {savedAt ? `Last saved: Today at ${savedAt}` : "Not saved yet"}
-          </span>
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-3">
+            <span
+              className={`rounded-full px-2.5 py-1 text-[11px] font-bold ${
+                autoReminder
+                  ? "bg-emerald-50 text-emerald-700"
+                  : "bg-slate-100 text-slate-600"
+              }`}
+            >
+              {autoReminder ? "Live" : "Paused"}
+            </span>
+            <span className="text-[12px] text-slate-500">
+              {savedAt ? `Last saved: Today at ${savedAt}` : "Not saved yet"}
+            </span>
+          </div>
+          {runNote ? <p className="text-[12px] text-indigo-600">{runNote}</p> : null}
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button type="button" className="nx-btn-secondary" onClick={reset}>
             Reset Changes
+          </button>
+          <button
+            type="button"
+            className="nx-btn-secondary"
+            disabled={running}
+            onClick={() => void runNow()}
+          >
+            <PlayArrowOutlined sx={{ fontSize: 16 }} />
+            {running ? "Running…" : "Run now"}
           </button>
           <button
             type="button"
