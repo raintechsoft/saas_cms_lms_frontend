@@ -59,14 +59,61 @@ type Run = (action: () => Promise<unknown>, success: string) => Promise<void>;
 function IntegrationPanel({ setup, token, run }: { setup: ErpSetup; token: string; run: Run }) {
   const [integration, setIntegration] = useState({ category: "NOTIFICATION", provider: "", isEnabled: false, config: "{}", secrets: "{}" });
   const [payment, setPayment] = useState({ code: "", name: "", instructions: "" });
+  const current = setup.integrations.find((item) => item.category === integration.category);
+
   function selectCategory(category: string) {
     const found = setup.integrations.find((item) => item.category === category);
-    setIntegration({ category, provider: found?.provider ?? "", isEnabled: found?.isEnabled ?? false, config: JSON.stringify(found?.config ?? {}, null, 2), secrets: "{}" });
+    const emptyConfig = !found?.config || Object.keys(found.config).length === 0;
+    let config = JSON.stringify(found?.config ?? {}, null, 2);
+    let provider = found?.provider ?? "";
+    if (category === "SMS" && emptyConfig) {
+      provider = provider || "twilio";
+      config = JSON.stringify({ fromNumber: "+91XXXXXXXXXX" }, null, 2);
+    }
+    if (category === "EMAIL" && emptyConfig) {
+      provider = provider || "SMTP";
+      config = JSON.stringify(
+        { host: "smtp.gmail.com", port: 587, secure: false, from: "noreply@school.com", fromName: "School" },
+        null,
+        2,
+      );
+    }
+    setIntegration({
+      category,
+      provider,
+      isEnabled: found?.isEnabled ?? false,
+      config,
+      secrets: category === "SMS"
+        ? '{\n  "accountSid": "ACxxxxxxxx",\n  "authToken": "your_auth_token"\n}'
+        : category === "EMAIL"
+          ? '{\n  "user": "smtp-user",\n  "pass": "smtp-password"\n}'
+          : "{}",
+    });
   }
+
   async function saveIntegration(event: FormEvent) {
     event.preventDefault();
-    await run(() => apiRequest(`/erp/integrations/${integration.category}`, token, { method: "PUT", body: JSON.stringify({ provider: integration.provider || null, isEnabled: integration.isEnabled, config: JSON.parse(integration.config), secrets: JSON.parse(integration.secrets) }) }), "Integration setting saved");
+    const secrets = JSON.parse(integration.secrets) as Record<string, string>;
+    const placeholderSecrets =
+      Object.values(secrets).some((value) =>
+        /ACxxxxxxxx|your_auth_token|smtp-user|smtp-password|XXXXXX/i.test(String(value)),
+      );
+    await run(
+      () =>
+        apiRequest(`/erp/integrations/${integration.category}`, token, {
+          method: "PUT",
+          body: JSON.stringify({
+            provider: integration.provider || null,
+            isEnabled: integration.isEnabled,
+            config: JSON.parse(integration.config),
+            // Skip placeholder / empty secrets so we don't wipe real credentials
+            secrets: placeholderSecrets || !Object.keys(secrets).length ? undefined : secrets,
+          }),
+        }),
+      "Integration setting saved",
+    );
   }
+
   async function savePayment(event: FormEvent) {
     event.preventDefault();
     await run(() => apiRequest("/erp/payment-methods", token, { method: "POST", body: JSON.stringify(payment) }), "Payment method added");
@@ -74,9 +121,21 @@ function IntegrationPanel({ setup, token, run }: { setup: ErpSetup; token: strin
   }
   return <section className="mt-6 grid gap-5 lg:grid-cols-2">
     <form className="card p-5" onSubmit={(event) => void saveIntegration(event)}><h2 className="font-semibold">Provider configuration</h2><p className="mt-1 text-sm text-slate-500">Credentials are encrypted at rest and never returned by the API.</p>
-      <select className="input mt-4" value={integration.category} onChange={(e) => selectCategory(e.target.value)}>{categories.map((category) => <option key={category}>{category.replace("_", " ")}</option>)}</select>
+      <select className="input mt-4" value={integration.category} onChange={(e) => selectCategory(e.target.value)}>{categories.map((category) => <option key={category} value={category}>{category.replace("_", " ")}</option>)}</select>
       <input className="input mt-3" placeholder="Provider, e.g. SMTP or Twilio" value={integration.provider} onChange={(e) => setIntegration({ ...integration, provider: e.target.value })} />
       <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={integration.isEnabled} onChange={(e) => setIntegration({ ...integration, isEnabled: e.target.checked })} />Enabled</label>
+      {current?.hasSecrets ? (
+        <p className="mt-2 text-xs font-medium text-emerald-700">Secrets are saved for this provider. Leave Secrets as {"{}"} to keep them, or paste new values to replace.</p>
+      ) : (
+        <p className="mt-2 text-xs font-medium text-amber-700">No secrets saved yet for this provider. Paste real credentials before enabling.</p>
+      )}
+      <p className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+        {integration.category === "EMAIL"
+          ? 'EMAIL config: {"host","port","secure","from","fromName"}. Secrets: {"user","pass"}'
+          : integration.category === "SMS"
+            ? 'SMS config: {"fromNumber":"+91..."}. Secrets: {"accountSid":"AC...","authToken":"..."}. Provider: twilio. Replace placeholders with real Twilio values, then Save.'
+            : "Enable and save provider settings used by campus notifications and reminders."}
+      </p>
       <label className="label mt-4">Public config (JSON)</label><textarea className="input min-h-28 font-mono text-xs" value={integration.config} onChange={(e) => setIntegration({ ...integration, config: e.target.value })} />
       <label className="label mt-3">Secrets (JSON, leave {"{}"} to preserve)</label><textarea className="input min-h-20 font-mono text-xs" value={integration.secrets} onChange={(e) => setIntegration({ ...integration, secrets: e.target.value })} />
       <button className="button-primary mt-4">Save integration</button>

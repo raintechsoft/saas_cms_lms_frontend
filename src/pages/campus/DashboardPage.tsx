@@ -90,6 +90,12 @@ function paymentStatus(raw: string) {
   return { label: "PENDING", className: "nx-pill-warning" };
 }
 
+function formatTrendPct(value: number) {
+  if (value > 0) return `+${value}%`;
+  if (value < 0) return `${value}%`;
+  return "0%";
+}
+
 function KpiCard({
   icon: Icon,
   label,
@@ -235,17 +241,18 @@ export function DashboardPage() {
     });
   }, [invoiceQuery, payments]);
 
-  const growthValues = [
-    Math.max(1, Math.round((stats?.students ?? 0) * 0.12)),
-    Math.max(1, Math.round((stats?.students ?? 0) * 0.16)),
-    Math.max(1, Math.round((stats?.students ?? 0) * 0.2)),
-    Math.max(1, Math.round((stats?.students ?? 0) * 0.28)),
-    Math.max(1, Math.round((stats?.students ?? 0) * 0.35)),
-    Math.max(1, Math.round((stats?.students ?? 0) * 0.42)),
-  ];
+  const growthValues =
+    dashboard?.trends?.enrollmentByMonth?.length === 6
+      ? dashboard.trends.enrollmentByMonth
+      : [0, 0, 0, 0, 0, 0];
   const monthlyGrowth = growthValues[growthValues.length - 1] ?? 0;
   const growthPct =
     growthValues[0] > 0 ? Math.round(((monthlyGrowth - growthValues[0]) / growthValues[0]) * 100) : 0;
+
+  const studentsTrend = dashboard?.trends?.studentsPct ?? 0;
+  const collectionTrend = dashboard?.trends?.collectionPct ?? 0;
+  const attendanceTrend = dashboard?.trends?.attendancePct ?? 0;
+  const enrollmentTrend = growthPct;
 
   if (!user) return null;
 
@@ -311,15 +318,17 @@ export function DashboardPage() {
             label="Total Students"
             value={stats?.students?.toLocaleString() ?? "—"}
             tint="#6366f1"
-            trend="+4.2%"
-            hint="4.2% YoY"
+            trend={formatTrendPct(studentsTrend)}
+            trendTone={studentsTrend >= 0 ? "up" : "down"}
+            hint={`${Math.abs(studentsTrend)}% YoY`}
           />
           <KpiCard
             icon={AccountBalanceWalletOutlined}
             label="Total Fees"
             value={feeSummary ? formatMoney(collected) : "—"}
             tint="#10b981"
-            trend="+12.5%"
+            trend={formatTrendPct(collectionTrend)}
+            trendTone={collectionTrend >= 0 ? "up" : "down"}
             hint={assigned > 0 ? `${collectionPct}% of Projected` : "Current cycle"}
           />
           <KpiCard
@@ -327,8 +336,8 @@ export function DashboardPage() {
             label="Avg Attendance"
             value={totalAttendance > 0 ? `${presentPct}%` : "—"}
             tint="#f59e0b"
-            trend={totalAttendance > 0 && absentPct > 0 ? `−${absentPct}%` : undefined}
-            trendTone="down"
+            trend={formatTrendPct(attendanceTrend)}
+            trendTone={attendanceTrend >= 0 ? "up" : "down"}
             hint="Avg attendance"
           />
           <KpiCard
@@ -336,7 +345,8 @@ export function DashboardPage() {
             label="New Enrollments"
             value={newEnrollments.toLocaleString()}
             tint="#3b82f6"
-            trend="+8.1%"
+            trend={formatTrendPct(enrollmentTrend)}
+            trendTone={enrollmentTrend >= 0 ? "up" : "down"}
             hint="Ahead of target"
           />
         </div>

@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   AssignmentOutlined,
   BadgeOutlined,
@@ -12,7 +12,8 @@ import {
   GroupsOutlined,
   LogoutOutlined,
   MenuBookOutlined,
-  NotificationsNoneOutlined,
+  NotificationsActiveOutlined,
+  NotificationsOutlined,
   PaymentsOutlined,
   PersonOutlined,
   QuizOutlined,
@@ -23,12 +24,32 @@ import {
   TuneOutlined,
   WorkOutlineOutlined,
 } from "@mui/icons-material";
-import { Link, NavLink, Navigate, Outlet, useLocation } from "react-router-dom";
+import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { applyBrandingToDocument, parseBranding } from "../lib/branding";
-import { assetUrl } from "../lib/api";
+import { apiRequest, assetUrl } from "../lib/api";
 import { CAMPUS_NAV, getCampusNavForMode, type NavSection } from "../lib/productMode";
 import { InitialsAvatar } from "./InitialsAvatar";
+
+type HeaderSearchStudent = {
+  id: string;
+  firstName: string;
+  lastName?: string | null;
+  admissionNumber: string;
+};
+
+type HeaderSearchPayment = {
+  id: string;
+  receiptNumber?: string;
+  paymentId?: string;
+  amount?: string;
+  student?: { firstName: string; lastName?: string | null; admissionNumber?: string };
+};
+
+type HeaderSearchResults = {
+  students: HeaderSearchStudent[];
+  payments: HeaderSearchPayment[];
+};
 
 const PORTAL_ROLES = ["STUDENT", "PARENT"];
 const STAFF_ROLES = ["INSTITUTION_ADMIN", "TEACHER", "ACCOUNTANT", "STAFF", "UNIVERSE_SUPER_ADMIN", "RESELLER_ADMIN"];
@@ -57,6 +78,7 @@ const navIcons: Record<string, NavIcon> = {
   "/academics": MenuBookOutlined,
   "/attendance": EventNoteOutlined,
   "/notices": CampaignOutlined,
+  "/notifications": NotificationsOutlined,
   "/exams": QuizOutlined,
   "/timetable": CalendarMonthOutlined,
   "/homework": AssignmentOutlined,
@@ -168,15 +190,205 @@ function NavGroup({
 }
 
 export function AppShell() {
-  const { user, isAuthenticated, logout } = useAuth();
+  const { user, isAuthenticated, logout, accessToken } = useAuth();
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
   const breadcrumb = useBreadcrumb();
   const branding = parseBranding(user?.tenant?.branding);
+
+  type NotificationAudience = "ALL" | "STUDENTS" | "PARENTS";
+  type NotificationTypeKey = "ANNOUNCEMENT" | "FEE_OVERDUE" | "FEE_RECEIPT" | "HOMEWORK" | "EXAM";
+  type CampusNotification = {
+    id: string;
+    title: string;
+    body: string;
+    createdAt: string;
+    isRead: boolean;
+    type: NotificationTypeKey;
+    audience: NotificationAudience;
+  };
+
+  const bellRef = useRef<HTMLDivElement | null>(null);
+  const searchRef = useRef<HTMLDivElement | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [bellOpen, setBellOpen] = useState(false);
+  const [bellLoading, setBellLoading] = useState(false);
+  const [recentNotifications, setRecentNotifications] = useState<CampusNotification[]>([]);
+  const [markAllLoading, setMarkAllLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<HeaderSearchResults>({ students: [], payments: [] });
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const BellIcon = bellOpen || unreadCount > 0 ? NotificationsActiveOutlined : NotificationsOutlined;
+
+  function timeAgo(value: string) {
+    const then = new Date(value).getTime();
+    const deltaMs = Date.now() - then;
+    const deltaSec = Math.floor(deltaMs / 1000);
+    if (deltaSec < 60) return "Just now";
+    const deltaMin = Math.floor(deltaSec / 60);
+    if (deltaMin < 60) return `${deltaMin}m ago`;
+    const deltaHr = Math.floor(deltaMin / 60);
+    if (deltaHr < 24) return `${deltaHr}h ago`;
+    const deltaDays = Math.floor(deltaHr / 24);
+    return `${deltaDays}d ago`;
+  }
 
   useEffect(() => {
     applyBrandingToDocument(branding);
   }, [branding.primaryColor, branding.logoText]);
+
+  async function refreshUnreadCount() {
+    if (!accessToken) return;
+    try {
+      const data = await apiRequest<{ count: number }>("/notifications/unread-count", accessToken);
+      setUnreadCount(Number(data?.count ?? 0));
+    } catch {
+      // Best-effort: unread badge is non-critical UI.
+    }
+  }
+
+  async function refreshRecentNotifications() {
+    if (!accessToken) return;
+    setBellLoading(true);
+    try {
+      const data = await apiRequest<CampusNotification[]>("/notifications", accessToken);
+      setRecentNotifications((data ?? []).slice(0, 10));
+    } catch {
+      // Best-effort: dropdown list is non-critical UI.
+    } finally {
+      setBellLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!accessToken) return;
+    void refreshUnreadCount();
+    const intervalId = window.setInterval(() => {
+      void refreshUnreadCount();
+    }, 60_000);
+    return () => window.clearInterval(intervalId);
+  }, [accessToken]);
+
+  useEffect(() => {
+    if (!bellOpen) return;
+    const onMouseDown = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (!bellRef.current) return;
+      if (bellRef.current.contains(target)) return;
+      setBellOpen(false);
+    };
+    document.addEventListener("mousedown", onMouseDown);
+    return () => document.removeEventListener("mousedown", onMouseDown);
+  }, [bellOpen]);
+
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (q.length < 2) {
+      setSearchResults({ students: [], payments: [] });
+      setSearchLoading(false);
+      setSearchOpen(false);
+      return;
+    }
+    if (!accessToken) return;
+
+    let cancelled = false;
+    setSearchLoading(true);
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const [studentsRes, paymentsRes] = await Promise.all([
+            apiRequest<{ items: HeaderSearchStudent[] }>(
+              `/students?search=${encodeURIComponent(q)}&limit=5`,
+              accessToken,
+            ),
+            apiRequest<HeaderSearchPayment[] | { items: HeaderSearchPayment[] }>(
+              `/fees/payments?query=${encodeURIComponent(q)}`,
+              accessToken,
+            ),
+          ]);
+          if (cancelled) return;
+          const students = Array.isArray(studentsRes?.items) ? studentsRes.items.slice(0, 5) : [];
+          const paymentsRaw = Array.isArray(paymentsRes)
+            ? paymentsRes
+            : Array.isArray(paymentsRes?.items)
+              ? paymentsRes.items
+              : [];
+          setSearchResults({ students, payments: paymentsRaw.slice(0, 5) });
+          setSearchOpen(true);
+        } catch {
+          if (cancelled) return;
+          setSearchResults({ students: [], payments: [] });
+          setSearchOpen(true);
+        } finally {
+          if (!cancelled) setSearchLoading(false);
+        }
+      })();
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [searchQuery, accessToken]);
+
+  useEffect(() => {
+    if (!searchOpen) return;
+    const onMouseDown = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (!searchRef.current) return;
+      if (searchRef.current.contains(target)) return;
+      setSearchOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSearchOpen(false);
+    };
+    document.addEventListener("mousedown", onMouseDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onMouseDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [searchOpen]);
+
+  function studentDisplayName(person: { firstName: string; lastName?: string | null }) {
+    return `${person.firstName} ${person.lastName ?? ""}`.trim();
+  }
+
+  function goToStudent(id: string) {
+    setSearchOpen(false);
+    setSearchQuery("");
+    navigate(`/students/${id}`);
+  }
+
+  function goToFees() {
+    setSearchOpen(false);
+    setSearchQuery("");
+    navigate("/fees");
+  }
+
+  async function onBellClick() {
+    const next = !bellOpen;
+    setBellOpen(next);
+    if (next) await refreshRecentNotifications();
+  }
+
+  async function markAllRead() {
+    if (!accessToken) return;
+    setMarkAllLoading(true);
+    try {
+      await apiRequest<unknown>("/notifications/read-all", accessToken, { method: "PUT" });
+      await refreshUnreadCount();
+      if (bellOpen) await refreshRecentNotifications();
+    } catch {
+      // Best-effort UI.
+    } finally {
+      setMarkAllLoading(false);
+    }
+  }
 
   if (!isAuthenticated || !user) return <Navigate to="/login" replace />;
   if (isPlatformUser(user.permissions)) return <Navigate to="/admin/dashboard" replace />;
@@ -321,17 +533,132 @@ export function AppShell() {
             ))}
           </div>
           <div className="flex items-center gap-3">
-            <div className="relative hidden sm:block">
+            <div className="relative hidden sm:block" ref={searchRef}>
               <SearchOutlined sx={{ fontSize: 18 }} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 className="nx-input w-72 !rounded-lg !border-[#dfe1e4] !bg-white pl-9"
                 placeholder="Search students, fees, logs..."
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                onFocus={() => {
+                  if (searchQuery.trim().length >= 2) setSearchOpen(true);
+                }}
               />
+              {searchOpen && (
+                <div className="absolute right-0 z-30 mt-2 w-80 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
+                  {searchLoading ? (
+                    <p className="px-3 py-3 text-center text-[12px] text-slate-500">Searching...</p>
+                  ) : searchResults.students.length === 0 && searchResults.payments.length === 0 ? (
+                    <p className="px-3 py-3 text-center text-[12px] text-slate-500">No matches found.</p>
+                  ) : (
+                    <div className="max-h-96 overflow-y-auto py-1">
+                      {searchResults.students.length > 0 ? (
+                        <div>
+                          <p className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                            Students
+                          </p>
+                          {searchResults.students.map((student) => (
+                            <button
+                              key={student.id}
+                              type="button"
+                              onClick={() => goToStudent(student.id)}
+                              className="flex w-full flex-col gap-0.5 px-3 py-2 text-left hover:bg-indigo-50"
+                            >
+                              <span className="truncate text-[13px] font-semibold text-slate-800">
+                                {studentDisplayName(student)}
+                              </span>
+                              <span className="truncate text-[11px] text-slate-500">
+                                {student.admissionNumber}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                      {searchResults.payments.length > 0 ? (
+                        <div>
+                          <p className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                            Payments
+                          </p>
+                          {searchResults.payments.map((payment) => (
+                            <button
+                              key={payment.id}
+                              type="button"
+                              onClick={goToFees}
+                              className="flex w-full flex-col gap-0.5 px-3 py-2 text-left hover:bg-indigo-50"
+                            >
+                              <span className="truncate text-[13px] font-semibold text-slate-800">
+                                {payment.receiptNumber || payment.paymentId || payment.id}
+                              </span>
+                              <span className="truncate text-[11px] text-slate-500">
+                                {payment.student
+                                  ? studentDisplayName(payment.student)
+                                  : "Fee payment"}
+                                {payment.amount != null ? ` · ${payment.amount}` : ""}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-            <button type="button" className="relative grid size-9 place-items-center rounded-lg text-slate-500 transition hover:bg-white">
-              <NotificationsNoneOutlined sx={{ fontSize: 21 }} />
-              <span className="absolute right-2 top-2 size-1.5 rounded-full bg-rose-500" />
-            </button>
+            <div className="relative" ref={bellRef}>
+              <button
+                type="button"
+                aria-label="Notifications"
+                onClick={onBellClick}
+                className="relative grid size-9 place-items-center rounded-lg text-slate-500 transition hover:bg-white"
+              >
+                <BellIcon sx={{ fontSize: 21 }} />
+                {unreadCount > 0 ? <span className="absolute right-2 top-2 size-1.5 rounded-full bg-rose-500" /> : null}
+              </button>
+              {bellOpen && (
+                <div className="absolute right-0 mt-3 w-[380px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
+                  <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-3 py-2">
+                    <p className="text-[12px] font-semibold text-slate-800">Notifications</p>
+                    <button
+                      type="button"
+                      onClick={() => void markAllRead()}
+                      disabled={markAllLoading}
+                      className="nx-btn-secondary !h-7 !px-2 !py-0 text-[12px] disabled:opacity-60"
+                    >
+                      {markAllLoading ? "Marking..." : "Mark all read"}
+                    </button>
+                  </div>
+                  <div className="max-h-96 overflow-y-auto px-2 py-2">
+                    {bellLoading ? (
+                      <p className="px-2 py-3 text-center text-[12px] text-slate-500">Loading...</p>
+                    ) : recentNotifications.length ? (
+                      <div className="space-y-1">
+                        {recentNotifications.map((n) => {
+                          const preview = n.body.length > 120 ? `${n.body.slice(0, 120)}...` : n.body;
+                          return (
+                            <div
+                              key={n.id}
+                              className="flex items-start gap-3 rounded-lg px-2 py-2 hover:bg-indigo-50/70"
+                            >
+                              <span className={`mt-1 size-2 rounded-full ${n.isRead ? "bg-slate-300" : "bg-rose-500"}`} />
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-[13px] font-semibold text-slate-900">{n.title}</p>
+                                <p className="mt-1 truncate text-[12px] text-slate-600">{preview}</p>
+                                <p className="mt-1 text-[11px] text-slate-400">{timeAgo(n.createdAt)}</p>
+                              </div>
+                              <div className="shrink-0 pr-1 text-[11px] font-medium text-slate-400">
+                                {n.isRead ? "Read" : "New"}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="px-2 py-3 text-center text-[12px] text-slate-500">No notifications.</p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
             <div className="hidden items-center gap-2 sm:flex">
               <InitialsAvatar name={fullName || "Admin User"} photoUrl={user.avatarUrl ? assetUrl(user.avatarUrl) : undefined} size={34} />
               <span className="text-[12.5px] font-semibold text-slate-700">{fullName || "Admin User"}</span>

@@ -26,6 +26,7 @@ export const CAMPUS_NAV: Array<{
 }> = [
   { to: "/dashboard", label: "Overview", permission: null, moduleKey: "dashboard", bucket: "SHARED", section: "top" },
   { to: "/profile", label: "Update Profile", permission: null, moduleKey: null, bucket: "SHARED", section: "top" },
+  { to: "/notifications", label: "Notifications", permission: null, moduleKey: null, bucket: "SHARED", section: "top" },
   { to: "/students", label: "Student Management", permission: "students.view", moduleKey: "students", bucket: "SHARED", section: "cms" },
   { to: "/academics", label: "Academics", permission: "academics.view", moduleKey: "academics", bucket: "SHARED", section: "cms" },
   { to: "/attendance", label: "Attendance", permission: "attendance.view", moduleKey: "attendance", bucket: "SHARED", section: "cms" },

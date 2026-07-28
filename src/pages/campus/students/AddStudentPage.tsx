@@ -394,11 +394,22 @@ export function AddStudentPage() {
           .filter(Boolean)
           .join("\n") || undefined,
       };
-      const created = await apiRequest<{ id: string }>("/students", accessToken, {
+      const created = await apiRequest<{
+        id: string;
+        credentials?: Array<{
+          email: string;
+          password: string;
+          role: "STUDENT" | "PARENT";
+          relation?: string | null;
+          created: boolean;
+        }>;
+      }>("/students", accessToken, {
         method: "POST",
         body: JSON.stringify(payload),
       });
-      navigate(`/students/${created.id}`, { state: { justCreated: true } });
+      navigate(`/students/${created.id}`, {
+        state: { justCreated: true, credentials: created.credentials ?? [] },
+      });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to add student");
     } finally {
@@ -413,7 +424,7 @@ export function AddStudentPage() {
     <CmsPage>
       <CmsPageHeader
         title="Add new student"
-        description="Enter student details to create a new enrollment record."
+        description="Enter student and parent details. Student and parent portal logins are created automatically."
         actions={
           <button
             type="button"
@@ -578,10 +589,13 @@ export function AddStudentPage() {
                   <input
                     className="nx-input"
                     type="email"
-                    placeholder="Email"
+                    placeholder="Student login email (e.g. anwin7x@gmail.com)"
                     value={form.email}
                     onChange={(e) => update("email", e.target.value)}
                   />
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    This becomes the student portal login email.
+                  </p>
                 </Field>
               </div>
 
@@ -690,10 +704,13 @@ export function AddStudentPage() {
                     <input
                       className="nx-input"
                       type="email"
-                      placeholder="Email"
+                      placeholder="Parent login email"
                       value={form.fatherEmail}
                       onChange={(e) => update("fatherEmail", e.target.value)}
                     />
+                    <p className="mt-1 text-[11px] text-slate-500">
+                      Used for parent portal login (preferred). Mother/guardian email used if empty.
+                    </p>
                   </Field>
                   <Field label="Occupation">
                     <input

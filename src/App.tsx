@@ -23,6 +23,7 @@ import { TimetablePage } from "./pages/campus/TimetablePage";
 import { HomeworkPage } from "./pages/campus/HomeworkPage";
 import { ErpSettingsPage } from "./pages/campus/ErpSettingsPage";
 import { NoticesPage } from "./pages/campus/NoticesPage";
+import { NotificationsPage } from "./pages/campus/NotificationsPage";
 import { OnlineAdmissionPage } from "./pages/public/OnlineAdmissionPage";
 import { PlatformShell } from "./pages/super-admin/PlatformShell";
 import { SuperAdminLoginPage } from "./pages/super-admin/SuperAdminLoginPage";
@@ -138,6 +139,14 @@ export function App() {
         <Route path="/academics" element={<AcademicsPage />} />
         <Route path="/attendance" element={<AttendancePage />} />
         <Route path="/notices" element={<NoticesPage />} />
+        <Route
+          path="/notifications"
+          element={
+            <RequireProductBucket bucket="SHARED">
+              <NotificationsPage />
+            </RequireProductBucket>
+          }
+        />
         <Route path="/exams" element={<ExamsPage />} />
         <Route path="/timetable" element={<RequireProductBucket bucket="LMS"><TimetablePage /></RequireProductBucket>} />
         <Route path="/homework" element={<RequireProductBucket bucket="LMS"><HomeworkPage /></RequireProductBucket>} />

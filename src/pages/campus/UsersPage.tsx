@@ -1,6 +1,7 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useAuth } from "../../auth/AuthContext";
 import { PageHeader } from "../../components/AppShell";
+import { ListPagination, paginateItems } from "../../components/ListPagination";
 import { confirmDelete } from "../../lib/confirm";
 import { apiRequest } from "../../lib/api";
 
@@ -24,15 +25,25 @@ interface User {
   roles: Array<{ role: Role }>;
 }
 
+const PAGE_SIZE = 8;
+
 export function UsersPage() {
   const { accessToken, user: currentUser } = useAuth();
   const [tab, setTab] = useState<"users" | "roles">("users");
   const [users, setUsers] = useState<User[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [permissions, setPermissions] = useState<Permission[]>([]);
+  const [page, setPage] = useState(1);
   const [error, setError] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+
+  const pageUsers = useMemo(() => paginateItems(users, page, PAGE_SIZE), [users, page]);
+
+  useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(users.length / PAGE_SIZE));
+    if (page > maxPage) setPage(maxPage);
+  }, [users.length, page]);
 
   async function load() {
     try {
@@ -44,6 +55,7 @@ export function UsersPage() {
       setUsers(nextUsers);
       setRoles(nextRoles);
       setPermissions(nextPermissions);
+      setPage(1);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to load access management");
     }
@@ -85,7 +97,7 @@ export function UsersPage() {
       <div className="mt-8 flex gap-2 border-b border-slate-200">
         {(["users", "roles"] as const).map((item) => (
           <button key={item} className={`tab ${tab === item ? "tab-active" : ""}`}
-            onClick={() => { setTab(item); setShowForm(false); setEditingUser(null); }}>
+            onClick={() => { setTab(item); setShowForm(false); setEditingUser(null); setPage(1); }}>
             {item === "users" ? `Users (${users.length})` : `Roles (${roles.length})`}
           </button>
         ))}
@@ -109,7 +121,7 @@ export function UsersPage() {
       {tab === "users" ? (
         <div className="card mt-6 overflow-hidden">
           <div className="divide-y divide-slate-100">
-            {users.map((user) => (
+            {pageUsers.map((user) => (
               <div key={user.id} className="flex flex-col justify-between gap-3 px-5 py-4 sm:flex-row sm:items-center">
                 <div>
                   <p className="font-medium">{user.firstName} {user.lastName}</p>
@@ -142,6 +154,15 @@ export function UsersPage() {
               <p className="p-8 text-center text-sm text-slate-500">No users yet.</p>
             )}
           </div>
+          {users.length > 0 ? (
+            <ListPagination
+              page={page}
+              pageSize={PAGE_SIZE}
+              total={users.length}
+              onPageChange={setPage}
+              label="users"
+            />
+          ) : null}
         </div>
       ) : (
         <div className="mt-6 grid gap-4 md:grid-cols-2">

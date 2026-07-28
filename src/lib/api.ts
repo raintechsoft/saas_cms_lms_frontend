@@ -55,6 +55,13 @@ export interface DashboardResult {
     notices: number;
     attendanceToday: { present: number; absent: number; total: number };
   };
+  trends?: {
+    studentsPct: number;
+    staffPct: number;
+    collectionPct: number;
+    attendancePct: number;
+    enrollmentByMonth: number[];
+  };
 }
 
 interface ApiEnvelope<T> {

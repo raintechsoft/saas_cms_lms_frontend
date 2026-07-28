@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useAuth } from "../../auth/AuthContext";
 import { PageHeader } from "../../components/AppShell";
 import { apiRequest } from "../../lib/api";
+import { confirmDelete } from "../../lib/confirm";
 
 interface Named { id: string; name: string }
 interface ClassSection {
@@ -20,12 +21,13 @@ interface Schedule {
   classSection: ClassSection;
   classSubject: { id: string; subject: Named };
 }
+type ExamStatus = "DRAFT" | "PUBLISHED" | "ARCHIVED";
 interface Exam {
   id: string;
   name: string;
   startDate: string;
   endDate: string;
-  status: "DRAFT" | "PUBLISHED";
+  status: ExamStatus;
   schedules: Schedule[];
   aspects: Array<{ id: string; name: string; maximumValue: string }>;
   _count: { students: number };
@@ -62,6 +64,16 @@ interface Result {
 }
 
 const today = new Date().toISOString().slice(0, 10);
+
+function toDateInput(value: string) {
+  return value.slice(0, 10);
+}
+
+function examStatusClass(status: ExamStatus) {
+  if (status === "PUBLISHED") return "badge-success";
+  if (status === "ARCHIVED") return "badge-danger";
+  return "badge";
+}
 
 export function ExamsPage() {
   const { accessToken } = useAuth();
@@ -294,32 +306,139 @@ function ExamSetupPanel({ setup, token, onSaved, onError }: {
       setExam({ ...exam, name: "" }); await onSaved();
     } catch (cause) { onError(cause instanceof Error ? cause.message : "Unable to create exam"); }
   }
+  async function renameGroup(item: ExamGroup) {
+    const name = window.prompt("Exam group name", item.name)?.trim();
+    if (!name || name === item.name) return;
+    try {
+      await apiRequest(`/exams/groups/${item.id}`, token, { method: "PUT", body: JSON.stringify({ name }) });
+      await onSaved();
+    } catch (cause) { onError(cause instanceof Error ? cause.message : "Unable to rename group"); }
+  }
+  async function removeGroup(item: ExamGroup) {
+    if (item.exams.length > 0) return;
+    const ok = await confirmDelete({
+      title: "Delete exam group?",
+      text: `"${item.name}" will be permanently deleted.`,
+    });
+    if (!ok) return;
+    try {
+      await apiRequest(`/exams/groups/${item.id}`, token, { method: "DELETE" });
+      await onSaved();
+    } catch (cause) { onError(cause instanceof Error ? cause.message : "Unable to delete group"); }
+  }
+  async function editExam(item: Exam) {
+    if (item.status === "ARCHIVED") return;
+    const name = window.prompt("Exam name", item.name)?.trim();
+    if (!name) return;
+    const startDate = window.prompt("Start date (YYYY-MM-DD)", toDateInput(item.startDate))?.trim();
+    if (!startDate) return;
+    const endDate = window.prompt("End date (YYYY-MM-DD)", toDateInput(item.endDate))?.trim();
+    if (!endDate) return;
+    try {
+      await apiRequest(`/exams/${item.id}`, token, {
+        method: "PUT",
+        body: JSON.stringify({ name, startDate, endDate }),
+      });
+      await onSaved();
+    } catch (cause) { onError(cause instanceof Error ? cause.message : "Unable to update exam"); }
+  }
+  async function archiveExamItem(item: Exam) {
+    if (item.status === "ARCHIVED") return;
+    try {
+      await apiRequest(`/exams/${item.id}/archive`, token, { method: "PUT" });
+      await onSaved();
+    } catch (cause) { onError(cause instanceof Error ? cause.message : "Unable to archive exam"); }
+  }
+  async function removeExam(item: Exam) {
+    if (item.status === "PUBLISHED") return;
+    const ok = await confirmDelete({
+      title: "Delete exam?",
+      text: `"${item.name}" (${item.status}) will be permanently deleted.`,
+    });
+    if (!ok) return;
+    try {
+      await apiRequest(`/exams/${item.id}`, token, { method: "DELETE" });
+      await onSaved();
+    } catch (cause) { onError(cause instanceof Error ? cause.message : "Unable to delete exam"); }
+  }
   return (
-    <section className="mt-6 grid gap-5 lg:grid-cols-2">
-      <form className="card p-5" onSubmit={submitGroup}>
-        <h2 className="font-semibold">Create exam class group</h2>
-        <select className="input mt-4" required value={group.academicSessionId} onChange={(e) => setGroup({ ...group, academicSessionId: e.target.value })}>
-          <option value="">Academic session</option>{setup.sessions.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
-        </select>
-        <input className="input mt-3" required placeholder="Group, e.g. Term 2" value={group.name} onChange={(e) => setGroup({ ...group, name: e.target.value })} />
-        <select className="input mt-3" value={group.resultType} onChange={(e) => setGroup({ ...group, resultType: e.target.value })}>
-          <option value="GENERAL">General pass/fail</option><option value="SCHOOL_GRADING">School grading</option>
-          <option value="COLLEGE_GRADING">College grading</option><option value="GPA">GPA grading</option>
-        </select>
-        <button className="button-primary mt-4">Create group</button>
-      </form>
-      <form className="card p-5" onSubmit={submitExam}>
-        <h2 className="font-semibold">Create exam</h2>
-        <select className="input mt-4" required value={exam.examGroupId} onChange={(e) => setExam({ ...exam, examGroupId: e.target.value })}>
-          <option value="">Exam group</option>{setup.groups.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
-        </select>
-        <input className="input mt-3" required placeholder="Exam name" value={exam.name} onChange={(e) => setExam({ ...exam, name: e.target.value })} />
-        <div className="mt-3 grid grid-cols-2 gap-3">
-          <input className="input" type="date" value={exam.startDate} onChange={(e) => setExam({ ...exam, startDate: e.target.value })} />
-          <input className="input" type="date" value={exam.endDate} onChange={(e) => setExam({ ...exam, endDate: e.target.value })} />
-        </div>
-        <button className="button-primary mt-4">Create exam</button>
-      </form>
+    <section className="mt-6 space-y-5">
+      <div className="grid gap-5 lg:grid-cols-2">
+        <form className="card p-5" onSubmit={submitGroup}>
+          <h2 className="font-semibold">Create exam class group</h2>
+          <select className="input mt-4" required value={group.academicSessionId} onChange={(e) => setGroup({ ...group, academicSessionId: e.target.value })}>
+            <option value="">Academic session</option>{setup.sessions.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
+          </select>
+          <input className="input mt-3" required placeholder="Group, e.g. Term 2" value={group.name} onChange={(e) => setGroup({ ...group, name: e.target.value })} />
+          <select className="input mt-3" value={group.resultType} onChange={(e) => setGroup({ ...group, resultType: e.target.value })}>
+            <option value="GENERAL">General pass/fail</option><option value="SCHOOL_GRADING">School grading</option>
+            <option value="COLLEGE_GRADING">College grading</option><option value="GPA">GPA grading</option>
+          </select>
+          <button className="button-primary mt-4">Create group</button>
+        </form>
+        <form className="card p-5" onSubmit={submitExam}>
+          <h2 className="font-semibold">Create exam</h2>
+          <select className="input mt-4" required value={exam.examGroupId} onChange={(e) => setExam({ ...exam, examGroupId: e.target.value })}>
+            <option value="">Exam group</option>{setup.groups.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}
+          </select>
+          <input className="input mt-3" required placeholder="Exam name" value={exam.name} onChange={(e) => setExam({ ...exam, name: e.target.value })} />
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <input className="input" type="date" value={exam.startDate} onChange={(e) => setExam({ ...exam, startDate: e.target.value })} />
+            <input className="input" type="date" value={exam.endDate} onChange={(e) => setExam({ ...exam, endDate: e.target.value })} />
+          </div>
+          <button className="button-primary mt-4">Create exam</button>
+        </form>
+      </div>
+      <div className="space-y-4">
+        {setup.groups.map((item) => (
+          <div className="card overflow-hidden" key={item.id}>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
+              <div>
+                <p className="font-semibold">{item.name}</p>
+                <p className="text-sm text-slate-500">{item.academicSession.name} · {item.resultType.replaceAll("_", " ")}</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button className="button-secondary" type="button" onClick={() => void renameGroup(item)}>Edit name</button>
+                {item.exams.length === 0 && (
+                  <button className="button-secondary" type="button" onClick={() => void removeGroup(item)}>Delete</button>
+                )}
+              </div>
+            </div>
+            <div className="divide-y divide-slate-100">
+              {item.exams.length === 0 ? (
+                <p className="p-5 text-sm text-slate-500">No exams in this group yet.</p>
+              ) : item.exams.map((examItem) => (
+                <div className="flex flex-col justify-between gap-3 p-5 sm:flex-row sm:items-center" key={examItem.id}>
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-medium">{examItem.name}</p>
+                      <span className={examStatusClass(examItem.status)}>{examItem.status}</span>
+                    </div>
+                    <p className="mt-1 text-sm text-slate-500">
+                      {new Date(examItem.startDate).toLocaleDateString()} – {new Date(examItem.endDate).toLocaleDateString()}
+                      {" · "}{examItem.schedules.length} schedules · {examItem._count.students} students
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {examItem.status !== "ARCHIVED" && (
+                      <button className="button-secondary" type="button" onClick={() => void editExam(examItem)}>Edit</button>
+                    )}
+                    {examItem.status !== "ARCHIVED" && (
+                      <button className="button-secondary" type="button" onClick={() => void archiveExamItem(examItem)}>Archive</button>
+                    )}
+                    {(examItem.status === "DRAFT" || examItem.status === "ARCHIVED") && (
+                      <button className="button-secondary" type="button" onClick={() => void removeExam(examItem)}>Delete</button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+        {!setup.groups.length && (
+          <div className="card p-6"><p className="text-sm text-slate-500">No exam groups yet.</p></div>
+        )}
+      </div>
     </section>
   );
 }
@@ -339,6 +458,32 @@ function SchedulePanel({ setup, exams, token, onSaved, onError }: {
       });
       await onSaved();
     } catch (cause) { onError(cause instanceof Error ? cause.message : "Unable to create schedule"); }
+  }
+  async function editSchedule(schedule: Schedule) {
+    const examDate = window.prompt("Exam date (YYYY-MM-DD)", toDateInput(schedule.examDate))?.trim();
+    if (!examDate) return;
+    const startTime = window.prompt("Start time (HH:MM)", schedule.startTime)?.trim();
+    if (!startTime) return;
+    const endTime = window.prompt("End time (HH:MM)", schedule.endTime)?.trim();
+    if (!endTime) return;
+    try {
+      await apiRequest(`/exams/schedules/${schedule.id}`, token, {
+        method: "PUT",
+        body: JSON.stringify({ examDate, startTime, endTime }),
+      });
+      await onSaved();
+    } catch (cause) { onError(cause instanceof Error ? cause.message : "Unable to update schedule"); }
+  }
+  async function removeSchedule(schedule: Schedule, examName: string) {
+    const ok = await confirmDelete({
+      title: "Delete schedule?",
+      text: `Remove ${examName} · ${schedule.classSubject.subject.name} schedule?`,
+    });
+    if (!ok) return;
+    try {
+      await apiRequest(`/exams/schedules/${schedule.id}`, token, { method: "DELETE" });
+      await onSaved();
+    } catch (cause) { onError(cause instanceof Error ? cause.message : "Unable to delete schedule"); }
   }
   return (
     <section className="mt-6 grid gap-5 lg:grid-cols-[420px_1fr]">
@@ -367,10 +512,26 @@ function SchedulePanel({ setup, exams, token, onSaved, onError }: {
         <div className="divide-y divide-slate-100">
           {exams.flatMap((exam) => exam.schedules.map((schedule) => (
             <div className="p-5" key={schedule.id}>
-              <div className="flex justify-between gap-3"><p className="font-medium">{exam.name} · {schedule.classSubject.subject.name}</p><span className="badge">{exam.status}</span></div>
-              <p className="mt-1 text-sm text-slate-500">{schedule.classSection.academicClass.name} {schedule.classSection.section.name} · {new Date(schedule.examDate).toLocaleDateString()} · {schedule.startTime}–{schedule.endTime}</p>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-medium">{exam.name} · {schedule.classSubject.subject.name}</p>
+                    <span className={examStatusClass(exam.status)}>{exam.status}</span>
+                  </div>
+                  <p className="mt-1 text-sm text-slate-500">{schedule.classSection.academicClass.name} {schedule.classSection.section.name} · {new Date(schedule.examDate).toLocaleDateString()} · {schedule.startTime}–{schedule.endTime}</p>
+                </div>
+                {exam.status === "DRAFT" && (
+                  <div className="flex flex-wrap gap-2">
+                    <button className="button-secondary" type="button" onClick={() => void editSchedule(schedule)}>Edit</button>
+                    <button className="button-secondary" type="button" onClick={() => void removeSchedule(schedule, exam.name)}>Delete</button>
+                  </div>
+                )}
+              </div>
             </div>
           )))}
+          {!exams.some((exam) => exam.schedules.length > 0) && (
+            <p className="p-8 text-center text-sm text-slate-500">No schedules yet.</p>
+          )}
         </div>
       </div>
     </section>
@@ -407,6 +568,36 @@ function ExamFieldsPanel({ setup, exams, schedules, token, onSaved, onError }: {
       });
       setGrade({ ...grade, name: "", minPercent: "", maxPercent: "", gradePoint: "" }); await onSaved();
     } catch (cause) { onError(cause instanceof Error ? cause.message : "Unable to create marks grade"); }
+  }
+  async function editGrade(item: Setup["grades"][number]) {
+    const name = window.prompt("Grade name", item.name)?.trim();
+    if (!name) return;
+    const minPercent = window.prompt("Min percent", String(item.minPercent))?.trim();
+    if (minPercent == null || minPercent === "") return;
+    const maxPercent = window.prompt("Max percent", String(item.maxPercent))?.trim();
+    if (maxPercent == null || maxPercent === "") return;
+    try {
+      await apiRequest(`/exams/grades/${item.id}`, token, {
+        method: "PUT",
+        body: JSON.stringify({
+          name,
+          minPercent: Number(minPercent),
+          maxPercent: Number(maxPercent),
+        }),
+      });
+      await onSaved();
+    } catch (cause) { onError(cause instanceof Error ? cause.message : "Unable to update grade"); }
+  }
+  async function removeGrade(item: Setup["grades"][number]) {
+    const ok = await confirmDelete({
+      title: "Delete grade?",
+      text: `"${item.name}" (${item.minPercent}–${item.maxPercent}%) will be removed.`,
+    });
+    if (!ok) return;
+    try {
+      await apiRequest(`/exams/grades/${item.id}`, token, { method: "DELETE" });
+      await onSaved();
+    } catch (cause) { onError(cause instanceof Error ? cause.message : "Unable to delete grade"); }
   }
   async function createComponent(event: FormEvent) {
     event.preventDefault();
@@ -462,7 +653,15 @@ function ExamFieldsPanel({ setup, exams, schedules, token, onSaved, onError }: {
           <input className="input mt-3" type="number" min="0" placeholder="Grade point" value={grade.gradePoint} onChange={(e) => setGrade({ ...grade, gradePoint: e.target.value })} />
           <select className="input mt-3" value={grade.passStatus} onChange={(e) => setGrade({ ...grade, passStatus: e.target.value })}><option value="PASS">Pass</option><option value="FAIL">Fail</option></select>
           <button className="button-primary mt-4">Add grade</button>
-          <div className="mt-4 flex flex-wrap gap-2">{setup.grades.map((item) => <span className={item.passStatus === "PASS" ? "badge-success" : "badge-danger"} key={item.id}>{item.name} · {item.minPercent}–{item.maxPercent}%</span>)}</div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {setup.grades.map((item) => (
+              <span className={`inline-flex items-center gap-2 ${item.passStatus === "PASS" ? "badge-success" : "badge-danger"}`} key={item.id}>
+                {item.name} · {item.minPercent}–{item.maxPercent}%
+                <button className="text-xs underline" type="button" onClick={() => void editGrade(item)}>Edit</button>
+                <button className="text-xs underline" type="button" onClick={() => void removeGrade(item)}>Delete</button>
+              </span>
+            ))}
+          </div>
         </form>
         <form className="card p-5" onSubmit={createComponent}>
           <h2 className="font-semibold">Subject mark field</h2>

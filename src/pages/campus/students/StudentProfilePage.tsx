@@ -86,11 +86,25 @@ function InfoRow({ label, value }: { label: string; value: ReactNode }) {
   );
 }
 
+type PortalCredential = {
+  email: string;
+  password: string;
+  role: "STUDENT" | "PARENT";
+  relation?: string | null;
+  created: boolean;
+};
+
+type CreateLocationState = {
+  justCreated?: boolean;
+  credentials?: PortalCredential[];
+};
+
 export function StudentProfilePage() {
   const { id } = useParams<{ id: string }>();
   const { accessToken } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const createState = (location.state as CreateLocationState | null) ?? null;
   const [setup, setSetup] = useState<Setup | null>(null);
   const [detail, setDetail] = useState<StudentDetail | null>(null);
   const [tab, setTab] = useState<DetailTab>("profile");
@@ -98,8 +112,9 @@ export function StudentProfilePage() {
   const [attendancePct, setAttendancePct] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState(
-    (location.state as { justCreated?: boolean } | null)?.justCreated ? "Student added successfully" : "",
+    createState?.justCreated ? "Student added successfully" : "",
   );
+  const [credentials] = useState<PortalCredential[]>(createState?.credentials ?? []);
   const [loading, setLoading] = useState(true);
 
   async function load() {
@@ -156,6 +171,31 @@ export function StudentProfilePage() {
         <p className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3.5 text-sm text-emerald-700">
           {message}
         </p>
+      )}
+      {credentials.length > 0 && (
+        <div className="mb-4 rounded-xl border border-indigo-200 bg-indigo-50 p-4">
+          <p className="text-[13px] font-bold text-indigo-900">Portal login credentials</p>
+          <p className="mt-1 text-[12px] text-indigo-700">
+            Share these once with the student/parent. Passwords are shown only here after create.
+          </p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            {credentials.map((item) => (
+              <div
+                key={`${item.role}-${item.email}`}
+                className="rounded-lg border border-indigo-100 bg-white px-3 py-2.5"
+              >
+                <p className="text-[11px] font-bold uppercase tracking-wide text-indigo-500">
+                  {item.role === "STUDENT" ? "Student login" : `Parent login${item.relation ? ` (${item.relation})` : ""}`}
+                </p>
+                <p className="mt-1 text-[13px] font-semibold text-slate-900">{item.email}</p>
+                <p className="mt-0.5 font-mono text-[13px] text-slate-700">Password: {item.password}</p>
+                {!item.created && (
+                  <p className="mt-1 text-[11px] text-amber-700">Existing parent account was linked.</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       {detail && setup && (
