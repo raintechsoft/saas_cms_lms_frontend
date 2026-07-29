@@ -12,8 +12,16 @@ import { PageHeader } from "../../components/AppShell";
 import { apiRequest } from "../../lib/api";
 import { confirmDelete } from "../../lib/confirm";
 import { notifyError, notifySuccess } from "../../lib/notify";
+import type { StudentListItem } from "./students/types";
 
-interface Item { id: string; name: string; code?: string | null }
+interface Item {
+  id: string;
+  name: string;
+  code?: string | null;
+  type?: "CORE" | "ELECTIVE";
+  electiveCategoryId?: string | null;
+  electiveCategory?: { id: string; name: string; maxSelect: number } | null;
+}
 interface Person { id: string; firstName: string; lastName: string }
 interface ClassSection {
   id: string;
@@ -22,6 +30,15 @@ interface ClassSection {
   classTeacher: Person | null;
   subjects: Array<{ id: string; subject: Item; teacher: Person | null }>;
   _count: { enrollments: number };
+}
+interface ElectiveCategory {
+  id: string;
+  name: string;
+  description: string | null;
+  classId: string | null;
+  maxSelect: number;
+  academicClass: { id: string; name: string } | null;
+  _count: { subjects: number };
 }
 interface Setup {
   currentSession: Item | null;
@@ -32,10 +49,21 @@ interface Setup {
   teachers: Person[];
   classSections: ClassSection[];
   teacherRoleId: string | null;
+  electiveCategories: ElectiveCategory[];
 }
 
 type MasterType = "classes" | "sections" | "subjects";
-type MainTab = "masters" | "sections" | "subjects";
+type MainTab = "masters" | "sections" | "subjects" | "electives" | "promote";
+
+type ElectiveBoard = {
+  classSection: { id: string; academicClass: Item; section: Item };
+  electiveSubjects: Item[];
+  students: Array<{
+    enrollmentId: string;
+    student: { id: string; firstName: string; lastName: string | null; admissionNumber: string };
+    selectedSubjectIds: string[];
+  }>;
+};
 
 const defaultSession = {
   name: "2026-2027",
@@ -69,6 +97,16 @@ function tabClass(active: boolean) {
     : "pb-3 text-[14px] font-medium text-slate-500 hover:text-slate-700";
 }
 
+type PromoteResult = "PASS" | "FAIL";
+type PromoteAction = "CONTINUE" | "LEAVE";
+
+type PromoteRow = {
+  studentEnrollmentId: string;
+  studentName: string;
+  result: PromoteResult;
+  action: PromoteAction;
+};
+
 export function AcademicsPage() {
   const { accessToken } = useAuth();
   const [setup, setSetup] = useState<Setup | null>(null);
@@ -76,7 +114,7 @@ export function AcademicsPage() {
   const [saving, setSaving] = useState("");
   const [mainTab, setMainTab] = useState<MainTab>("masters");
   const [masterType, setMasterType] = useState<MasterType>("classes");
-  const [master, setMaster] = useState({ name: "", code: "" });
+  const [master, setMaster] = useState({ name: "", code: "", type: "CORE" as "CORE" | "ELECTIVE", electiveCategoryId: "" });
   const [group, setGroup] = useState({ classId: "", sectionId: "", classTeacherId: "" });
   const [assignment, setAssignment] = useState({ classSectionId: "", subjectId: "", teacherId: "" });
   const [sessionForm, setSessionForm] = useState(defaultSession);
@@ -89,6 +127,31 @@ export function AcademicsPage() {
     email: "",
     password: "ChangeMe123!",
   });
+
+  // Promote students workflow (pass/fail + continue/leave).
+  const [promoteFromClassSectionId, setPromoteFromClassSectionId] = useState("");
+  const [promoteSessionId, setPromoteSessionId] = useState("");
+  const [promotePassClassId, setPromotePassClassId] = useState("");
+  const [promotePassSectionId, setPromotePassSectionId] = useState("");
+  const [promoteRows, setPromoteRows] = useState<PromoteRow[]>([]);
+  const [promoteLoading, setPromoteLoading] = useState(false);
+
+  // Electives workflow
+  const [electiveCategoryForm, setElectiveCategoryForm] = useState({
+    name: "",
+    description: "",
+    classId: "",
+    maxSelect: 1,
+  });
+  const [electiveSubjectForm, setElectiveSubjectForm] = useState({
+    name: "",
+    code: "",
+    electiveCategoryId: "",
+  });
+  const [electiveClassSectionId, setElectiveClassSectionId] = useState("");
+  const [electiveBoard, setElectiveBoard] = useState<ElectiveBoard | null>(null);
+  const [electiveSelections, setElectiveSelections] = useState<Record<string, string[]>>({});
+  const [electiveLoading, setElectiveLoading] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -108,6 +171,224 @@ export function AcademicsPage() {
     }
   }
   useEffect(() => { void load(); }, [accessToken]);
+
+  async function loadPromoteStudents() {
+    if (!setup) return;
+    if (!promoteFromClassSectionId) {
+      notifyError("Select the source class section first.");
+      return;
+    }
+    setPromoteLoading(true);
+    try {
+      const limit = 100;
+      const allItems: StudentListItem[] = [];
+      let page = 1;
+      for (;;) {
+        const data = await apiRequest<{ items: StudentListItem[]; total: number; page: number; limit: number }>(
+          `/students?status=ACTIVE&classSectionId=${encodeURIComponent(promoteFromClassSectionId)}&page=${page}&limit=${limit}`,
+          accessToken,
+        );
+        allItems.push(...(data.items ?? []));
+        if (!data.items?.length || data.items.length < limit || allItems.length >= (data.total ?? 0)) {
+          break;
+        }
+        page += 1;
+      }
+
+      const sessionId = setup.currentSession?.id ?? "";
+      const rows: PromoteRow[] = allItems
+        .map((student) => {
+          const enrollment = student.enrollments.find(
+            (e) => e.classSection.id === promoteFromClassSectionId && (!sessionId || e.academicSession.id === sessionId),
+          );
+          if (!enrollment) return null;
+          return {
+            studentEnrollmentId: enrollment.id,
+            studentName: `${student.firstName} ${student.lastName ?? ""}`.trim(),
+            result: "PASS",
+            action: "CONTINUE",
+          } satisfies PromoteRow;
+        })
+        .filter(Boolean) as PromoteRow[];
+
+      setPromoteRows(rows);
+      notifySuccess(`Found ${rows.length} students to promote.`);
+    } catch (cause) {
+      notifyError(cause instanceof Error ? cause.message : "Unable to load students for promotion");
+    } finally {
+      setPromoteLoading(false);
+    }
+  }
+
+  async function submitPromote() {
+    if (!setup) return;
+    if (!promoteFromClassSectionId) {
+      notifyError("Select source class section.");
+      return;
+    }
+    if (!promoteSessionId) {
+      notifyError("Select promote in session.");
+      return;
+    }
+    if (!promotePassClassId || !promotePassSectionId) {
+      notifyError("Select target class and section for pass/continue students.");
+      return;
+    }
+    if (!promoteRows.length) {
+      notifyError("Nothing to promote. Load students first.");
+      return;
+    }
+    setSaving("promote");
+    try {
+      await apiRequest("/academics/promote", accessToken, {
+        method: "POST",
+        body: JSON.stringify({
+          fromClassSectionId: promoteFromClassSectionId,
+          promoteSessionId,
+          passContinueClassId: promotePassClassId,
+          passContinueSectionId: promotePassSectionId,
+          items: promoteRows.map((row) => ({
+            studentEnrollmentId: row.studentEnrollmentId,
+            result: row.result,
+            action: row.action,
+          })),
+        }),
+      });
+      notifySuccess("Students promoted successfully.");
+      // Refresh academic setup + reset workflow.
+      await load();
+      setPromoteRows([]);
+    } catch (cause) {
+      notifyError(cause instanceof Error ? cause.message : "Unable to promote students");
+    } finally {
+      setSaving("");
+    }
+  }
+
+  async function addElectiveCategory(event: FormEvent) {
+    event.preventDefault();
+    setSaving("elective-category");
+    try {
+      await apiRequest("/academics/elective-categories", accessToken, {
+        method: "POST",
+        body: JSON.stringify({
+          name: electiveCategoryForm.name.trim(),
+          description: electiveCategoryForm.description.trim() || null,
+          classId: electiveCategoryForm.classId || null,
+          maxSelect: Number(electiveCategoryForm.maxSelect) || 1,
+        }),
+      });
+      setElectiveCategoryForm({ name: "", description: "", classId: "", maxSelect: 1 });
+      notifySuccess("Elective category created.");
+      await load();
+    } catch (cause) {
+      notifyError(cause instanceof Error ? cause.message : "Unable to create elective category");
+    } finally {
+      setSaving("");
+    }
+  }
+
+  async function deleteElectiveCategory(id: string) {
+    const ok = await confirmDelete({
+      title: "Delete elective category?",
+      text: "Subjects linked to this category will keep their type but lose the category link.",
+      confirmText: "Delete",
+    });
+    if (!ok) return;
+    setSaving(`elective-category-delete-${id}`);
+    try {
+      await apiRequest(`/academics/elective-categories/${id}`, accessToken, { method: "DELETE" });
+      notifySuccess("Elective category deleted.");
+      await load();
+    } catch (cause) {
+      notifyError(cause instanceof Error ? cause.message : "Unable to delete elective category");
+    } finally {
+      setSaving("");
+    }
+  }
+
+  async function addElectiveSubject(event: FormEvent) {
+    event.preventDefault();
+    setSaving("elective-subject");
+    try {
+      await apiRequest("/academics/subjects", accessToken, {
+        method: "POST",
+        body: JSON.stringify({
+          name: electiveSubjectForm.name.trim(),
+          code: electiveSubjectForm.code.trim() || null,
+          type: "ELECTIVE",
+          electiveCategoryId: electiveSubjectForm.electiveCategoryId || null,
+        }),
+      });
+      setElectiveSubjectForm({ name: "", code: "", electiveCategoryId: "" });
+      notifySuccess("Elective subject created.");
+      await load();
+    } catch (cause) {
+      notifyError(cause instanceof Error ? cause.message : "Unable to create elective subject");
+    } finally {
+      setSaving("");
+    }
+  }
+
+  async function loadElectiveBoard() {
+    if (!electiveClassSectionId) {
+      notifyError("Select a class section first.");
+      return;
+    }
+    setElectiveLoading(true);
+    try {
+      const data = await apiRequest<ElectiveBoard>(
+        `/academics/electives/board?classSectionId=${encodeURIComponent(electiveClassSectionId)}`,
+        accessToken,
+      );
+      setElectiveBoard(data);
+      const next: Record<string, string[]> = {};
+      for (const row of data.students) next[row.enrollmentId] = [...row.selectedSubjectIds];
+      setElectiveSelections(next);
+      notifySuccess(`Loaded ${data.students.length} students for elective assignment.`);
+    } catch (cause) {
+      notifyError(cause instanceof Error ? cause.message : "Unable to load elective board");
+    } finally {
+      setElectiveLoading(false);
+    }
+  }
+
+  function toggleElectiveSelection(enrollmentId: string, subjectId: string) {
+    setElectiveSelections((prev) => {
+      const current = prev[enrollmentId] ?? [];
+      const exists = current.includes(subjectId);
+      return {
+        ...prev,
+        [enrollmentId]: exists ? current.filter((id) => id !== subjectId) : [...current, subjectId],
+      };
+    });
+  }
+
+  async function saveElectiveAssignments() {
+    if (!electiveClassSectionId || !electiveBoard) {
+      notifyError("Load elective board first.");
+      return;
+    }
+    setSaving("elective-assign");
+    try {
+      await apiRequest("/academics/electives/assignments", accessToken, {
+        method: "PUT",
+        body: JSON.stringify({
+          classSectionId: electiveClassSectionId,
+          items: electiveBoard.students.map((row) => ({
+            studentEnrollmentId: row.enrollmentId,
+            subjectIds: electiveSelections[row.enrollmentId] ?? [],
+          })),
+        }),
+      });
+      notifySuccess("Elective subjects saved for students.");
+      await loadElectiveBoard();
+    } catch (cause) {
+      notifyError(cause instanceof Error ? cause.message : "Unable to save elective assignments");
+    } finally {
+      setSaving("");
+    }
+  }
 
   const teachers = setup?.teachers ?? [];
   const hasSession = Boolean(setup?.currentSession);
@@ -172,9 +453,16 @@ export function AcademicsPage() {
         body: JSON.stringify({
           name: master.name,
           ...(masterType !== "sections" ? { code: master.code || null } : {}),
+          ...(masterType === "subjects"
+            ? {
+                type: master.type,
+                electiveCategoryId:
+                  master.type === "ELECTIVE" ? master.electiveCategoryId || null : null,
+              }
+            : {}),
         }),
       });
-      setMaster({ name: "", code: "" });
+      setMaster({ name: "", code: "", type: "CORE", electiveCategoryId: "" });
       notifySuccess(`${MASTER_HELP[masterType].title} "${master.name.trim()}" added.`);
       await load();
     } catch (cause) {
@@ -542,6 +830,20 @@ export function AcademicsPage() {
           <button type="button" className={tabClass(mainTab === "subjects")} onClick={() => setMainTab("subjects")}>
             Subject assignment
           </button>
+          <button
+            type="button"
+            className={tabClass(mainTab === "electives")}
+            onClick={() => setMainTab("electives")}
+          >
+            Electives
+          </button>
+          <button
+            type="button"
+            className={tabClass(mainTab === "promote")}
+            onClick={() => setMainTab("promote")}
+          >
+            Promote students
+          </button>
         </div>
 
         {mainTab === "masters" ? (
@@ -562,7 +864,7 @@ export function AcademicsPage() {
                     }`}
                     onClick={() => {
                       setMasterType(type);
-                      setMaster({ name: "", code: "" });
+                      setMaster({ name: "", code: "", type: "CORE", electiveCategoryId: "" });
                     }}
                   >
                     {MASTER_HELP[type].title}
@@ -591,6 +893,42 @@ export function AcademicsPage() {
                   />
                 </label>
               ) : null}
+              {masterType === "subjects" ? (
+                <>
+                  <label className="mt-3 block">
+                    <span className="nx-label">Subject type</span>
+                    <select
+                      className="nx-input"
+                      value={master.type}
+                      onChange={(e) =>
+                        setMaster({
+                          ...master,
+                          type: e.target.value as "CORE" | "ELECTIVE",
+                          electiveCategoryId: e.target.value === "CORE" ? "" : master.electiveCategoryId,
+                        })
+                      }
+                    >
+                      <option value="CORE">Core</option>
+                      <option value="ELECTIVE">Elective</option>
+                    </select>
+                  </label>
+                  {master.type === "ELECTIVE" ? (
+                    <label className="mt-3 block">
+                      <span className="nx-label">Elective category (optional)</span>
+                      <select
+                        className="nx-input"
+                        value={master.electiveCategoryId}
+                        onChange={(e) => setMaster({ ...master, electiveCategoryId: e.target.value })}
+                      >
+                        <option value="">No category</option>
+                        {(setup?.electiveCategories ?? []).map((item) => (
+                          <option key={item.id} value={item.id}>{item.name}</option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
+                </>
+              ) : null}
               <button className="nx-btn-primary mt-4 w-full" type="submit" disabled={saving === "master"}>
                 {saving === "master" ? "Adding…" : `Add ${masterHelp.title.toLowerCase()}`}
               </button>
@@ -602,6 +940,7 @@ export function AcademicsPage() {
                   <tr>
                     <th>{masterHelp.title}</th>
                     {masterType !== "sections" ? <th>Code</th> : null}
+                    {masterType === "subjects" ? <th>Type</th> : null}
                     <th className="text-right">Actions</th>
                   </tr>
                 </thead>
@@ -611,6 +950,13 @@ export function AcademicsPage() {
                       <td className="font-semibold text-slate-900">{item.name}</td>
                       {masterType !== "sections" ? (
                         <td className="text-slate-500">{item.code || "—"}</td>
+                      ) : null}
+                      {masterType === "subjects" ? (
+                        <td>
+                          <span className={`nx-pill ${item.type === "ELECTIVE" ? "nx-pill-indigo" : "nx-pill-neutral"}`}>
+                            {item.type === "ELECTIVE" ? "Elective" : "Core"}
+                          </span>
+                        </td>
                       ) : null}
                       <td>
                         <div className="flex justify-end gap-1">
@@ -638,7 +984,10 @@ export function AcademicsPage() {
                   ))}
                   {!masterItems.length ? (
                     <tr>
-                      <td colSpan={masterType === "sections" ? 2 : 3} className="px-5 py-10 text-center text-slate-500">
+                      <td
+                        colSpan={masterType === "sections" ? 2 : masterType === "subjects" ? 4 : 3}
+                        className="px-5 py-10 text-center text-slate-500"
+                      >
                         No {masterHelp.title.toLowerCase()}s yet. Add one on the left.
                       </td>
                     </tr>
@@ -931,6 +1280,402 @@ export function AcademicsPage() {
             </div>
           </div>
         ) : null}
+
+        {mainTab === "electives" ? (
+          <div className="p-5 space-y-5">
+            <div className="grid gap-5 lg:grid-cols-2">
+              <form className="rounded-xl border border-slate-200 bg-white p-4" onSubmit={addElectiveCategory}>
+                <h3 className="text-[15px] font-bold text-slate-900">Elective category</h3>
+                <p className="mt-1 text-[13px] text-slate-500">
+                  Example: Optional Group 1 / Optional Group 2 for Class 11 Science.
+                </p>
+                <label className="mt-4 block">
+                  <span className="nx-label">Category name</span>
+                  <input
+                    className="nx-input"
+                    required
+                    value={electiveCategoryForm.name}
+                    onChange={(e) => setElectiveCategoryForm({ ...electiveCategoryForm, name: e.target.value })}
+                    placeholder="Optional Group 1"
+                  />
+                </label>
+                <label className="mt-3 block">
+                  <span className="nx-label">Class (optional)</span>
+                  <select
+                    className="nx-input"
+                    value={electiveCategoryForm.classId}
+                    onChange={(e) => setElectiveCategoryForm({ ...electiveCategoryForm, classId: e.target.value })}
+                  >
+                    <option value="">All classes</option>
+                    {(setup?.classes ?? []).map((item) => (
+                      <option key={item.id} value={item.id}>{item.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="mt-3 block">
+                  <span className="nx-label">Max subjects a student can pick</span>
+                  <input
+                    className="nx-input"
+                    type="number"
+                    min={1}
+                    max={10}
+                    value={electiveCategoryForm.maxSelect}
+                    onChange={(e) =>
+                      setElectiveCategoryForm({
+                        ...electiveCategoryForm,
+                        maxSelect: Number(e.target.value) || 1,
+                      })
+                    }
+                  />
+                </label>
+                <label className="mt-3 block">
+                  <span className="nx-label">Description</span>
+                  <textarea
+                    className="nx-input min-h-20"
+                    value={electiveCategoryForm.description}
+                    onChange={(e) =>
+                      setElectiveCategoryForm({ ...electiveCategoryForm, description: e.target.value })
+                    }
+                  />
+                </label>
+                <button className="nx-btn-primary mt-4" type="submit" disabled={saving === "elective-category"}>
+                  {saving === "elective-category" ? "Saving…" : "Add category"}
+                </button>
+              </form>
+
+              <form className="rounded-xl border border-slate-200 bg-white p-4" onSubmit={addElectiveSubject}>
+                <h3 className="text-[15px] font-bold text-slate-900">Add elective subject</h3>
+                <p className="mt-1 text-[13px] text-slate-500">
+                  Creates a subject with type Elective. Assign it to a class section from Subject assignment tab.
+                </p>
+                <label className="mt-4 block">
+                  <span className="nx-label">Subject name</span>
+                  <input
+                    className="nx-input"
+                    required
+                    value={electiveSubjectForm.name}
+                    onChange={(e) => setElectiveSubjectForm({ ...electiveSubjectForm, name: e.target.value })}
+                    placeholder="Computer Science"
+                  />
+                </label>
+                <label className="mt-3 block">
+                  <span className="nx-label">Code (optional)</span>
+                  <input
+                    className="nx-input"
+                    value={electiveSubjectForm.code}
+                    onChange={(e) => setElectiveSubjectForm({ ...electiveSubjectForm, code: e.target.value })}
+                    placeholder="CS"
+                  />
+                </label>
+                <label className="mt-3 block">
+                  <span className="nx-label">Category</span>
+                  <select
+                    className="nx-input"
+                    value={electiveSubjectForm.electiveCategoryId}
+                    onChange={(e) =>
+                      setElectiveSubjectForm({ ...electiveSubjectForm, electiveCategoryId: e.target.value })
+                    }
+                  >
+                    <option value="">No category</option>
+                    {(setup?.electiveCategories ?? []).map((item) => (
+                      <option key={item.id} value={item.id}>{item.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <button className="nx-btn-primary mt-4" type="submit" disabled={saving === "elective-subject"}>
+                  {saving === "elective-subject" ? "Saving…" : "Add elective subject"}
+                </button>
+              </form>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+              <div className="border-b border-slate-100 px-4 py-3">
+                <h3 className="text-[15px] font-bold text-slate-900">Categories</h3>
+              </div>
+              <div className="divide-y divide-slate-100">
+                {(setup?.electiveCategories ?? []).map((item) => (
+                  <div key={item.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                    <div>
+                      <p className="font-semibold text-slate-900">{item.name}</p>
+                      <p className="text-[13px] text-slate-500">
+                        Max {item.maxSelect} · {item.academicClass?.name ?? "All classes"} · {item._count.subjects} subjects
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className="rounded-md p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                      disabled={saving.startsWith("elective-category-delete")}
+                      onClick={() => void deleteElectiveCategory(item.id)}
+                    >
+                      <DeleteOutline sx={{ fontSize: 18 }} />
+                    </button>
+                  </div>
+                ))}
+                {!setup?.electiveCategories?.length ? (
+                  <p className="px-4 py-8 text-center text-sm text-slate-500">No elective categories yet.</p>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <h3 className="text-[15px] font-bold text-slate-900">Assign electives to students</h3>
+              <p className="mt-1 text-[13px] text-slate-500">
+                First assign elective subjects to the class section (Subject assignment tab), then select which
+                electives each student opted for.
+              </p>
+              <div className="mt-4 flex flex-wrap items-end gap-3">
+                <label className="min-w-[240px] flex-1">
+                  <span className="nx-label">Class section</span>
+                  <select
+                    className="nx-input"
+                    value={electiveClassSectionId}
+                    onChange={(e) => {
+                      setElectiveClassSectionId(e.target.value);
+                      setElectiveBoard(null);
+                    }}
+                  >
+                    <option value="">Select class section</option>
+                    {(setup?.classSections ?? []).map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.academicClass.name} · {item.section.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  className="nx-btn-secondary"
+                  disabled={electiveLoading || !electiveClassSectionId}
+                  onClick={() => void loadElectiveBoard()}
+                >
+                  {electiveLoading ? "Loading…" : "Load students"}
+                </button>
+              </div>
+
+              {electiveBoard ? (
+                <div className="mt-5 overflow-x-auto rounded-xl border border-slate-200">
+                  {!electiveBoard.electiveSubjects.length ? (
+                    <p className="px-4 py-8 text-center text-sm text-amber-700 bg-amber-50">
+                      No elective subjects are assigned to this class section yet. Create elective subjects, then
+                      assign them under Subject assignment.
+                    </p>
+                  ) : (
+                    <>
+                      <table className="nx-table min-w-[760px]">
+                        <thead>
+                          <tr>
+                            <th>Student</th>
+                            {electiveBoard.electiveSubjects.map((subject) => (
+                              <th key={subject.id} className="text-center">
+                                <div>{subject.name}</div>
+                                <div className="text-[11px] font-medium normal-case text-slate-400">
+                                  {subject.electiveCategory?.name ?? "Uncategorized"}
+                                </div>
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {electiveBoard.students.map((row) => (
+                            <tr key={row.enrollmentId}>
+                              <td className="font-semibold text-slate-900">
+                                {row.student.firstName} {row.student.lastName ?? ""}
+                                <div className="text-[12px] font-normal text-slate-400">
+                                  {row.student.admissionNumber}
+                                </div>
+                              </td>
+                              {electiveBoard.electiveSubjects.map((subject) => {
+                                const checked = (electiveSelections[row.enrollmentId] ?? []).includes(subject.id);
+                                return (
+                                  <td key={subject.id} className="text-center">
+                                    <input
+                                      type="checkbox"
+                                      checked={checked}
+                                      onChange={() => toggleElectiveSelection(row.enrollmentId, subject.id)}
+                                    />
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+                          {!electiveBoard.students.length ? (
+                            <tr>
+                              <td
+                                colSpan={Math.max(1, electiveBoard.electiveSubjects.length + 1)}
+                                className="px-5 py-10 text-center text-slate-500"
+                              >
+                                No active students in this class section.
+                              </td>
+                            </tr>
+                          ) : null}
+                        </tbody>
+                      </table>
+                      <div className="flex justify-end border-t border-slate-100 p-4">
+                        <button
+                          type="button"
+                          className="nx-btn-primary"
+                          disabled={saving === "elective-assign" || !electiveBoard.students.length}
+                          onClick={() => void saveElectiveAssignments()}
+                        >
+                          {saving === "elective-assign" ? "Saving…" : "Save elective choices"}
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+
+        {mainTab === "promote" ? (
+          <div className="p-5">
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <h3 className="text-[16px] font-bold text-slate-900">Promote students</h3>
+              <p className="mt-1 text-sm text-slate-500">
+                Select the current class section, mark Pass/Fail and Continue/Leave, then promote to the next session.
+              </p>
+
+              <div className="mt-4 grid gap-3 md:grid-cols-4 md:items-end">
+                <label>
+                  <span className="nx-label">Source class section</span>
+                  <select
+                    className="nx-input"
+                    value={promoteFromClassSectionId}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setPromoteFromClassSectionId(v);
+                      setPromoteRows([]);
+                    }}
+                  >
+                    <option value="">Select source</option>
+                    {(setup?.classSections ?? []).map((cs) => (
+                      <option key={cs.id} value={cs.id}>
+                        {cs.academicClass.name} · {cs.section.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label>
+                  <span className="nx-label">Promote in session</span>
+                  <select
+                    className="nx-input"
+                    value={promoteSessionId}
+                    onChange={(e) => {
+                      setPromoteSessionId(e.target.value);
+                      setPromoteRows([]);
+                    }}
+                  >
+                    <option value="">Select session</option>
+                    {(setup?.sessions ?? []).map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label>
+                  <span className="nx-label">Target class (Pass + Continue)</span>
+                  <select className="nx-input" value={promotePassClassId} onChange={(e) => setPromotePassClassId(e.target.value)}>
+                    <option value="">Select class</option>
+                    {(setup?.classes ?? []).map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label>
+                  <span className="nx-label">Target section (Pass + Continue)</span>
+                  <select className="nx-input" value={promotePassSectionId} onChange={(e) => setPromotePassSectionId(e.target.value)}>
+                    <option value="">Select section</option>
+                    {(setup?.sections ?? []).map((s) => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  className="nx-btn-secondary"
+                  disabled={promoteLoading || saving === "promote"}
+                  onClick={() => void loadPromoteStudents()}
+                >
+                  {promoteLoading ? "Loading…" : "Search students"}
+                </button>
+                <span className="nx-pill nx-pill-neutral">
+                  {promoteRows.length ? `${promoteRows.length} students loaded` : "Mark results per student"}
+                </span>
+              </div>
+
+              {!promoteRows.length ? null : (
+                <div className="mt-5 overflow-hidden rounded-xl border border-slate-200">
+                  <table className="nx-table min-w-[820px]">
+                    <thead>
+                      <tr>
+                        <th>Student</th>
+                        <th className="w-[160px]">Result</th>
+                        <th className="w-[180px]">Next session status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {promoteRows.map((row) => (
+                        <tr key={row.studentEnrollmentId}>
+                          <td className="font-semibold text-slate-900">{row.studentName}</td>
+                          <td>
+                            <select
+                              className="nx-input !py-1.5"
+                              value={row.result}
+                              onChange={(e) => {
+                                const v = e.target.value as PromoteResult;
+                                setPromoteRows((prev) =>
+                                  prev.map((p) => (p.studentEnrollmentId === row.studentEnrollmentId ? { ...p, result: v } : p)),
+                                );
+                              }}
+                            >
+                              <option value="PASS">Pass</option>
+                              <option value="FAIL">Fail</option>
+                            </select>
+                          </td>
+                          <td>
+                            <select
+                              className="nx-input !py-1.5"
+                              value={row.action}
+                              onChange={(e) => {
+                                const v = e.target.value as PromoteAction;
+                                setPromoteRows((prev) =>
+                                  prev.map((p) => (p.studentEnrollmentId === row.studentEnrollmentId ? { ...p, action: v } : p)),
+                                );
+                              }}
+                            >
+                              <option value="CONTINUE">Continue</option>
+                              <option value="LEAVE">Leave (Alumni)</option>
+                            </select>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+
+                  <div className="mt-4 flex justify-end">
+                    <button
+                      className="nx-btn-primary"
+                      type="button"
+                      disabled={saving === "promote"}
+                      onClick={() => void submitPromote()}
+                    >
+                      {saving === "promote" ? "Promoting…" : "Save promotion"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : null}
+
       </section>
 
       {teacherModalOpen ? (
