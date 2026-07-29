@@ -180,8 +180,8 @@ export function ReceiptsPanel({
                     <span
                       className={
                         payment.status === "COLLECTED"
-                          ? "rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-bold text-blue-700"
-                          : "rounded-full bg-rose-50 px-2.5 py-1 text-[11px] font-bold text-rose-700"
+                          ? "nx-pill nx-pill-indigo"
+                          : "nx-pill nx-pill-danger"
                       }
                     >
                       {payment.status === "COLLECTED" ? "Active" : "Cancelled"}

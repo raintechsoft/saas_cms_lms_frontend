@@ -1,13 +1,19 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { CloseOutlined, DeleteOutline, EditOutlined } from "@mui/icons-material";
+import {
+  CloseOutlined,
+  DeleteOutline,
+  EditOutlined,
+  InfoOutlined,
+  SearchOutlined,
+} from "@mui/icons-material";
 import { ListPagination, paginateItems } from "../../../components/ListPagination";
 import { apiRequest } from "../../../lib/api";
 import { notifySuccess } from "../../../lib/notify";
 import { confirmDelete } from "../../../lib/confirm";
-import type { FeeDiscount, FeeSetup } from "./types";
-import { formatMoney } from "./utils";
+import type { FeeDiscount, FeeSetup, Student, StudentFees } from "./types";
+import { formatMoney, studentDisplayName } from "./utils";
 
-const PAGE_SIZE = 8;
+const PAGE_SIZE = 5;
 
 const DISCOUNT_CATEGORIES = [
   "RTE",
@@ -23,13 +29,19 @@ export function DiscountsPanel({
   token,
   onSaved,
   onError,
+  openCreateSignal = 0,
+  openAssignSignal = 0,
 }: {
   setup: FeeSetup;
   token: string;
   onSaved: () => Promise<void>;
   onError: (message: string) => void;
+  openCreateSignal?: number;
+  openAssignSignal?: number;
 }) {
   const [showForm, setShowForm] = useState(false);
+  const [showAssign, setShowAssign] = useState(false);
+  const [assignDiscountId, setAssignDiscountId] = useState("");
   const [editing, setEditing] = useState<FeeDiscount | null>(null);
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
@@ -40,13 +52,66 @@ export function DiscountsPanel({
   const [saving, setSaving] = useState(false);
   const [page, setPage] = useState(1);
 
+  const [className, setClassName] = useState("");
+  const [sectionName, setSectionName] = useState("");
+  const [studentSearch, setStudentSearch] = useState("");
+  const [selectedStudentIds, setSelectedStudentIds] = useState<Record<string, boolean>>({});
+  const [assigning, setAssigning] = useState(false);
+
   const rows = useMemo(() => setup.discounts, [setup.discounts]);
   const pageRows = useMemo(() => paginateItems(rows, page, PAGE_SIZE), [rows, page]);
+
+  const classOptions = useMemo(
+    () => [...new Set(setup.classSections.map((cs) => cs.academicClass.name))].sort(),
+    [setup.classSections],
+  );
+  const sectionOptions = useMemo(() => {
+    const sections = setup.classSections
+      .filter((cs) => !className || cs.academicClass.name === className)
+      .map((cs) => cs.section.name);
+    return [...new Set(sections)].sort();
+  }, [setup.classSections, className]);
+
+  const assignStudents = useMemo(() => {
+    const list: Array<Student & { roll: string; rte: boolean }> = [];
+    const seen = new Set<string>();
+    setup.classSections.forEach((cs) => {
+      if (className && cs.academicClass.name !== className) return;
+      if (sectionName && cs.section.name !== sectionName) return;
+      cs.enrollments.forEach(({ student }) => {
+        if (seen.has(student.id)) return;
+        seen.add(student.id);
+        list.push({
+          ...student,
+          roll: student.admissionNumber,
+          rte: Boolean(student.rteEnabled),
+        });
+      });
+    });
+    const q = studentSearch.trim().toLowerCase();
+    if (!q) return list;
+    return list.filter(
+      (s) =>
+        studentDisplayName(s).toLowerCase().includes(q) ||
+        s.admissionNumber.toLowerCase().includes(q),
+    );
+  }, [setup.classSections, className, sectionName, studentSearch]);
 
   useEffect(() => {
     const maxPage = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
     if (page > maxPage) setPage(maxPage);
   }, [rows.length, page]);
+
+  useEffect(() => {
+    if (!openCreateSignal) return;
+    reset();
+    setShowForm(true);
+  }, [openCreateSignal]);
+
+  useEffect(() => {
+    if (!openAssignSignal) return;
+    openAssign();
+  }, [openAssignSignal]);
 
   function reset() {
     setEditing(null);
@@ -57,6 +122,15 @@ export function DiscountsPanel({
     setValue("");
     setDescription("");
     setShowForm(false);
+  }
+
+  function openAssign(discount?: FeeDiscount) {
+    setAssignDiscountId(discount?.id ?? setup.discounts.find((d) => d.isActive !== false)?.id ?? "");
+    setClassName(classOptions[0] ?? "");
+    setSectionName("");
+    setStudentSearch("");
+    setSelectedStudentIds({});
+    setShowAssign(true);
   }
 
   function startEdit(item: FeeDiscount) {
@@ -121,21 +195,66 @@ export function DiscountsPanel({
     }
   }
 
+  async function applyAssign() {
+    if (!assignDiscountId) {
+      onError("Select a discount to assign");
+      return;
+    }
+    const ids = Object.entries(selectedStudentIds)
+      .filter(([, on]) => on)
+      .map(([id]) => id);
+    if (!ids.length) {
+      onError("Select at least one student");
+      return;
+    }
+    setAssigning(true);
+    try {
+      let applied = 0;
+      for (const studentId of ids) {
+        const fees = await apiRequest<StudentFees>(`/fees/students/${studentId}`, token);
+        const targets = fees.assignments.filter((a) => a.totals.balance > 0);
+        const list = targets.length ? targets : fees.assignments;
+        for (const assignment of list) {
+          await apiRequest(`/fees/assignments/${assignment.id}/discount`, token, {
+            method: "PUT",
+            body: JSON.stringify({ discountId: assignDiscountId }),
+          });
+          applied += 1;
+        }
+      }
+      notifySuccess(
+        applied
+          ? `Discount applied to ${applied} fee assignment(s)`
+          : "No fee assignments found for selected students",
+      );
+      setShowAssign(false);
+      await onSaved();
+    } catch (cause) {
+      onError(cause instanceof Error ? cause.message : "Unable to assign discount");
+    } finally {
+      setAssigning(false);
+    }
+  }
+
   function categoryPill(categoryValue?: string | null) {
     const valueText = (categoryValue || "OTHER").toUpperCase();
     if (valueText === "RTE") return "nx-pill nx-pill-indigo";
-    if (valueText === "SCHOLARSHIP") return "nx-pill nx-pill-warning";
+    if (valueText === "SCHOLARSHIP" || valueText === "MERIT") return "nx-pill nx-pill-warning";
     if (valueText === "SIBLING") return "nx-pill nx-pill-neutral";
     if (valueText.includes("STAFF")) return "nx-pill nx-pill-success";
     return "nx-pill nx-pill-neutral";
   }
+
+  const pageStudentIds = assignStudents.map((s) => s.id);
+  const allStudentsChecked =
+    pageStudentIds.length > 0 && pageStudentIds.every((id) => selectedStudentIds[id]);
 
   return (
     <section className="mt-5 space-y-4">
       {showForm ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
           <form
-            className="flex w-full max-w-2xl max-h-[min(92vh,720px)] flex-col overflow-hidden rounded-xl bg-white shadow-xl"
+            className="flex w-full max-w-xl max-h-[min(92vh,720px)] flex-col overflow-hidden rounded-xl bg-white shadow-xl"
             onSubmit={(e) => void submit(e)}
           >
             <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-5 py-3">
@@ -164,7 +283,6 @@ export function DiscountsPanel({
                   autoFocus
                 />
               </div>
-
               <div>
                 <label className="nx-label">Discount Code</label>
                 <input
@@ -174,7 +292,6 @@ export function DiscountsPanel({
                   onChange={(e) => setCode(e.target.value)}
                 />
               </div>
-
               <div>
                 <label className="nx-label">Type</label>
                 <select
@@ -191,9 +308,8 @@ export function DiscountsPanel({
                   ))}
                 </select>
               </div>
-
               <div>
-                <label className="nx-label">Amount</label>
+                <label className="nx-label">Amount ₹</label>
                 <div className="relative">
                   <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[14px] font-semibold text-slate-500">
                     {amountType === "PERCENTAGE" ? "%" : "₹"}
@@ -210,7 +326,6 @@ export function DiscountsPanel({
                   />
                 </div>
               </div>
-
               <div className="sm:col-span-2">
                 <label className="nx-label">Amount Type</label>
                 <div className="mt-1.5 flex flex-wrap gap-6">
@@ -236,7 +351,6 @@ export function DiscountsPanel({
                   </label>
                 </div>
               </div>
-
               <div className="sm:col-span-2">
                 <label className="nx-label">Description (Optional)</label>
                 <textarea
@@ -258,23 +372,187 @@ export function DiscountsPanel({
         </div>
       ) : null}
 
-      <div className="nx-card overflow-hidden">
-        <div className="border-b border-slate-100 px-5 py-4">
-          <div className="flex items-center justify-between gap-3">
-            <h3 className="text-[28px] font-bold text-slate-900">Active Discounts</h3>
-            <button type="button" className="nx-btn-primary" onClick={() => setShowForm(true)}>
-              + Add discount
-            </button>
+      {showAssign ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+          <div className="flex w-full max-w-3xl max-h-[min(92vh,820px)] flex-col overflow-hidden rounded-xl bg-white shadow-xl">
+            <div className="flex shrink-0 items-start justify-between border-b border-slate-100 px-5 py-4">
+              <div>
+                <h3 className="text-[18px] font-bold text-slate-900">Assign Discount</h3>
+                <p className="mt-1 text-[13px] text-slate-500">
+                  Bulk assign selected discounts to students across classes.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="grid size-8 place-items-center rounded-md text-slate-400 hover:bg-slate-100"
+                onClick={() => setShowAssign(false)}
+                aria-label="Close"
+              >
+                <CloseOutlined sx={{ fontSize: 18 }} />
+              </button>
+            </div>
+
+            <div className="space-y-3 border-b border-slate-100 px-5 py-4">
+              <div className="grid gap-3 sm:grid-cols-3">
+                <label>
+                  <span className="nx-label">Discount</span>
+                  <select
+                    className="nx-input"
+                    value={assignDiscountId}
+                    onChange={(e) => setAssignDiscountId(e.target.value)}
+                  >
+                    <option value="">Select discount</option>
+                    {setup.discounts
+                      .filter((d) => d.isActive !== false)
+                      .map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+                <label>
+                  <span className="nx-label">Class</span>
+                  <select
+                    className="nx-input"
+                    value={className}
+                    onChange={(e) => {
+                      setClassName(e.target.value);
+                      setSectionName("");
+                    }}
+                  >
+                    <option value="">All Classes</option>
+                    {classOptions.map((nameOption) => (
+                      <option key={nameOption} value={nameOption}>
+                        {nameOption}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span className="nx-label">Section</span>
+                  <select
+                    className="nx-input"
+                    value={sectionName}
+                    onChange={(e) => setSectionName(e.target.value)}
+                  >
+                    <option value="">All Sections</option>
+                    {sectionOptions.map((nameOption) => (
+                      <option key={nameOption} value={nameOption}>
+                        {nameOption}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div className="relative">
+                <SearchOutlined
+                  sx={{ fontSize: 18 }}
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                />
+                <input
+                  className="nx-input pl-10"
+                  placeholder="Name or roll no..."
+                  value={studentSearch}
+                  onChange={(e) => setStudentSearch(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-auto">
+              <table className="nx-table min-w-full">
+                <thead>
+                  <tr>
+                    <th className="w-10">
+                      <input
+                        type="checkbox"
+                        checked={allStudentsChecked}
+                        onChange={(e) => {
+                          const next = { ...selectedStudentIds };
+                          pageStudentIds.forEach((id) => {
+                            next[id] = e.target.checked;
+                          });
+                          setSelectedStudentIds(next);
+                        }}
+                      />
+                    </th>
+                    <th>Student Name</th>
+                    <th>Roll Number</th>
+                    <th>RTE Applicable</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {assignStudents.map((student) => (
+                    <tr key={student.id}>
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={!!selectedStudentIds[student.id]}
+                          onChange={(e) =>
+                            setSelectedStudentIds({
+                              ...selectedStudentIds,
+                              [student.id]: e.target.checked,
+                            })
+                          }
+                        />
+                      </td>
+                      <td className="font-semibold text-slate-900">
+                        {studentDisplayName(student)}
+                      </td>
+                      <td className="font-mono text-[12px] text-slate-600">{student.roll}</td>
+                      <td>
+                        <span
+                          className={
+                            student.rte ? "nx-pill nx-pill-success" : "nx-pill nx-pill-neutral"
+                          }
+                        >
+                          {student.rte ? "Yes" : "No"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                  {!assignStudents.length ? (
+                    <tr>
+                      <td colSpan={4} className="px-5 py-10 text-center text-slate-500">
+                        No students match the selected filters.
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-5 py-3">
+              <p className="flex items-start gap-2 text-[12px] text-slate-500">
+                <InfoOutlined sx={{ fontSize: 16 }} className="mt-0.5 shrink-0 text-indigo-500" />
+                Students flagged as RTE-applicable in their profile are marked for quick assignment.
+              </p>
+              <button
+                type="button"
+                className="nx-btn-primary"
+                disabled={assigning}
+                onClick={() => void applyAssign()}
+              >
+                {assigning ? "Applying…" : "Apply to selected"}
+              </button>
+            </div>
           </div>
         </div>
+      ) : null}
+
+      <div className="nx-card overflow-hidden">
+        <div className="border-b border-slate-100 px-5 py-4">
+          <h3 className="text-[22px] font-bold text-slate-900">Active Discounts</h3>
+        </div>
         <div className="overflow-x-auto">
-          <table className="nx-table min-w-[860px]">
+          <table className="nx-table min-w-[920px]">
             <thead>
               <tr>
                 <th>Discount Name</th>
                 <th>Code</th>
                 <th>Type</th>
                 <th>Amount</th>
+                <th>Assigned</th>
                 <th>Status</th>
                 <th className="text-right">Actions</th>
               </tr>
@@ -285,18 +563,34 @@ export function DiscountsPanel({
                   <td className="font-semibold text-slate-900">{item.name}</td>
                   <td className="text-slate-500">{item.code || "—"}</td>
                   <td>
-                    <span className={categoryPill(item.category)}>{item.category || item.type}</span>
+                    <span className={categoryPill(item.category)}>
+                      {item.category || "CUSTOM"}
+                    </span>
                   </td>
                   <td className="font-semibold text-slate-900">
-                    {item.type === "PERCENTAGE" ? `${Number(item.value)}%` : formatMoney(item.value)}
+                    {item.type === "PERCENTAGE"
+                      ? `${Number(item.value)}%`
+                      : formatMoney(item.value)}
+                  </td>
+                  <td className="font-semibold text-slate-700">
+                    {item._count?.assignments ?? 0}
                   </td>
                   <td>
-                    <span className={`nx-pill ${item.isActive === false ? "nx-pill-neutral" : "nx-pill-success"}`}>
+                    <span
+                      className={`nx-pill ${item.isActive === false ? "nx-pill-neutral" : "nx-pill-success"}`}
+                    >
                       {item.isActive === false ? "Inactive" : "Active"}
                     </span>
                   </td>
                   <td>
-                    <div className="flex justify-end gap-1">
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        type="button"
+                        className="text-[12px] font-bold uppercase tracking-wide text-indigo-600 hover:underline"
+                        onClick={() => openAssign(item)}
+                      >
+                        Assign
+                      </button>
                       <button
                         type="button"
                         className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-indigo-600"
@@ -317,7 +611,7 @@ export function DiscountsPanel({
               ))}
               {!rows.length ? (
                 <tr>
-                  <td colSpan={6} className="px-5 py-12 text-center text-slate-500">
+                  <td colSpan={7} className="px-5 py-12 text-center text-slate-500">
                     No discounts found.
                   </td>
                 </tr>

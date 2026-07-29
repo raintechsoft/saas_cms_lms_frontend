@@ -18,7 +18,7 @@ import { RemindersPanel } from "./fees/RemindersPanel";
 import { SearchPanel } from "./fees/SearchPanel";
 import { DiscountsPanel } from "./fees/DiscountsPanel";
 import { SetupPanel } from "./fees/SetupPanel";
-import type { FeeSetup, FeeSummary, FeesTab, Payment, Session, Student, StudentFees } from "./fees/types";
+import type { FeeSetup, FeesTab, Payment, Session, Student, StudentFees } from "./fees/types";
 import { downloadCsv, headerForTab, studentDisplayName } from "./fees/utils";
 
 const TABS: Array<[FeesTab, string]> = [
@@ -41,11 +41,14 @@ export function FeesPage() {
   const [studentId, setStudentId] = useState("");
   const [studentFees, setStudentFees] = useState<StudentFees | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
-  const [invoiceSummary, setInvoiceSummary] = useState<FeeSummary | null>(null);
   const [receiptSearch, setReceiptSearch] = useState("");
   const [showCollect, setShowCollect] = useState(false);
   const [duesExport, setDuesExport] = useState<(() => void) | null>(null);
   const [customFocusSignal, setCustomFocusSignal] = useState(0);
+  const [discountCreateSignal, setDiscountCreateSignal] = useState(0);
+  const [discountAssignSignal, setDiscountAssignSignal] = useState(0);
+  const [invoiceCreateSignal, setInvoiceCreateSignal] = useState(0);
+  const [invoiceExportSignal, setInvoiceExportSignal] = useState(0);
 
   const students = useMemo(() => {
     const byId = new Map<string, Student>();
@@ -92,22 +95,6 @@ export function FeesPage() {
     }
   }
 
-  async function loadInvoiceSummary() {
-    if (!setup?.currentSession?.id) {
-      setInvoiceSummary(null);
-      return;
-    }
-    try {
-      const summary = await apiRequest<FeeSummary>(
-        `/fees/reports/summary?sessionId=${setup.currentSession.id}`,
-        accessToken,
-      );
-      setInvoiceSummary(summary);
-    } catch {
-      setInvoiceSummary(null);
-    }
-  }
-
   async function loadStudent(id: string) {
     setStudentId(id);
     if (!id) {
@@ -126,12 +113,8 @@ export function FeesPage() {
   }, [accessToken]);
 
   useEffect(() => {
-    if (tab === "receipts" || tab === "invoices") void loadPayments(receiptSearch);
+    if (tab === "receipts") void loadPayments(receiptSearch);
   }, [tab, accessToken]);
-
-  useEffect(() => {
-    if (tab === "invoices") void loadInvoiceSummary();
-  }, [tab, accessToken, setup?.currentSession?.id]);
 
   useEffect(() => {
     setShowCollect(false);
@@ -245,11 +228,19 @@ export function FeesPage() {
       ) : null}
       {tab === "invoices" ? (
         <>
-          <button type="button" className="nx-btn-secondary" onClick={exportReceipts}>
+          <button
+            type="button"
+            className="nx-btn-secondary"
+            onClick={() => setInvoiceExportSignal((value) => value + 1)}
+          >
             <DownloadOutlined sx={{ fontSize: 16 }} />
             Export CSV
           </button>
-          <button type="button" className="nx-btn-primary" onClick={() => setShowCollect(true)}>
+          <button
+            type="button"
+            className="nx-btn-primary"
+            onClick={() => setInvoiceCreateSignal((value) => value + 1)}
+          >
             <AddOutlined sx={{ fontSize: 16 }} />
             Generate Invoice
           </button>
@@ -276,7 +267,19 @@ export function FeesPage() {
             <DownloadOutlined sx={{ fontSize: 16 }} />
             Export CSV
           </button>
-          <button type="button" className="nx-btn-primary" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
+          <button
+            type="button"
+            className="nx-btn-primary"
+            onClick={() => setDiscountAssignSignal((value) => value + 1)}
+          >
+            <AddOutlined sx={{ fontSize: 16 }} />
+            Assign Discount
+          </button>
+          <button
+            type="button"
+            className="nx-btn-primary"
+            onClick={() => setDiscountCreateSignal((value) => value + 1)}
+          >
             <AddOutlined sx={{ fontSize: 16 }} />
             Add discount
           </button>
@@ -311,23 +314,9 @@ export function FeesPage() {
       <CmsPageHeader
         title={header.title}
         description={
-          tab === "dues"
-            ? "Monitor and manage outstanding student fee records across all departments."
-            : tab === "search"
-              ? "Retrieve student payment records and digital receipts using unique Transaction IDs."
-              : tab === "carry"
-                ? `Manage student balances moving from previous academic session to the current session${setup?.currentSession ? ` (${setup.currentSession.name})` : ""}.`
-                : tab === "reminders"
-                  ? "Configure automated schedule for payment due notices and overdue reminders."
-                  : tab === "receipts"
-                    ? "View and manage fee collection receipts generated for students."
-                    : tab === "custom"
-                      ? "Configure and manage individual or group-based custom fee structures."
-                    : tab === "invoices"
-                      ? "Manage student billing, arrears, receipt generation, and automated financial reminders."
-                      : tab === "discounts"
-                        ? "Maintain active discounts and concessions available for student fee assignments."
-                        : "Configure fee type, fee group, and fee master structures."
+          tab === "carry"
+            ? `Manage student balances moving from previous academic session to the current session${setup?.currentSession ? ` (${setup.currentSession.name})` : ""}.`
+            : header.description
         }
         actions={headerActions}
       />
@@ -426,17 +415,24 @@ export function FeesPage() {
         />
       ) : null}
 
-      {tab === "invoices" ? (
+      {tab === "invoices" && setup ? (
         <FeeInvoicesPanel
-          payments={payments}
-          summary={invoiceSummary}
-          search={receiptSearch}
-          onSearchChange={setReceiptSearch}
+          setup={setup}
+          token={accessToken}
+          openCreateSignal={invoiceCreateSignal}
+          exportSignal={invoiceExportSignal}
         />
       ) : null}
 
       {tab === "discounts" && setup ? (
-        <DiscountsPanel setup={setup} token={accessToken} onSaved={load} onError={notifyError} />
+        <DiscountsPanel
+          setup={setup}
+          token={accessToken}
+          onSaved={load}
+          onError={notifyError}
+          openCreateSignal={discountCreateSignal}
+          openAssignSignal={discountAssignSignal}
+        />
       ) : null}
 
       {tab === "structure" && setup ? (

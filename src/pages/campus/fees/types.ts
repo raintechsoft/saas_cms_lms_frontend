@@ -18,6 +18,11 @@ export interface Student {
   admissionNumber: string;
   firstName: string;
   lastName: string | null;
+  guardianPhone?: string | null;
+  fatherPhone?: string | null;
+  motherPhone?: string | null;
+  parentContact?: string | null;
+  rteEnabled?: boolean;
 }
 
 export interface Enrollment {
@@ -38,9 +43,16 @@ export interface FeeMaster {
   dueDate: string;
   createdAt?: string;
   isCustom?: boolean;
-  fineType?: "NONE" | "FIXED" | "PERCENTAGE";
+  fineType?: "NONE" | "FIXED" | "PERCENTAGE" | "PER_DAY" | "DATE_RANGE";
   fineValue?: string;
   graceDays?: number;
+  fineRanges?: Array<{
+    id: string;
+    startDate: string;
+    endDate: string | null;
+    amount: string;
+    perDay: boolean;
+  }>;
   feeType: FeeType;
   feeGroup: FeeGroup;
   classSection: ClassSection | null;
@@ -54,6 +66,7 @@ export interface FeeDiscount extends Named {
   type: "FIXED" | "PERCENTAGE";
   value: string;
   isActive?: boolean;
+  _count?: { assignments: number };
 }
 
 export interface ReceiptBook extends Named {

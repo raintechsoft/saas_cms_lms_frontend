@@ -43,16 +43,26 @@ export function overdueDays(dueDate: string) {
 
 export function overduePill(dueDate: string) {
   const days = overdueDays(dueDate);
-  if (days > 30) {
-    return { label: `${days}d overdue`, className: "nx-pill nx-pill-danger" };
+  if (days > 14) {
+    return { label: `${days} Days`, className: "nx-pill nx-pill-danger" };
   }
   if (days > 0) {
-    return { label: `${days}d overdue`, className: "nx-pill nx-pill-warning" };
+    return { label: `${days} Days`, className: "nx-pill nx-pill-warning" };
   }
   if (days === 0) {
     return { label: "Due today", className: "nx-pill nx-pill-indigo" };
   }
-  return { label: `Due in ${Math.abs(days)}d`, className: "nx-pill nx-pill-neutral" };
+  return { label: `In ${Math.abs(days)} Days`, className: "nx-pill nx-pill-neutral" };
+}
+
+export function parentContactOf(student: Student) {
+  return (
+    student.parentContact?.trim() ||
+    student.guardianPhone?.trim() ||
+    student.fatherPhone?.trim() ||
+    student.motherPhone?.trim() ||
+    "—"
+  );
 }
 
 export function headerForTab(tab: FeesTab) {
@@ -98,7 +108,8 @@ export function headerForTab(tab: FeesTab) {
     case "structure":
       return {
         title: "Fees Management",
-        description: "Configure fee type, fee group, and fee master structures.",
+        description:
+          "Manage student billing, arrears, receipt generation, and automated financial reminders.",
       };
     default:
       return {

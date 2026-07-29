@@ -19,15 +19,18 @@ const MASTER_PAGE_SIZE = 6;
 
 type FineUi = "NONE" | "FIXED" | "PER_DAY" | "DATE_RANGE";
 
-function fineLabel(fineType?: string) {
-  if (fineType === "FIXED") return "Fixed";
+function fineLabel(fineType?: string, fineUiHint?: FineUi) {
+  if (fineUiHint === "PER_DAY" || fineType === "PER_DAY") return "Per-day";
+  if (fineUiHint === "DATE_RANGE" || fineType === "DATE_RANGE") return "Date range";
   if (fineType === "PERCENTAGE") return "Percentage";
+  if (fineType === "FIXED") return "Fixed";
   return "None";
 }
 
 function finePill(fineType?: string) {
   if (fineType === "FIXED") return "nx-pill nx-pill-indigo";
-  if (fineType === "PERCENTAGE") return "nx-pill nx-pill-warning";
+  if (fineType === "PERCENTAGE" || fineType === "PER_DAY") return "nx-pill nx-pill-warning";
+  if (fineType === "DATE_RANGE") return "nx-pill nx-pill-indigo";
   return "nx-pill nx-pill-neutral";
 }
 
@@ -62,6 +65,7 @@ export function SetupPanel({
   const [master, setMaster] = useState({
     feeGroupId: "",
     feeTypeId: "",
+    classSectionId: "",
     dueDate: today,
     amount: "",
     fineUi: "NONE" as FineUi,
@@ -151,6 +155,22 @@ export function SetupPanel({
     }
   }
 
+  async function removeFeeType(item: { id: string; name: string }) {
+    const ok = await confirmDelete({
+      title: "Delete fee type?",
+      text: `"${item.name}" will be deleted if unused.`,
+      confirmText: "Delete",
+    });
+    if (!ok) return;
+    try {
+      await apiRequest(`/fees/types/${item.id}`, token, { method: "DELETE" });
+      notifySuccess("Fee type deleted");
+      await onSaved();
+    } catch (cause) {
+      onError(cause instanceof Error ? cause.message : "Unable to delete fee type");
+    }
+  }
+
   async function saveGroup(event: FormEvent) {
     event.preventDefault();
     if (!groupName.trim()) return;
@@ -228,6 +248,7 @@ export function SetupPanel({
     setMaster({
       feeGroupId: setup.groups[0]?.id ?? "",
       feeTypeId: "",
+      classSectionId: "",
       dueDate: today,
       amount: "",
       fineUi: "NONE",
@@ -242,12 +263,20 @@ export function SetupPanel({
     setMaster({
       feeGroupId: item.feeGroup.id,
       feeTypeId: item.feeType.id,
+      classSectionId: item.classSection?.id ?? "",
       dueDate: item.dueDate.slice(0, 10),
       amount: String(Number(item.amount)),
-      fineUi: item.fineType === "FIXED" ? "FIXED" : item.fineType === "PERCENTAGE" ? "FIXED" : "NONE",
+      fineUi:
+        item.fineType === "PER_DAY"
+          ? "PER_DAY"
+          : item.fineType === "DATE_RANGE"
+            ? "DATE_RANGE"
+            : item.fineType === "FIXED" || item.fineType === "PERCENTAGE"
+              ? "FIXED"
+              : "NONE",
       fineValue: String(Number(item.fineValue ?? 0) || ""),
-      rangeStart: today,
-      rangeEnd: today,
+      rangeStart: item.fineRanges?.[0]?.startDate.slice(0, 10) ?? today,
+      rangeEnd: item.fineRanges?.[0]?.endDate?.slice(0, 10) ?? today,
     });
     setSubTab("masters");
   }
@@ -265,12 +294,16 @@ export function SetupPanel({
     setSaving(true);
     try {
       const fineType =
-        master.fineUi === "NONE" ? "NONE" : master.fineUi === "DATE_RANGE" || master.fineUi === "PER_DAY" || master.fineUi === "FIXED"
-          ? "FIXED"
-          : "NONE";
+        master.fineUi === "NONE"
+          ? "NONE"
+          : master.fineUi === "PER_DAY"
+            ? "PER_DAY"
+            : master.fineUi === "DATE_RANGE"
+              ? "DATE_RANGE"
+              : "FIXED";
       const payload = {
         academicSessionId: setup.currentSession.id,
-        classSectionId: null,
+        classSectionId: master.classSectionId || null,
         feeGroupId: master.feeGroupId,
         feeTypeId: master.feeTypeId,
         amount: Number(master.amount),
@@ -278,6 +311,17 @@ export function SetupPanel({
         fineType,
         fineValue: fineType === "NONE" ? 0 : Number(master.fineValue || 0),
         graceDays: 0,
+        fineRanges:
+          master.fineUi === "DATE_RANGE"
+            ? [
+                {
+                  startDate: master.rangeStart,
+                  endDate: master.rangeEnd || null,
+                  amount: Number(master.fineValue || 0),
+                  perDay: false,
+                },
+              ]
+            : [],
         isCustom: false,
       };
       if (editingMasterId) {
@@ -363,9 +407,17 @@ export function SetupPanel({
               {setup.types.map((item) => (
                 <span
                   key={item.id}
-                  className="rounded-md bg-indigo-50 px-4 py-2 text-[14px] font-semibold text-indigo-700"
+                  className="inline-flex items-center gap-2 rounded-md bg-indigo-50 px-3 py-2 text-[14px] font-semibold text-indigo-700"
                 >
                   {item.name}
+                  <button
+                    type="button"
+                    className="rounded p-0.5 text-indigo-400 hover:bg-indigo-100 hover:text-rose-600"
+                    title={`Delete ${item.name}`}
+                    onClick={() => void removeFeeType(item)}
+                  >
+                    <DeleteOutline sx={{ fontSize: 16 }} />
+                  </button>
                 </span>
               ))}
               {!setup.types.length ? <p className="text-sm text-slate-500">No fee types.</p> : null}
@@ -465,7 +517,7 @@ export function SetupPanel({
                             onClick={() => void assignGroup(group)}
                             disabled={saving}
                           >
-                            Assign
+                            Assign / View
                           </button>
                           <button
                             type="button"
@@ -543,6 +595,20 @@ export function SetupPanel({
                 {selectedGroupTypes.map((item) => (
                   <option key={item.id} value={item.id}>
                     {item.name}
+                  </option>
+                ))}
+              </select>
+
+              <label className="nx-label mt-4">Class Section (optional)</label>
+              <select
+                className="nx-input"
+                value={master.classSectionId}
+                onChange={(e) => setMaster({ ...master, classSectionId: e.target.value })}
+              >
+                <option value="">All classes in group</option>
+                {setup.classSections.map((cs) => (
+                  <option key={cs.id} value={cs.id}>
+                    {cs.academicClass.name} - {cs.section.name}
                   </option>
                 ))}
               </select>

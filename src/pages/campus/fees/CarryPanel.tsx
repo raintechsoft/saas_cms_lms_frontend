@@ -10,7 +10,7 @@ import {
 } from "@mui/icons-material";
 import { InitialsAvatar } from "../../../components/InitialsAvatar";
 import { apiRequest } from "../../../lib/api";
-import { notifySuccess } from "../../../lib/notify";
+import { notifyInfo, notifySuccess } from "../../../lib/notify";
 import type { FeeSetup, FeeSummary, Session, Student, StudentDetail } from "./types";
 import { buildStudentClassMap, formatMoney, studentDisplayName, today } from "./utils";
 
@@ -41,6 +41,7 @@ export function CarryPanel({
   const [classFilter, setClassFilter] = useState("");
   const [sectionFilter, setSectionFilter] = useState("");
   const [selected, setSelected] = useState<Record<string, boolean>>({});
+  const [balances, setBalances] = useState<Record<string, string>>({});
   const [page, setPage] = useState(1);
   const [submitting, setSubmitting] = useState(false);
 
@@ -106,17 +107,24 @@ export function CarryPanel({
 
   useEffect(() => {
     setPage(1);
-    const next: Record<string, boolean> = {};
+    const nextSelected: Record<string, boolean> = {};
+    const nextBalances: Record<string, string> = {};
     rows.forEach((row) => {
-      next[row.student.id] = selected[row.student.id] ?? true;
+      nextSelected[row.student.id] = selected[row.student.id] ?? true;
+      nextBalances[row.student.id] =
+        balances[row.student.id] ?? row.balance.toFixed(2);
     });
-    setSelected(next);
-  }, [fromSessionId, search, classFilter, sectionFilter]);
+    setSelected(nextSelected);
+    setBalances(nextBalances);
+  }, [fromSessionId, search, classFilter, sectionFilter, summary]);
 
   const pageCount = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const pageRows = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const selectedRows = rows.filter((row) => selected[row.student.id]);
-  const selectedBalance = selectedRows.reduce((sum, row) => sum + row.balance, 0);
+  const selectedBalance = selectedRows.reduce((sum, row) => {
+    const override = Number(balances[row.student.id]);
+    return sum + (Number.isFinite(override) ? override : row.balance);
+  }, 0);
 
   async function forwardSelected() {
     if (!fromSessionId || !toSessionId || !selectedRows.length) return;
@@ -136,6 +144,7 @@ export function CarryPanel({
             fromSessionId,
             targetEnrollmentId: enrollment.id,
             dueDate,
+            amount: Number(balances[row.student.id] ?? row.balance),
           }),
         });
       }
@@ -277,7 +286,11 @@ export function CarryPanel({
               </option>
             ))}
           </select>
-          <button type="button" className="nx-btn-secondary">
+          <button
+            type="button"
+            className="nx-btn-secondary"
+            onClick={() => notifyInfo("Additional carry-forward filters coming soon")}
+          >
             <FilterListOutlined sx={{ fontSize: 16 }} />
             More Filters
           </button>
@@ -335,8 +348,13 @@ export function CarryPanel({
                   <td>
                     <input
                       className="nx-input max-w-[140px]"
-                      readOnly
-                      value={row.balance.toFixed(2)}
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={balances[row.student.id] ?? row.balance.toFixed(2)}
+                      onChange={(e) =>
+                        setBalances({ ...balances, [row.student.id]: e.target.value })
+                      }
                     />
                   </td>
                   <td>

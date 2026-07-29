@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   DownloadOutlined,
   MailOutline,
@@ -11,36 +12,19 @@ import {
 } from "@mui/icons-material";
 import { InitialsAvatar } from "../../../components/InitialsAvatar";
 import { apiRequest } from "../../../lib/api";
+import { notifyInfo, notifySuccess } from "../../../lib/notify";
 import type { FeeSetup, FeeSummary, Session } from "./types";
 import {
   buildStudentClassMap,
   exportDuesCsv,
   formatMoney,
   overdueDays,
+  overduePill,
+  parentContactOf,
   studentDisplayName,
 } from "./utils";
 
 const PAGE_SIZE = 5;
-
-function daysBadge(dueDate: string) {
-  const days = overdueDays(dueDate);
-  if (days <= 0) {
-    return {
-      label: days === 0 ? "Due today" : `In ${Math.abs(days)} Days`,
-      className: "rounded-full bg-indigo-50 px-2.5 py-1 text-[11px] font-bold text-indigo-700",
-    };
-  }
-  if (days <= 14) {
-    return {
-      label: `${days} Days`,
-      className: "rounded-full bg-orange-50 px-2.5 py-1 text-[11px] font-bold text-orange-600",
-    };
-  }
-  return {
-    label: `${days} Days`,
-    className: "rounded-full bg-rose-50 px-2.5 py-1 text-[11px] font-bold text-rose-600",
-  };
-}
 
 export function DuesPanel({
   setup,
@@ -65,6 +49,7 @@ export function DuesPanel({
   const [classFilter, setClassFilter] = useState("");
   const [sectionFilter, setSectionFilter] = useState("");
   const [page, setPage] = useState(1);
+  const [remindersSentMtd, setRemindersSentMtd] = useState(0);
 
   const classMap = useMemo(() => buildStudentClassMap(setup), [setup]);
   const classOptions = useMemo(
@@ -93,7 +78,12 @@ export function DuesPanel({
     }
     setLoading(true);
     try {
-      setSummary(await apiRequest<FeeSummary>(`/fees/reports/summary?sessionId=${id}`, token));
+      const [nextSummary, reminderStats] = await Promise.all([
+        apiRequest<FeeSummary>(`/fees/reports/summary?sessionId=${id}`, token),
+        apiRequest<{ sentMtd: number }>("/fees/reminders/stats", token),
+      ]);
+      setSummary(nextSummary);
+      setRemindersSentMtd(reminderStats.sentMtd);
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : "Unable to load dues summary");
     } finally {
@@ -258,7 +248,8 @@ export function DuesPanel({
               {!loading &&
                 pageRows.map((due) => {
                   const info = classMap.get(due.student.id);
-                  const badge = daysBadge(due.feeMaster.dueDate);
+                  const badge = overduePill(due.feeMaster.dueDate);
+                  const contact = parentContactOf(due.student);
                   return (
                     <tr key={due.id}>
                       <td>
@@ -285,16 +276,55 @@ export function DuesPanel({
                       <td>
                         <span className={badge.className}>{badge.label}</span>
                       </td>
-                      <td className="text-slate-500">—</td>
+                      <td className="text-slate-600">{contact}</td>
                       <td>
                         <div className="flex items-center justify-end gap-1 text-slate-400">
-                          <button type="button" className="rounded-md p-1.5 hover:bg-slate-100 hover:text-indigo-600">
+                          <button
+                            type="button"
+                            className="rounded-md p-1.5 hover:bg-slate-100 hover:text-indigo-600"
+                            title="Send reminder"
+                            onClick={() => {
+                              if (contact === "—") {
+                                notifyInfo("No parent contact on file for this student");
+                                return;
+                              }
+                              void apiRequest("/fees/reminders/student", token, {
+                                method: "POST",
+                                body: JSON.stringify({
+                                  studentId: due.student.id,
+                                  sessionId,
+                                }),
+                              })
+                                .then(() => {
+                                  notifySuccess(
+                                    `Reminder sent for ${studentDisplayName(due.student)}`,
+                                  );
+                                  setRemindersSentMtd((count) => count + 1);
+                                })
+                                .catch((cause) =>
+                                  onError(
+                                    cause instanceof Error
+                                      ? cause.message
+                                      : "Unable to send reminder",
+                                  ),
+                                );
+                            }}
+                          >
                             <MailOutline sx={{ fontSize: 18 }} />
                           </button>
-                          <button type="button" className="rounded-md p-1.5 hover:bg-slate-100 hover:text-indigo-600">
+                          <Link
+                            to={`/students/${due.student.id}`}
+                            className="rounded-md p-1.5 hover:bg-slate-100 hover:text-indigo-600"
+                            title="View profile"
+                          >
                             <PersonOutline sx={{ fontSize: 18 }} />
-                          </button>
-                          <button type="button" className="rounded-md p-1.5 hover:bg-slate-100 hover:text-indigo-600">
+                          </Link>
+                          <button
+                            type="button"
+                            className="rounded-md p-1.5 hover:bg-slate-100 hover:text-indigo-600"
+                            title="More"
+                            onClick={() => notifyInfo("Additional fee actions coming soon")}
+                          >
                             <MoreVert sx={{ fontSize: 18 }} />
                           </button>
                         </div>
@@ -385,7 +415,7 @@ export function DuesPanel({
               Reminders Sent (MTD)
             </p>
             <p className="mt-1 text-xl font-bold text-orange-600">
-              {setup.setting?.autoReminder ? "Active" : "0 Sent"}
+              {remindersSentMtd} Sent
             </p>
           </div>
         </div>
