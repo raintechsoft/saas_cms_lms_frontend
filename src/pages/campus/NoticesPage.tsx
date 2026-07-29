@@ -4,6 +4,7 @@ import { PageHeader } from "../../components/AppShell";
 import { ListPagination, paginateItems } from "../../components/ListPagination";
 import { apiRequest } from "../../lib/api";
 import { confirmDelete } from "../../lib/confirm";
+import { notifyError, notifySuccess } from "../../lib/notify";
 
 type NoticeAudience = "ALL" | "STUDENTS" | "PARENTS";
 
@@ -49,8 +50,6 @@ export function NoticesPage() {
   const [attachmentUrl, setAttachmentUrl] = useState("");
   const [classSectionId, setClassSectionId] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
-  const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
@@ -74,7 +73,6 @@ export function NoticesPage() {
 
   async function load() {
     try {
-      setError("");
       const [nextNotices, academics] = await Promise.all([
         apiRequest<CampusNotice[]>("/notices", accessToken),
         apiRequest<{ classSections: ClassSectionOption[] }>("/academics/setup", accessToken),
@@ -83,7 +81,7 @@ export function NoticesPage() {
       setClassSections(academics.classSections);
       setPage(1);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to load notices");
+      notifyError(cause instanceof Error ? cause.message : "Unable to load notices");
     } finally {
       setLoading(false);
     }
@@ -101,16 +99,12 @@ export function NoticesPage() {
     setAttachmentUrl(notice.attachmentUrl ?? "");
     setClassSectionId(notice.classSectionId ?? "");
     setExpiresAt(toDateInput(notice.expiresAt));
-    setMessage("");
-    setError("");
   }
 
   async function saveNotice(event: FormEvent) {
     event.preventDefault();
     if (!canManage) return;
     setSubmitting(true);
-    setError("");
-    setMessage("");
     const payload = {
       title,
       body,
@@ -125,18 +119,18 @@ export function NoticesPage() {
           method: "PUT",
           body: JSON.stringify(payload),
         });
-        setMessage("Notice updated");
+        notifySuccess("Notice updated");
       } else {
         await apiRequest("/notices", accessToken, {
           method: "POST",
           body: JSON.stringify(payload),
         });
-        setMessage("Notice published");
+        notifySuccess("Notice published");
       }
       resetForm();
       await load();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : editingId ? "Unable to update notice" : "Unable to create notice");
+      notifyError(cause instanceof Error ? cause.message : editingId ? "Unable to update notice" : "Unable to create notice");
     } finally {
       setSubmitting(false);
     }
@@ -152,10 +146,10 @@ export function NoticesPage() {
     try {
       await apiRequest(`/notices/${id}`, accessToken, { method: "DELETE" });
       if (editingId === id) resetForm();
-      setMessage("Notice deleted");
+      notifySuccess("Notice deleted");
       await load();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to delete notice");
+      notifyError(cause instanceof Error ? cause.message : "Unable to delete notice");
     }
   }
 
@@ -166,11 +160,6 @@ export function NoticesPage() {
         title="Notices"
         description="Publish announcements for students, parents, or everyone."
       />
-
-      {error && <p className="alert-error mt-6">{error}</p>}
-      {message && (
-        <p className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">{message}</p>
-      )}
 
       {canManage && (
         <section className="card mt-8 p-6">

@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { GoogleSignInButton } from "./GoogleSignInButton";
 
-type AuthMethod = "password" | "otp";
+type AuthMethod = "password" | "otp" | "mobile_otp";
 
 interface LoginAuthExtrasProps {
   method: AuthMethod;
@@ -20,6 +20,10 @@ interface LoginAuthExtrasProps {
   onGoogleError: (message: string) => void;
   forgotPasswordPath: string;
   tone?: "dark" | "light";
+  msg91Enabled?: boolean;
+  mobilePhone?: string;
+  onMobilePhoneChange?: (value: string) => void;
+  onMsg91Verify?: () => void;
 }
 
 export function LoginAuthExtras({
@@ -39,6 +43,10 @@ export function LoginAuthExtras({
   onGoogleError,
   forgotPasswordPath,
   tone = "dark",
+  msg91Enabled = false,
+  mobilePhone = "",
+  onMobilePhoneChange,
+  onMsg91Verify,
 }: LoginAuthExtrasProps) {
   const light = tone === "light";
   const forgotParams = new URLSearchParams();
@@ -47,6 +55,15 @@ export function LoginAuthExtras({
     ? `${forgotPasswordPath}?${forgotParams.toString()}`
     : forgotPasswordPath;
 
+  const tabClass = (active: boolean) =>
+    `flex-1 rounded-lg px-2 py-2 text-sm font-semibold transition ${
+      active
+        ? "bg-teal-500 text-white shadow-sm"
+        : light
+          ? "text-slate-500 hover:text-slate-800"
+          : "text-slate-400 hover:text-white"
+    }`;
+
   return (
     <div className="space-y-5">
       <div
@@ -54,32 +71,21 @@ export function LoginAuthExtras({
           light ? "border border-slate-200 bg-slate-50" : "border border-slate-800 bg-slate-900/50"
         }`}
       >
-        <button
-          type="button"
-          className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${
-            method === "password"
-              ? "bg-teal-500 text-white shadow-sm"
-              : light
-                ? "text-slate-500 hover:text-slate-800"
-                : "text-slate-400 hover:text-white"
-          }`}
-          onClick={() => onMethodChange("password")}
-        >
+        <button type="button" className={tabClass(method === "password")} onClick={() => onMethodChange("password")}>
           Password
         </button>
-        <button
-          type="button"
-          className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${
-            method === "otp"
-              ? "bg-teal-500 text-white shadow-sm"
-              : light
-                ? "text-slate-500 hover:text-slate-800"
-                : "text-slate-400 hover:text-white"
-          }`}
-          onClick={() => onMethodChange("otp")}
-        >
+        <button type="button" className={tabClass(method === "otp")} onClick={() => onMethodChange("otp")}>
           Email code
         </button>
+        {msg91Enabled ? (
+          <button
+            type="button"
+            className={tabClass(method === "mobile_otp")}
+            onClick={() => onMethodChange("mobile_otp")}
+          >
+            Mobile OTP
+          </button>
+        ) : null}
       </div>
 
       {method === "password" && (
@@ -164,6 +170,39 @@ export function LoginAuthExtras({
           )}
         </div>
       )}
+
+      {method === "mobile_otp" && msg91Enabled ? (
+        <div
+          className={`space-y-4 rounded-xl p-4 ${
+            light ? "border border-slate-200 bg-slate-50" : "border border-slate-800 bg-slate-900/40"
+          }`}
+        >
+          <p className={`text-sm ${light ? "text-slate-600" : "text-slate-400"}`}>
+            Verify with MSG91 OTP. Use the mobile number saved on your campus user profile.
+          </p>
+          <label className="block">
+            <span className={`mb-2 block text-sm font-medium ${light ? "text-slate-700" : "text-slate-200"}`}>
+              Mobile number
+            </span>
+            <input
+              className={light ? "input" : "field"}
+              inputMode="tel"
+              autoComplete="tel"
+              placeholder="9876543210 or +919876543210"
+              value={mobilePhone}
+              onChange={(event) => onMobilePhoneChange?.(event.target.value)}
+            />
+          </label>
+          <button
+            type="button"
+            className="button-primary w-full py-3 disabled:opacity-60"
+            onClick={onMsg91Verify}
+            disabled={submitting}
+          >
+            {submitting ? "Opening OTP…" : "Continue with Mobile OTP"}
+          </button>
+        </div>
+      ) : null}
 
       {googleClientId && (
         <div className="space-y-3">

@@ -11,6 +11,7 @@ import { useAuth } from "../../auth/AuthContext";
 import { PageHeader } from "../../components/AppShell";
 import { apiRequest } from "../../lib/api";
 import { confirmDelete } from "../../lib/confirm";
+import { notifyError, notifySuccess } from "../../lib/notify";
 
 interface Item { id: string; name: string; code?: string | null }
 interface Person { id: string; firstName: string; lastName: string }
@@ -72,8 +73,6 @@ export function AcademicsPage() {
   const { accessToken } = useAuth();
   const [setup, setSetup] = useState<Setup | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
   const [saving, setSaving] = useState("");
   const [mainTab, setMainTab] = useState<MainTab>("masters");
   const [masterType, setMasterType] = useState<MasterType>("classes");
@@ -103,7 +102,7 @@ export function AcademicsPage() {
         setAssignment((prev) => ({ ...prev, classSectionId: data.classSections[0]!.id }));
       }
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to load academics");
+      notifyError(cause instanceof Error ? cause.message : "Unable to load academics");
     } finally {
       setLoading(false);
     }
@@ -130,24 +129,18 @@ export function AcademicsPage() {
     { label: "Class sections", value: setup?.classSections.length ?? 0, icon: SchoolOutlined, tint: "#10b981" },
   ];
 
-  function clearFeedback() {
-    setError("");
-    setMessage("");
-  }
-
   async function addSession(event: FormEvent) {
     event.preventDefault();
-    clearFeedback();
     setSaving("session");
     try {
       await apiRequest("/academic-sessions", accessToken, {
         method: "POST",
         body: JSON.stringify({ ...sessionForm, isCurrent: true }),
       });
-      setMessage("Academic session created.");
+      notifySuccess("Academic session created.");
       await load();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to create session");
+      notifyError(cause instanceof Error ? cause.message : "Unable to create session");
     } finally {
       setSaving("");
     }
@@ -156,16 +149,15 @@ export function AcademicsPage() {
   async function activateSession(event: FormEvent) {
     event.preventDefault();
     if (!activateSessionId) return;
-    clearFeedback();
     setSaving("session");
     try {
       await apiRequest(`/academic-sessions/${activateSessionId}/current`, accessToken, {
         method: "PUT",
       });
-      setMessage("Current session updated.");
+      notifySuccess("Current session updated.");
       await load();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to set current session");
+      notifyError(cause instanceof Error ? cause.message : "Unable to set current session");
     } finally {
       setSaving("");
     }
@@ -173,7 +165,6 @@ export function AcademicsPage() {
 
   async function addMaster(event: FormEvent) {
     event.preventDefault();
-    clearFeedback();
     setSaving("master");
     try {
       await apiRequest(`/academics/${masterType}`, accessToken, {
@@ -184,10 +175,10 @@ export function AcademicsPage() {
         }),
       });
       setMaster({ name: "", code: "" });
-      setMessage(`${MASTER_HELP[masterType].title} "${master.name.trim()}" added.`);
+      notifySuccess(`${MASTER_HELP[masterType].title} "${master.name.trim()}" added.`);
       await load();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to add record");
+      notifyError(cause instanceof Error ? cause.message : "Unable to add record");
     } finally {
       setSaving("");
     }
@@ -196,10 +187,9 @@ export function AcademicsPage() {
   async function addTeacher(event: FormEvent) {
     event.preventDefault();
     if (!setup?.teacherRoleId) {
-      setError("Teacher role is not available. Refresh the page and try again.");
+      notifyError("Teacher role is not available. Refresh the page and try again.");
       return;
     }
-    clearFeedback();
     setSaving("teacher");
     try {
       const created = await apiRequest<Person>("/users", accessToken, {
@@ -216,10 +206,10 @@ export function AcademicsPage() {
       setTeacherModalOpen(false);
       setGroup((prev) => ({ ...prev, classTeacherId: created.id }));
       setAssignment((prev) => ({ ...prev, teacherId: created.id }));
-      setMessage(`Teacher ${created.firstName} ${created.lastName} added.`);
+      notifySuccess(`Teacher ${created.firstName} ${created.lastName} added.`);
       await load();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to add teacher");
+      notifyError(cause instanceof Error ? cause.message : "Unable to add teacher");
     } finally {
       setSaving("");
     }
@@ -228,14 +218,13 @@ export function AcademicsPage() {
   async function addGroup(event: FormEvent) {
     event.preventDefault();
     if (!setup?.currentSession) {
-      setError("Create or activate an academic session first.");
+      notifyError("Create or activate an academic session first.");
       return;
     }
     if (!group.classId || !group.sectionId) {
-      setError("Select both a class and a section.");
+      notifyError("Select both a class and a section.");
       return;
     }
-    clearFeedback();
     setSaving("section");
     try {
       const created = await apiRequest<ClassSection>("/academics/class-sections", accessToken, {
@@ -249,10 +238,10 @@ export function AcademicsPage() {
       });
       setGroup({ classId: "", sectionId: "", classTeacherId: "" });
       setAssignment({ classSectionId: created.id, subjectId: "", teacherId: "" });
-      setMessage("Class section saved.");
+      notifySuccess("Class section saved.");
       await load();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to create class section");
+      notifyError(cause instanceof Error ? cause.message : "Unable to create class section");
     } finally {
       setSaving("");
     }
@@ -260,7 +249,6 @@ export function AcademicsPage() {
 
   async function addSubject(event: FormEvent) {
     event.preventDefault();
-    clearFeedback();
     setSaving("subject");
     try {
       await apiRequest("/academics/subject-assignments", accessToken, {
@@ -272,17 +260,16 @@ export function AcademicsPage() {
         }),
       });
       setAssignment((prev) => ({ ...prev, subjectId: "", teacherId: "" }));
-      setMessage("Subject assigned.");
+      notifySuccess("Subject assigned.");
       await load();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to assign subject");
+      notifyError(cause instanceof Error ? cause.message : "Unable to assign subject");
     } finally {
       setSaving("");
     }
   }
 
   async function updateMaster(type: MasterType, id: string, data: { name: string; code?: string | null }) {
-    clearFeedback();
     setSaving("master-update");
     try {
       await apiRequest(`/academics/${type}/${id}`, accessToken, {
@@ -293,10 +280,10 @@ export function AcademicsPage() {
             : { name: data.name, code: data.code ?? null },
         ),
       });
-      setMessage(`${MASTER_HELP[type].title} updated.`);
+      notifySuccess(`${MASTER_HELP[type].title} updated.`);
       await load();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to update record");
+      notifyError(cause instanceof Error ? cause.message : "Unable to update record");
     } finally {
       setSaving("");
     }
@@ -314,14 +301,13 @@ export function AcademicsPage() {
       confirmText: "Delete",
     });
     if (!ok) return;
-    clearFeedback();
     setSaving("master-delete");
     try {
       await apiRequest(`/academics/${type}/${id}`, accessToken, { method: "DELETE" });
-      setMessage(`${MASTER_HELP[type].title} deleted.`);
+      notifySuccess(`${MASTER_HELP[type].title} deleted.`);
       await load();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to delete record");
+      notifyError(cause instanceof Error ? cause.message : "Unable to delete record");
     } finally {
       setSaving("");
     }
@@ -340,17 +326,16 @@ export function AcademicsPage() {
   }
 
   async function updateClassTeacher(classSectionId: string, classTeacherId: string) {
-    clearFeedback();
     setSaving(`teacher-${classSectionId}`);
     try {
       await apiRequest(`/academics/class-sections/${classSectionId}`, accessToken, {
         method: "PUT",
         body: JSON.stringify({ classTeacherId: classTeacherId || null }),
       });
-      setMessage("Class teacher updated.");
+      notifySuccess("Class teacher updated.");
       await load();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to update class teacher");
+      notifyError(cause instanceof Error ? cause.message : "Unable to update class teacher");
     } finally {
       setSaving("");
     }
@@ -367,7 +352,6 @@ export function AcademicsPage() {
       confirmText: "Delete",
     });
     if (!ok) return;
-    clearFeedback();
     setSaving(`section-delete-${id}`);
     try {
       await apiRequest(`/academics/class-sections/${id}`, accessToken, { method: "DELETE" });
@@ -379,10 +363,10 @@ export function AcademicsPage() {
       if (assignment.classSectionId === id) {
         setAssignment((prev) => ({ ...prev, classSectionId: "" }));
       }
-      setMessage("Class section deleted.");
+      notifySuccess("Class section deleted.");
       await load();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to delete class section");
+      notifyError(cause instanceof Error ? cause.message : "Unable to delete class section");
     } finally {
       setSaving("");
     }
@@ -395,14 +379,13 @@ export function AcademicsPage() {
       confirmText: "Remove",
     });
     if (!ok) return;
-    clearFeedback();
     setSaving(`subject-${id}`);
     try {
       await apiRequest(`/academics/subject-assignments/${id}`, accessToken, { method: "DELETE" });
-      setMessage("Subject assignment removed.");
+      notifySuccess("Subject assignment removed.");
       await load();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to remove subject assignment");
+      notifyError(cause instanceof Error ? cause.message : "Unable to remove subject assignment");
     } finally {
       setSaving("");
     }
@@ -435,13 +418,6 @@ export function AcademicsPage() {
           </div>
         }
       />
-
-      {error ? <p className="alert-error mt-5">{error}</p> : null}
-      {message ? (
-        <p className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-          {message}
-        </p>
-      ) : null}
 
       <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {stats.map((stat) => {

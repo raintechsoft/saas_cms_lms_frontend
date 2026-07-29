@@ -10,6 +10,7 @@ import {
   SmsOutlined,
 } from "@mui/icons-material";
 import { apiRequest } from "../../../lib/api";
+import { notifySuccess } from "../../../lib/notify";
 import type { FeeReminderStep, FeeSetting } from "./types";
 
 type Step = FeeReminderStep & { id: string };
@@ -101,7 +102,6 @@ export function RemindersPanel({
     const after = steps.find((s) => s.when === "after")?.days ?? 7;
     setSaving(true);
     try {
-      onError("");
       setRunNote(null);
       await apiRequest("/fees/reminders", token, {
         method: "PUT",
@@ -126,6 +126,7 @@ export function RemindersPanel({
       setSavedAt(
         new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
       );
+      notifySuccess("Reminder settings saved");
       await onSaved();
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : "Unable to save reminder settings");
@@ -137,7 +138,6 @@ export function RemindersPanel({
   async function runNow() {
     setRunning(true);
     try {
-      onError("");
       const result = await apiRequest<{
         count: number;
         smsSent: number;
@@ -157,6 +157,7 @@ export function RemindersPanel({
           ` · Push ${result?.pushSent ?? 0} ok / ${result?.pushFailed ?? 0} failed` +
           (result?.sessionName ? ` · ${result.sessionName}` : ""),
       );
+      notifySuccess(`Sent ${result?.count ?? 0} fee reminders`);
       await onSaved();
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : "Unable to run reminders");

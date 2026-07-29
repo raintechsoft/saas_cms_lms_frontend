@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "../../auth/AuthContext";
 import { PageHeader } from "../../components/AppShell";
 import { apiRequest } from "../../lib/api";
+import { notifyError } from "../../lib/notify";
 
 type ReportModule = "students" | "finance" | "attendance" | "examinations" | "timetable" | "homework" | "hr" | "audit";
 interface HubModule {
@@ -29,11 +30,10 @@ export function ReportsPage() {
   const [module, setModule] = useState<ReportModule>("students");
   const [filters, setFilters] = useState({ from: monthStart, to: today, includeDisabled: "true" });
   const [data, setData] = useState<unknown>(null);
-  const [error, setError] = useState("");
 
   useEffect(() => {
     apiRequest<Hub>("/reports", accessToken).then(setHub).catch((cause: unknown) => {
-      setError(cause instanceof Error ? cause.message : "Unable to load report hub");
+      notifyError(cause instanceof Error ? cause.message : "Unable to load report hub");
     });
   }, [accessToken]);
 
@@ -48,7 +48,7 @@ export function ReportsPage() {
       if (hub?.currentSession) query.set("sessionId", hub.currentSession.id);
       setData(await apiRequest(`/reports/${selected}?${query}`, accessToken));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to generate report");
+      notifyError(cause instanceof Error ? cause.message : "Unable to generate report");
     }
   }
 
@@ -60,7 +60,6 @@ export function ReportsPage() {
         description="Run student, finance, attendance, examination, HR, payroll, document, and audit reports."
         action={<button className="button-secondary" onClick={() => window.print()}>Print report</button>}
       />
-      {error && <p className="alert-error mt-6">{error}</p>}
       <section className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {hub?.modules.map((item) => (
           <button key={item.key} onClick={() => void run(item.key)}

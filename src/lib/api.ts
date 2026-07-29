@@ -120,7 +120,11 @@ export function login(payload: { email: string; password: string; tenantSlug?: s
 }
 
 export function getAuthConfig() {
-  return request<{ googleClientId: string | null; mailConfigured: boolean }>("/auth/config");
+  return request<{
+    googleClientId: string | null;
+    mailConfigured: boolean;
+    msg91Otp: { widgetId: string; tokenAuth: string } | null;
+  }>("/auth/config");
 }
 
 export function requestLoginOtp(payload: { email: string; tenantSlug?: string }) {
@@ -132,6 +136,13 @@ export function requestLoginOtp(payload: { email: string; tenantSlug?: string })
 
 export function verifyLoginOtp(payload: { email: string; code: string; tenantSlug?: string }) {
   return request<LoginResult>("/auth/otp/verify", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function loginWithMsg91Otp(payload: { accessToken: string; tenantSlug?: string }) {
+  return request<LoginResult>("/auth/otp/msg91", {
     method: "POST",
     body: JSON.stringify(payload),
   });

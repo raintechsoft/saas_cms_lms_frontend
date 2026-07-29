@@ -93,7 +93,6 @@ export function DuesPanel({
     }
     setLoading(true);
     try {
-      onError("");
       setSummary(await apiRequest<FeeSummary>(`/fees/reports/summary?sessionId=${id}`, token));
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : "Unable to load dues summary");

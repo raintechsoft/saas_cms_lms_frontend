@@ -7,6 +7,7 @@ import {
 import { useAuth } from "../../auth/AuthContext";
 import { CmsFooter, CmsPage, CmsPageHeader, CmsTab, CmsTabs } from "../../components/cms/CmsLayout";
 import { apiRequest } from "../../lib/api";
+import { notifyError } from "../../lib/notify";
 import { CarryPanel } from "./fees/CarryPanel";
 import { CollectPanel } from "./fees/CollectPanel";
 import { CustomFeesPanel } from "./fees/CustomFeesPanel";
@@ -42,7 +43,6 @@ export function FeesPage() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [invoiceSummary, setInvoiceSummary] = useState<FeeSummary | null>(null);
   const [receiptSearch, setReceiptSearch] = useState("");
-  const [error, setError] = useState("");
   const [showCollect, setShowCollect] = useState(false);
   const [duesExport, setDuesExport] = useState<(() => void) | null>(null);
   const [customFocusSignal, setCustomFocusSignal] = useState(0);
@@ -68,7 +68,6 @@ export function FeesPage() {
 
   async function load() {
     try {
-      setError("");
       const [nextSetup, nextSessions] = await Promise.all([
         apiRequest<FeeSetup>("/fees/setup", accessToken),
         apiRequest<{ sessions: Session[] }>("/academics/setup", accessToken).then(
@@ -78,19 +77,18 @@ export function FeesPage() {
       setSetup(nextSetup);
       setSessions(nextSessions);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to load fees");
+      notifyError(cause instanceof Error ? cause.message : "Unable to load fees");
     }
   }
 
   async function loadPayments(query?: string) {
     try {
-      setError("");
       const path = query?.trim()
         ? `/fees/payments?query=${encodeURIComponent(query.trim())}`
         : "/fees/payments";
       setPayments(await apiRequest<Payment[]>(path, accessToken));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to load receipts");
+      notifyError(cause instanceof Error ? cause.message : "Unable to load receipts");
     }
   }
 
@@ -117,10 +115,9 @@ export function FeesPage() {
       return;
     }
     try {
-      setError("");
       setStudentFees(await apiRequest<StudentFees>(`/fees/students/${id}`, accessToken));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to load student fees");
+      notifyError(cause instanceof Error ? cause.message : "Unable to load student fees");
     }
   }
 
@@ -335,8 +332,6 @@ export function FeesPage() {
         actions={headerActions}
       />
 
-      {error ? <p className="alert-error mt-4">{error}</p> : null}
-
       <CmsTabs>
         {TABS.map(([key, label]) => (
           <CmsTab key={key} active={tab === key} onClick={() => setTab(key)}>
@@ -350,12 +345,12 @@ export function FeesPage() {
           setup={setup}
           sessions={sessions}
           token={accessToken}
-          onError={setError}
+          onError={notifyError}
           onExportReady={onExportReady}
         />
       ) : null}
 
-      {tab === "search" ? <SearchPanel token={accessToken} onError={setError} /> : null}
+      {tab === "search" ? <SearchPanel token={accessToken} onError={notifyError} /> : null}
 
       {tab === "carry" && setup ? (
         <CarryPanel
@@ -364,7 +359,7 @@ export function FeesPage() {
           students={students}
           token={accessToken}
           onSaved={load}
-          onError={setError}
+          onError={notifyError}
         />
       ) : null}
 
@@ -373,7 +368,7 @@ export function FeesPage() {
           setting={setup.setting}
           token={accessToken}
           onSaved={load}
-          onError={setError}
+          onError={notifyError}
         />
       ) : null}
 
@@ -403,7 +398,7 @@ export function FeesPage() {
                 await loadPayments(receiptSearch);
                 setShowCollect(false);
               }}
-              onError={setError}
+              onError={notifyError}
             />
           </div>
         ) : (
@@ -414,7 +409,7 @@ export function FeesPage() {
             onSearchChange={setReceiptSearch}
             onSearch={() => void loadPayments(receiptSearch)}
             onRevert={() => void loadPayments(receiptSearch)}
-            onError={setError}
+            onError={notifyError}
             onCollectClick={() => setShowCollect(true)}
           />
         )
@@ -426,7 +421,7 @@ export function FeesPage() {
           token={accessToken}
           schoolName={user?.tenant?.name}
           onSaved={load}
-          onError={setError}
+          onError={notifyError}
           focusCreateSignal={customFocusSignal}
         />
       ) : null}
@@ -441,14 +436,14 @@ export function FeesPage() {
       ) : null}
 
       {tab === "discounts" && setup ? (
-        <DiscountsPanel setup={setup} token={accessToken} onSaved={load} onError={setError} />
+        <DiscountsPanel setup={setup} token={accessToken} onSaved={load} onError={notifyError} />
       ) : null}
 
       {tab === "structure" && setup ? (
-        <SetupPanel setup={setup} token={accessToken} onSaved={load} onError={setError} />
+        <SetupPanel setup={setup} token={accessToken} onSaved={load} onError={notifyError} />
       ) : null}
 
-      {!setup && !error ? (
+      {!setup ? (
         <p className="mt-8 text-center text-sm text-slate-500">Loading fees…</p>
       ) : null}
 

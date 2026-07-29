@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useAuth } from "../../auth/AuthContext";
 import { PageHeader } from "../../components/AppShell";
 import { apiRequest } from "../../lib/api";
+import { notifyError, notifySuccess } from "../../lib/notify";
 
 type TemplateType = "ADMIT_CARD" | "MARKSHEET" | "CERTIFICATE" | "ID_CARD";
 interface Template {
@@ -101,8 +102,6 @@ export function DocumentsPage() {
   const [staff, setStaff] = useState<Staff[]>([]);
   const [exams, setExams] = useState<Exam[]>([]);
   const [documents, setDocuments] = useState<Generated[]>([]);
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
 
   async function load() {
     try {
@@ -120,7 +119,7 @@ export function DocumentsPage() {
       setExams(examSetup.groups.flatMap((group) => group.exams));
       setDocuments(nextDocuments);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to load document center");
+      notifyError(cause instanceof Error ? cause.message : "Unable to load document center");
     }
   }
   useEffect(() => { void load(); }, [accessToken]);
@@ -133,8 +132,6 @@ export function DocumentsPage() {
         description="Design reusable backgrounds and fields, then generate barcoded exam and identity documents."
         action={<span className="badge">{templates.length} templates</span>}
       />
-      {error && <p className="alert-error mt-6">{error}</p>}
-      {message && <p className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">{message}</p>}
       <div className="mt-8 flex gap-2 border-b border-slate-200">
         {(["templates", "generate", "history"] as const).map((item) => (
           <button className={`tab ${tab === item ? "tab-active" : ""}`} key={item} onClick={() => setTab(item)}>
@@ -142,11 +139,11 @@ export function DocumentsPage() {
           </button>
         ))}
       </div>
-      {tab === "templates" && <TemplatePanel templates={templates} token={accessToken} onSaved={load} onError={setError} />}
+      {tab === "templates" && <TemplatePanel templates={templates} token={accessToken} onSaved={load} onError={notifyError} />}
       {tab === "generate" && (
         <GeneratePanel templates={templates} students={students} staff={staff} exams={exams}
-          token={accessToken} onSaved={async () => { setMessage("Document generated"); await load(); setTab("history"); }}
-          onError={setError} />
+          token={accessToken} onSaved={async () => { notifySuccess("Document generated"); await load(); setTab("history"); }}
+          onError={notifyError} />
       )}
       {tab === "history" && (
         <div className="card mt-6 divide-y divide-slate-100 overflow-hidden">
@@ -230,6 +227,7 @@ function TemplatePanel({ templates, token, onSaved, onError }: {
         });
       }
       resetForm();
+      notifySuccess(editingId ? "Template updated" : "Template created");
       await onSaved();
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : editingId ? "Unable to update template" : "Unable to create template");

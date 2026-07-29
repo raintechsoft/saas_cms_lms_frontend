@@ -8,6 +8,7 @@ import { useAuth } from "../../auth/AuthContext";
 import { ListPagination, paginateItems } from "../../components/ListPagination";
 import { CmsFooter, CmsPage, CmsPageHeader } from "../../components/cms/CmsLayout";
 import { apiRequest } from "../../lib/api";
+import { notifyError, notifySuccess } from "../../lib/notify";
 import { useSearchParams } from "react-router-dom";
 
 const PAGE_SIZE = 8;
@@ -108,8 +109,6 @@ export function NotificationsPage() {
   const [audience, setAudience] = useState<NotificationAudience>("ALL");
   const [sendEmail, setSendEmail] = useState(false);
 
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
   const [activeOption, setActiveOption] = useState<NotificationOption>(() => {
     const panel = searchParams.get("panel");
     return panel === "fees" || panel === "push" ? panel : "broadcast";
@@ -132,8 +131,6 @@ export function NotificationsPage() {
 
   async function load() {
     setLoading(true);
-    setError("");
-    setMessage("");
     try {
       const [notifs, setup] = await Promise.all([
         apiRequest<CampusNotification[]>("/notifications?scope=all&limit=200", accessToken),
@@ -147,7 +144,7 @@ export function NotificationsPage() {
         return setup?.sessions?.[0]?.id ?? "";
       });
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to load notifications");
+      notifyError(cause instanceof Error ? cause.message : "Unable to load notifications");
     } finally {
       setLoading(false);
     }
@@ -184,8 +181,6 @@ export function NotificationsPage() {
     if (!canManageNotifications) return;
     if (!title.trim() || !body.trim()) return;
     setSubmitting(true);
-    setError("");
-    setMessage("");
     try {
       const result = await apiRequest<{ pushSent?: number; pushFailed?: number }>(
         "/notifications",
@@ -209,12 +204,12 @@ export function NotificationsPage() {
       setSendEmail(false);
       const pushSent = result?.pushSent ?? 0;
       const pushFailed = result?.pushFailed ?? 0;
-      setMessage(
+      notifySuccess(
         `Notification sent · Push delivered ${pushSent}, failed ${pushFailed}`,
       );
       await refreshNotifications();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to send notification");
+      notifyError(cause instanceof Error ? cause.message : "Unable to send notification");
     } finally {
       setSubmitting(false);
     }
@@ -224,8 +219,6 @@ export function NotificationsPage() {
     if (!canManageFees) return;
     if (!sessionId) return;
     setRemindersBusy(true);
-    setError("");
-    setMessage("");
     try {
       const result = await apiRequest<{
         count: number;
@@ -249,10 +242,10 @@ export function NotificationsPage() {
             }`
           : " · no SMS numbers found on overdue students";
       const pushNote = ` · Push delivered ${pushSent}, failed ${pushFailed}`;
-      setMessage(`Fee overdue reminders sent: ${result?.count ?? 0}${smsNote}${pushNote}`);
+      notifySuccess(`Fee overdue reminders sent: ${result?.count ?? 0}${smsNote}${pushNote}`);
       await refreshNotifications();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to send fee overdue reminders");
+      notifyError(cause instanceof Error ? cause.message : "Unable to send fee overdue reminders");
     } finally {
       setRemindersBusy(false);
     }
@@ -261,17 +254,15 @@ export function NotificationsPage() {
   async function enablePush() {
     const vapidPublicKey = import.meta.env.VITE_PUSH_VAPID_PUBLIC_KEY as string | undefined;
     if (!vapidPublicKey) {
-      setError("VITE_PUSH_VAPID_PUBLIC_KEY is missing in frontend .env");
+      notifyError("VITE_PUSH_VAPID_PUBLIC_KEY is missing in frontend .env");
       return;
     }
     if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
-      setError("This browser does not support push notifications.");
+      notifyError("This browser does not support push notifications.");
       return;
     }
 
     setPushBusy(true);
-    setError("");
-    setMessage("");
     try {
       const permission = await Notification.requestPermission();
       if (permission !== "granted") {
@@ -291,9 +282,9 @@ export function NotificationsPage() {
         body: JSON.stringify(subscription),
       });
       setPushEnabled(true);
-      setMessage("Push notifications enabled on this browser.");
+      notifySuccess("Push notifications enabled on this browser");
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to enable push notifications");
+      notifyError(cause instanceof Error ? cause.message : "Unable to enable push notifications");
     } finally {
       setPushBusy(false);
     }
@@ -302,14 +293,12 @@ export function NotificationsPage() {
   async function disablePush() {
     if (!("serviceWorker" in navigator)) return;
     setPushBusy(true);
-    setError("");
-    setMessage("");
     try {
       const registration = await navigator.serviceWorker.ready;
       const subscription = await registration.pushManager.getSubscription();
       if (!subscription) {
         setPushEnabled(false);
-        setMessage("Push notifications already disabled on this browser.");
+        notifySuccess("Push notifications already disabled on this browser");
         return;
       }
 
@@ -319,9 +308,9 @@ export function NotificationsPage() {
       });
       await subscription.unsubscribe();
       setPushEnabled(false);
-      setMessage("Push notifications disabled for this browser.");
+      notifySuccess("Push notifications disabled for this browser");
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to disable push notifications");
+      notifyError(cause instanceof Error ? cause.message : "Unable to disable push notifications");
     } finally {
       setPushBusy(false);
     }
@@ -329,17 +318,15 @@ export function NotificationsPage() {
 
   async function sendPushTest() {
     setPushBusy(true);
-    setError("");
-    setMessage("");
     try {
       const result = await apiRequest<{ delivered: number; failed: number }>(
         "/notifications/push/test",
         accessToken,
         { method: "POST", body: JSON.stringify({}) },
       );
-      setMessage(`Push test sent: delivered ${result?.delivered ?? 0}, failed ${result?.failed ?? 0}`);
+      notifySuccess(`Push test sent: delivered ${result?.delivered ?? 0}, failed ${result?.failed ?? 0}`);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to send test push");
+      notifyError(cause instanceof Error ? cause.message : "Unable to send test push");
     } finally {
       setPushBusy(false);
     }
@@ -358,13 +345,6 @@ export function NotificationsPage() {
         title="Notifications"
         description="Manage communications and send overdue fee reminders."
       />
-
-      {error ? <p className="alert-error mt-6">{error}</p> : null}
-      {message ? (
-        <p className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
-          {message}
-        </p>
-      ) : null}
 
       <section className="mt-8 grid gap-6 lg:grid-cols-[1fr_420px]">
         <div className="nx-card p-5">

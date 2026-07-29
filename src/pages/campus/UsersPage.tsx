@@ -4,6 +4,7 @@ import { PageHeader } from "../../components/AppShell";
 import { ListPagination, paginateItems } from "../../components/ListPagination";
 import { confirmDelete } from "../../lib/confirm";
 import { apiRequest } from "../../lib/api";
+import { notifyError, notifySuccess } from "../../lib/notify";
 
 interface Permission { id: string; key: string; description: string | null }
 interface Role {
@@ -34,7 +35,6 @@ export function UsersPage() {
   const [roles, setRoles] = useState<Role[]>([]);
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [page, setPage] = useState(1);
-  const [error, setError] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
 
@@ -57,7 +57,7 @@ export function UsersPage() {
       setPermissions(nextPermissions);
       setPage(1);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to load access management");
+      notifyError(cause instanceof Error ? cause.message : "Unable to load access management");
     }
   }
 
@@ -65,7 +65,7 @@ export function UsersPage() {
 
   async function removeUser(user: User) {
     if (user.id === currentUser?.id) {
-      setError("You cannot delete your own account");
+      notifyError("You cannot delete your own account");
       return;
     }
     const ok = await confirmDelete({
@@ -76,10 +76,10 @@ export function UsersPage() {
     if (!ok) return;
     try {
       await apiRequest(`/users/${user.id}`, accessToken, { method: "DELETE" });
-      setError("");
+      notifySuccess("User deleted");
       await load();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to delete user");
+      notifyError(cause instanceof Error ? cause.message : "Unable to delete user");
     }
   }
 
@@ -93,7 +93,6 @@ export function UsersPage() {
           Add {tab === "users" ? "user" : "role"}
         </button>}
       />
-      {error && <p className="alert-error mt-6">{error}</p>}
       <div className="mt-8 flex gap-2 border-b border-slate-200">
         {(["users", "roles"] as const).map((item) => (
           <button key={item} className={`tab ${tab === item ? "tab-active" : ""}`}
@@ -110,12 +109,12 @@ export function UsersPage() {
           initial={editingUser}
           onCancel={() => { setShowForm(false); setEditingUser(null); }}
           onSaved={() => { setShowForm(false); setEditingUser(null); void load(); }}
-          onError={setError}
+          onError={notifyError}
         />
       )}
       {showForm && tab === "roles" && (
         <RoleForm permissions={permissions} token={accessToken}
-          onSaved={() => { setShowForm(false); void load(); }} onError={setError} />
+          onSaved={() => { setShowForm(false); void load(); }} onError={notifyError} />
       )}
 
       {tab === "users" ? (
@@ -135,7 +134,7 @@ export function UsersPage() {
                   <button
                     className="button-secondary"
                     type="button"
-                    onClick={() => { setEditingUser(user); setShowForm(true); setError(""); }}
+                    onClick={() => { setEditingUser(user); setShowForm(true); }}
                   >
                     Edit
                   </button>
@@ -206,6 +205,10 @@ function UserForm({ roles, token, initial, onSaved, onCancel, onError }: {
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    if (form.phone.replace(/\D/g, "").length < 10) {
+      onError("A valid mobile number is required");
+      return;
+    }
     setSaving(true);
     try {
       if (isEdit && initial) {
@@ -213,7 +216,7 @@ function UserForm({ roles, token, initial, onSaved, onCancel, onError }: {
           firstName: form.firstName,
           lastName: form.lastName,
           email: form.email,
-          phone: form.phone.trim() || null,
+          phone: form.phone.trim(),
           status: form.status,
           roleIds: [form.roleId],
         };
@@ -229,12 +232,13 @@ function UserForm({ roles, token, initial, onSaved, onCancel, onError }: {
             firstName: form.firstName,
             lastName: form.lastName,
             email: form.email,
-            phone: form.phone.trim() || null,
+            phone: form.phone.trim(),
             password: form.password,
             roleIds: [form.roleId],
           }),
         });
       }
+      notifySuccess(isEdit ? "User updated" : "User created");
       onSaved();
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : `Unable to ${isEdit ? "update" : "create"} user`);
@@ -255,7 +259,7 @@ function UserForm({ roles, token, initial, onSaved, onCancel, onError }: {
         onChange={(e) => setForm({ ...form, lastName: e.target.value })} />
       <input className="input" type="email" placeholder="Email" required value={form.email}
         onChange={(e) => setForm({ ...form, email: e.target.value })} />
-      <input className="input" placeholder="Phone (optional)" value={form.phone}
+      <input className="input" placeholder="Mobile number" required minLength={10} value={form.phone}
         onChange={(e) => setForm({ ...form, phone: e.target.value })} />
       <input
         className="input"
@@ -297,6 +301,7 @@ function RoleForm({ permissions, token, onSaved, onError }: {
         method: "POST",
         body: JSON.stringify({ name, code: name, permissionIds: selected }),
       });
+      notifySuccess("Role created");
       onSaved();
     } catch (cause) { onError(cause instanceof Error ? cause.message : "Unable to create role"); }
   }

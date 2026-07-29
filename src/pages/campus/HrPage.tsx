@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useAuth } from "../../auth/AuthContext";
 import { PageHeader } from "../../components/AppShell";
 import { apiRequest } from "../../lib/api";
+import { notifyError, notifySuccess } from "../../lib/notify";
 
 interface Named { id: string; name: string }
 interface User {
@@ -59,8 +60,6 @@ export function HrPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [statuses, setStatuses] = useState<Record<string, string>>({});
   const [times, setTimes] = useState<Record<string, { inTime: string; outTime: string }>>({});
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
 
   async function load(selectedMonth = month) {
     try {
@@ -82,7 +81,7 @@ export function HrPage() {
         },
       ])));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to load human resources");
+      notifyError(cause instanceof Error ? cause.message : "Unable to load human resources");
     }
   }
   useEffect(() => { void load(); }, [accessToken]);
@@ -102,9 +101,9 @@ export function HrPage() {
           })),
         }),
       });
-      setMessage("Staff attendance saved");
+      notifySuccess("Staff attendance saved");
       await load();
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to mark attendance"); }
+    } catch (cause) { notifyError(cause instanceof Error ? cause.message : "Unable to mark attendance"); }
   }
 
   async function reviewLeave(id: string, status: "APPROVED" | "REJECTED") {
@@ -112,8 +111,8 @@ export function HrPage() {
       await apiRequest(`/hr/leaves/${id}/review`, accessToken, {
         method: "PUT", body: JSON.stringify({ status }),
       });
-      setMessage(`Leave ${status.toLowerCase()}`); await load();
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to review leave"); }
+      notifySuccess(`Leave ${status.toLowerCase()}`); await load();
+    } catch (cause) { notifyError(cause instanceof Error ? cause.message : "Unable to review leave"); }
   }
 
   async function generatePayroll() {
@@ -126,8 +125,8 @@ export function HrPage() {
           payrollMonth: `${month}-01`,
         }),
       });
-      setMessage("Payroll generated with attendance deductions"); await load();
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to generate payroll"); }
+      notifySuccess("Payroll generated with attendance deductions"); await load();
+    } catch (cause) { notifyError(cause instanceof Error ? cause.message : "Unable to generate payroll"); }
   }
 
   async function payPayroll(id: string) {
@@ -135,8 +134,8 @@ export function HrPage() {
       await apiRequest(`/hr/payroll/${id}/pay`, accessToken, {
         method: "PUT", body: JSON.stringify({ paymentMode: "BANK_TRANSFER" }),
       });
-      setMessage("Payroll marked paid"); await load();
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to pay payroll"); }
+      notifySuccess("Payroll marked paid"); await load();
+    } catch (cause) { notifyError(cause instanceof Error ? cause.message : "Unable to pay payroll"); }
   }
 
   return (
@@ -147,8 +146,6 @@ export function HrPage() {
         description="Maintain staff profiles, attendance, leave, earnings, deductions, and monthly payroll."
         action={<input className="input w-44" type="month" value={month} onChange={(e) => { setMonth(e.target.value); void load(e.target.value); }} />}
       />
-      {error && <p className="alert-error mt-6">{error}</p>}
-      {message && <p className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">{message}</p>}
       <div className="mt-8 flex gap-2 overflow-x-auto border-b border-slate-200">
         {(["staff", "attendance", "leave", "payroll", "setup"] as const).map((item) => (
           <button className={`tab ${tab === item ? "tab-active" : ""}`} key={item} onClick={() => setTab(item)}>
@@ -158,7 +155,7 @@ export function HrPage() {
       </div>
 
       {setup && tab === "staff" && (
-        <StaffPanel setup={setup} users={users} token={accessToken} onSaved={load} onError={setError} />
+        <StaffPanel setup={setup} users={users} token={accessToken} onSaved={load} onError={notifyError} />
       )}
       {setup && tab === "attendance" && (
         <section className="mt-6">
@@ -191,7 +188,7 @@ export function HrPage() {
       )}
       {setup && tab === "leave" && (
         <section className="mt-6 grid gap-5 lg:grid-cols-[360px_1fr]">
-          <LeaveForm setup={setup} token={accessToken} onSaved={load} onError={setError} />
+          <LeaveForm setup={setup} token={accessToken} onSaved={load} onError={notifyError} />
           <div className="card divide-y divide-slate-100 overflow-hidden">
             {setup.pendingLeaves.map((leave) => (
               <div className="flex flex-col justify-between gap-3 p-5 sm:flex-row sm:items-center" key={leave.id}>
@@ -220,7 +217,7 @@ export function HrPage() {
         </section>
       )}
       {setup && tab === "setup" && (
-        <HrSetupPanel setup={setup} token={accessToken} onSaved={load} onError={setError} />
+        <HrSetupPanel setup={setup} token={accessToken} onSaved={load} onError={notifyError} />
       )}
     </main>
   );
@@ -235,7 +232,9 @@ function StaffPanel({ setup, users, token, onSaved, onError }: {
     event.preventDefault();
     try {
       await apiRequest("/hr/staff", token, { method: "POST", body: JSON.stringify(form) });
-      setForm({ ...form, userId: "", employeeNumber: "" }); await onSaved();
+      setForm({ ...form, userId: "", employeeNumber: "" });
+      notifySuccess("Staff profile created");
+      await onSaved();
     } catch (cause) { onError(cause instanceof Error ? cause.message : "Unable to add staff profile"); }
   }
   async function disable(member: Staff) {
@@ -244,6 +243,7 @@ function StaffPanel({ setup, users, token, onSaved, onError }: {
         method: "PUT",
         body: JSON.stringify(member.status === "ACTIVE" ? { status: "DISABLED", disabledReason: "Disabled by administrator" } : { status: "ACTIVE" }),
       });
+      notifySuccess(member.status === "ACTIVE" ? "Staff disabled" : "Staff enabled");
       await onSaved();
     } catch (cause) { onError(cause instanceof Error ? cause.message : "Unable to update staff"); }
   }
@@ -279,7 +279,9 @@ function LeaveForm({ setup, token, onSaved, onError }: {
     event.preventDefault();
     try {
       await apiRequest("/hr/leaves", token, { method: "POST", body: JSON.stringify(form) });
-      setForm({ ...form, reason: "" }); await onSaved();
+      setForm({ ...form, reason: "" });
+      notifySuccess("Leave request submitted");
+      await onSaved();
     } catch (cause) { onError(cause instanceof Error ? cause.message : "Unable to apply leave"); }
   }
   return (
@@ -310,7 +312,9 @@ function HrSetupPanel({ setup, token, onSaved, onError }: {
           ...(master.resource === "leave-types" ? { annualLimit: Number(master.annualLimit) } : {}),
         }),
       });
-      setMaster({ ...master, name: "" }); await onSaved();
+      setMaster({ ...master, name: "" });
+      notifySuccess("HR master added");
+      await onSaved();
     } catch (cause) { onError(cause instanceof Error ? cause.message : "Unable to create HR master"); }
   }
   async function addAdjustment(event: FormEvent) {
@@ -320,7 +324,9 @@ function HrSetupPanel({ setup, token, onSaved, onError }: {
         method: "POST",
         body: JSON.stringify({ ...adjustment, amount: Number(adjustment.amount) }),
       });
-      setAdjustment({ ...adjustment, name: "", amount: "" }); await onSaved();
+      setAdjustment({ ...adjustment, name: "", amount: "" });
+      notifySuccess("Earning or deduction added");
+      await onSaved();
     } catch (cause) { onError(cause instanceof Error ? cause.message : "Unable to add earning or deduction"); }
   }
   async function addRating(event: FormEvent) {
@@ -330,7 +336,9 @@ function HrSetupPanel({ setup, token, onSaved, onError }: {
         method: "POST",
         body: JSON.stringify({ ...rating, rating: Number(rating.rating) }),
       });
-      setRating({ ...rating, comment: "" }); await onSaved();
+      setRating({ ...rating, comment: "" });
+      notifySuccess("Teacher rating added");
+      await onSaved();
     } catch (cause) { onError(cause instanceof Error ? cause.message : "Unable to add teacher rating"); }
   }
   return (

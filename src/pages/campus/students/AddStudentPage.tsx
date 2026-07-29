@@ -14,6 +14,7 @@ import {
 import { useAuth } from "../../../auth/AuthContext";
 import { CmsFooter, CmsPage, CmsPageHeader } from "../../../components/cms/CmsLayout";
 import { apiRequest } from "../../../lib/api";
+import { notifyError, notifySuccess } from "../../../lib/notify";
 import type { Setup } from "./types";
 
 const today = new Date().toISOString().slice(0, 10);
@@ -221,7 +222,6 @@ export function AddStudentPage() {
   const [setup, setSetup] = useState<Setup | null>(null);
   const [step, setStep] = useState<StepKey>("basic");
   const [form, setForm] = useState<FormState>(INITIAL_FORM);
-  const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [openSection, setOpenSection] = useState<"transport" | "hostel" | "misc" | "">("");
   const [photoPreview, setPhotoPreview] = useState("");
@@ -230,7 +230,7 @@ export function AddStudentPage() {
   useEffect(() => {
     void apiRequest<Setup>("/students/setup", accessToken)
       .then(setSetup)
-      .catch((cause) => setError(cause instanceof Error ? cause.message : "Unable to load setup"));
+      .catch((cause) => notifyError(cause instanceof Error ? cause.message : "Unable to load setup"));
   }, [accessToken]);
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
@@ -254,10 +254,9 @@ export function AddStudentPage() {
   function goNext() {
     const issue = validateStep(step);
     if (issue) {
-      setError(issue);
+      notifyError(issue);
       return;
     }
-    setError("");
     const index = STEPS.findIndex((item) => item.key === step);
     if (index < STEPS.length - 1) setStep(STEPS[index + 1].key);
   }
@@ -270,11 +269,11 @@ export function AddStudentPage() {
   function handlePhotoFile(file: File | undefined) {
     if (!file) return;
     if (!file.type.startsWith("image/")) {
-      setError("Please upload a JPG or PNG image");
+      notifyError("Please upload a JPG or PNG image");
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
-      setError("Photo must be 5MB or smaller");
+      notifyError("Photo must be 5MB or smaller");
       return;
     }
     const reader = new FileReader();
@@ -297,11 +296,11 @@ export function AddStudentPage() {
         file.type === "image/jpeg" ||
         /\.(pdf|png|jpe?g)$/i.test(file.name);
       if (!okType) {
-        setError("Documents must be PDF, PNG, or JPG");
+        notifyError("Documents must be PDF, PNG, or JPG");
         return;
       }
       if (file.size > 10 * 1024 * 1024) {
-        setError("Each document must be 10MB or smaller");
+        notifyError("Each document must be 10MB or smaller");
         return;
       }
       next.push({
@@ -310,7 +309,6 @@ export function AddStudentPage() {
         sizeBytes: file.size,
       });
     }
-    setError("");
     setDocuments((current) => {
       const seen = new Set(current.map((item) => item.id));
       return [...current, ...next.filter((item) => !seen.has(item.id))];
@@ -326,12 +324,11 @@ export function AddStudentPage() {
     event.preventDefault();
     const issue = validateStep("basic");
     if (issue) {
-      setError(issue);
+      notifyError(issue);
       setStep("basic");
       return;
     }
     setBusy(true);
-    setError("");
     try {
       const photoUrl =
         form.photoUrl && (form.photoUrl.startsWith("http://") || form.photoUrl.startsWith("https://"))
@@ -407,11 +404,12 @@ export function AddStudentPage() {
         method: "POST",
         body: JSON.stringify(payload),
       });
+      notifySuccess("Student added successfully");
       navigate(`/students/${created.id}`, {
         state: { justCreated: true, credentials: created.credentials ?? [] },
       });
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to add student");
+      notifyError(cause instanceof Error ? cause.message : "Unable to add student");
     } finally {
       setBusy(false);
     }
@@ -435,8 +433,6 @@ export function AddStudentPage() {
           </button>
         }
       />
-
-      {error && <p className="alert-error mt-4">{error}</p>}
 
       <form className="nx-card mt-5 overflow-hidden" onSubmit={submit}>
         <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">

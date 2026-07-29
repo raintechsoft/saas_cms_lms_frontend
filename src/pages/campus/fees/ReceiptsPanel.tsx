@@ -7,6 +7,7 @@ import {
   SearchOutlined,
 } from "@mui/icons-material";
 import { apiRequest } from "../../../lib/api";
+import { notifySuccess } from "../../../lib/notify";
 import type { Payment } from "./types";
 import { formatMoney, studentDisplayName } from "./utils";
 
@@ -58,11 +59,11 @@ export function ReceiptsPanel({
     setRevertingId(id);
     setMenuId(null);
     try {
-      onError("");
       await apiRequest(`/fees/payments/${id}/revert`, token, {
         method: "PUT",
         body: JSON.stringify({ reason: reason.trim() }),
       });
+      notifySuccess("Payment reverted");
       onRevert();
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : "Unable to revert payment");

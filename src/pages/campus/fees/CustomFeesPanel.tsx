@@ -7,6 +7,7 @@ import {
 } from "@mui/icons-material";
 import { ListPagination, paginateItems } from "../../../components/ListPagination";
 import { apiRequest } from "../../../lib/api";
+import { notifySuccess } from "../../../lib/notify";
 import type { FeeMaster, FeeSetup } from "./types";
 import { formatMoney } from "./utils";
 
@@ -119,7 +120,6 @@ export function CustomFeesPanel({
     }
     setSaving(true);
     try {
-      onError("");
       await apiRequest("/fees/custom", token, {
         method: "POST",
         body: JSON.stringify({
@@ -132,6 +132,7 @@ export function CustomFeesPanel({
         }),
       });
       resetForm();
+      notifySuccess("Custom fee created");
       await onSaved();
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : "Unable to create custom fee");
@@ -144,11 +145,11 @@ export function CustomFeesPanel({
     const next = master.feeType.isActive === false;
     setTogglingId(master.id);
     try {
-      onError("");
       await apiRequest(`/fees/custom/${master.id}/active`, token, {
         method: "PUT",
         body: JSON.stringify({ isActive: next }),
       });
+      notifySuccess(next ? "Custom fee activated" : "Custom fee deactivated");
       await onSaved();
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : "Unable to update status");

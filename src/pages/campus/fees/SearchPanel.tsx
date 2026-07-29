@@ -31,7 +31,6 @@ export function SearchPanel({
     }
     setSearching(true);
     try {
-      onError("");
       const path = `/fees/payments?query=${encodeURIComponent(q)}`;
       const data = await apiRequest<Payment[]>(path, token);
       setResults(data);

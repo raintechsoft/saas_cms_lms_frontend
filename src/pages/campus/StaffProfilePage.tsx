@@ -4,6 +4,7 @@ import { useAuth } from "../../auth/AuthContext";
 import { PageHeader } from "../../components/AppShell";
 import { PanelCard } from "../../components/charts/PremiumCharts";
 import { assetUrl, updateAuthProfile, uploadAvatar } from "../../lib/api";
+import { notifyError, notifySuccess } from "../../lib/notify";
 import {
   OpsPageHeader,
   OpsPanel,
@@ -18,8 +19,6 @@ export function StaffProfilePage() {
   const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState("");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
 
@@ -36,8 +35,6 @@ export function StaffProfilePage() {
   async function handleSave(event: FormEvent) {
     event.preventDefault();
     setSaving(true);
-    setError("");
-    setMessage("");
     try {
       const updated = await updateAuthProfile(accessToken, {
         firstName,
@@ -45,7 +42,7 @@ export function StaffProfilePage() {
         phone: phone || null,
       });
       setAvatarUrl(updated.avatarUrl);
-      setMessage("Profile updated successfully.");
+      notifySuccess("Profile updated successfully");
       completeLogin({
         accessToken,
         user: {
@@ -57,7 +54,7 @@ export function StaffProfilePage() {
         },
       });
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to update profile");
+      notifyError(cause instanceof Error ? cause.message : "Unable to update profile");
     } finally {
       setSaving(false);
     }
@@ -66,12 +63,10 @@ export function StaffProfilePage() {
   async function handlePhoto(file: File | null) {
     if (!file) return;
     setUploading(true);
-    setError("");
-    setMessage("");
     try {
       const updated = await uploadAvatar(accessToken, file);
       setAvatarUrl(updated.avatarUrl);
-      setMessage("Photo uploaded successfully.");
+      notifySuccess("Photo uploaded successfully");
       completeLogin({
         accessToken,
         user: {
@@ -83,7 +78,7 @@ export function StaffProfilePage() {
         },
       });
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to upload photo");
+      notifyError(cause instanceof Error ? cause.message : "Unable to upload photo");
     } finally {
       setUploading(false);
     }
@@ -156,18 +151,6 @@ export function StaffProfilePage() {
         <span className="label">Phone</span>
         <input className="input" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Optional" />
       </label>
-      {message && (
-        <p
-          className={`sm:col-span-2 px-4 py-3 text-sm ${
-            isOps
-              ? "rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800"
-              : "rounded-xl bg-emerald-50 text-emerald-700"
-          }`}
-        >
-          {message}
-        </p>
-      )}
-      {error && <p className="alert-error sm:col-span-2">{error}</p>}
       <div className="sm:col-span-2">
         <button className={btnClass} type="submit" disabled={saving}>
           {saving ? "Saving…" : "Save profile"}

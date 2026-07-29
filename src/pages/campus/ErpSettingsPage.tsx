@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useAuth } from "../../auth/AuthContext";
 import { PageHeader } from "../../components/AppShell";
 import { apiRequest } from "../../lib/api";
+import { notifyError, notifySuccess } from "../../lib/notify";
 
 interface ErpSetup {
   integrations: Array<{ category: string; provider: string | null; isEnabled: boolean; config: Record<string, unknown>; hasSecrets: boolean }>;
@@ -27,21 +28,17 @@ export function ErpSettingsPage() {
   const { accessToken } = useAuth();
   const [setup, setSetup] = useState<ErpSetup | null>(null);
   const [tab, setTab] = useState<Tab>("integrations");
-  const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
   async function load() {
     try { setSetup(await apiRequest<ErpSetup>("/erp/setup", accessToken)); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to load ERP settings"); }
+    catch (cause) { notifyError(cause instanceof Error ? cause.message : "Unable to load ERP settings"); }
   }
   useEffect(() => { void load(); }, [accessToken]);
   const run = async (action: () => Promise<unknown>, success: string) => {
-    setError(""); setMessage("");
-    try { await action(); setMessage(success); await load(); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : "ERP setting could not be saved"); }
+    try { await action(); notifySuccess(success); await load(); }
+    catch (cause) { notifyError(cause instanceof Error ? cause.message : "ERP setting could not be saved"); }
   };
   return <main className="page-main">
     <PageHeader eyebrow="ERP settings" title="CMS control center" description="Configure providers, payment methods, panel modules, fields, holidays, documents, and recoverable tenant settings." />
-    {error && <p className="alert-error mt-6">{error}</p>}{message && <p className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">{message}</p>}
     <div className="mt-8 flex flex-wrap gap-2 border-b border-slate-200">{(["integrations", "access", "fields", "calendar", "documents", "backups"] as Tab[]).map((item) => <button className={`tab ${tab === item ? "tab-active" : ""}`} key={item} onClick={() => setTab(item)}>{item === "access" ? "Modules & languages" : item[0].toUpperCase() + item.slice(1)}</button>)}</div>
     {!setup ? <p className="mt-8 text-sm text-slate-500">Loading ERP settings…</p> : <>
       {tab === "integrations" && <IntegrationPanel setup={setup} token={accessToken} run={run} />}
@@ -67,8 +64,8 @@ function IntegrationPanel({ setup, token, run }: { setup: ErpSetup; token: strin
     let config = JSON.stringify(found?.config ?? {}, null, 2);
     let provider = found?.provider ?? "";
     if (category === "SMS" && emptyConfig) {
-      provider = provider || "twilio";
-      config = JSON.stringify({ fromNumber: "+91XXXXXXXXXX" }, null, 2);
+      provider = provider || "msg91";
+      config = JSON.stringify({ senderId: "SCHOOL", templateId: "" }, null, 2);
     }
     if (category === "EMAIL" && emptyConfig) {
       provider = provider || "SMTP";
@@ -84,7 +81,7 @@ function IntegrationPanel({ setup, token, run }: { setup: ErpSetup; token: strin
       isEnabled: found?.isEnabled ?? false,
       config,
       secrets: category === "SMS"
-        ? '{\n  "accountSid": "ACxxxxxxxx",\n  "authToken": "your_auth_token"\n}'
+        ? '{\n  "authKey": "your_msg91_authkey"\n}'
         : category === "EMAIL"
           ? '{\n  "user": "smtp-user",\n  "pass": "smtp-password"\n}'
           : "{}",
@@ -96,7 +93,7 @@ function IntegrationPanel({ setup, token, run }: { setup: ErpSetup; token: strin
     const secrets = JSON.parse(integration.secrets) as Record<string, string>;
     const placeholderSecrets =
       Object.values(secrets).some((value) =>
-        /ACxxxxxxxx|your_auth_token|smtp-user|smtp-password|XXXXXX/i.test(String(value)),
+        /ACxxxxxxxx|your_auth_token|your_msg91_authkey|smtp-user|smtp-password|XXXXXX/i.test(String(value)),
       );
     await run(
       () =>
@@ -122,7 +119,7 @@ function IntegrationPanel({ setup, token, run }: { setup: ErpSetup; token: strin
   return <section className="mt-6 grid gap-5 lg:grid-cols-2">
     <form className="card p-5" onSubmit={(event) => void saveIntegration(event)}><h2 className="font-semibold">Provider configuration</h2><p className="mt-1 text-sm text-slate-500">Credentials are encrypted at rest and never returned by the API.</p>
       <select className="input mt-4" value={integration.category} onChange={(e) => selectCategory(e.target.value)}>{categories.map((category) => <option key={category} value={category}>{category.replace("_", " ")}</option>)}</select>
-      <input className="input mt-3" placeholder="Provider, e.g. SMTP or Twilio" value={integration.provider} onChange={(e) => setIntegration({ ...integration, provider: e.target.value })} />
+      <input className="input mt-3" placeholder="Provider, e.g. SMTP or msg91" value={integration.provider} onChange={(e) => setIntegration({ ...integration, provider: e.target.value })} />
       <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={integration.isEnabled} onChange={(e) => setIntegration({ ...integration, isEnabled: e.target.checked })} />Enabled</label>
       {current?.hasSecrets ? (
         <p className="mt-2 text-xs font-medium text-emerald-700">Secrets are saved for this provider. Leave Secrets as {"{}"} to keep them, or paste new values to replace.</p>
@@ -133,7 +130,7 @@ function IntegrationPanel({ setup, token, run }: { setup: ErpSetup; token: strin
         {integration.category === "EMAIL"
           ? 'EMAIL config: {"host","port","secure","from","fromName"}. Secrets: {"user","pass"}'
           : integration.category === "SMS"
-            ? 'SMS config: {"fromNumber":"+91..."}. Secrets: {"accountSid":"AC...","authToken":"..."}. Provider: twilio. Replace placeholders with real Twilio values, then Save.'
+            ? 'SMS config: {"senderId":"SCHOOL","templateId":"your_flow_id"}. Secrets: {"authKey":"..."}. Provider: msg91. Template maps reminder text to VAR1.'
             : "Enable and save provider settings used by campus notifications and reminders."}
       </p>
       <label className="label mt-4">Public config (JSON)</label><textarea className="input min-h-28 font-mono text-xs" value={integration.config} onChange={(e) => setIntegration({ ...integration, config: e.target.value })} />

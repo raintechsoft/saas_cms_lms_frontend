@@ -10,6 +10,7 @@ import {
 } from "@mui/icons-material";
 import { InitialsAvatar } from "../../../components/InitialsAvatar";
 import { apiRequest } from "../../../lib/api";
+import { notifySuccess } from "../../../lib/notify";
 import type { FeeSetup, FeeSummary, Session, Student, StudentDetail } from "./types";
 import { buildStudentClassMap, formatMoney, studentDisplayName, today } from "./utils";
 
@@ -59,7 +60,6 @@ export function CarryPanel({
     if (!fromSessionId) return;
     void (async () => {
       try {
-        onError("");
         setSummary(
           await apiRequest<FeeSummary>(`/fees/reports/summary?sessionId=${fromSessionId}`, token),
         );
@@ -122,7 +122,6 @@ export function CarryPanel({
     if (!fromSessionId || !toSessionId || !selectedRows.length) return;
     setSubmitting(true);
     try {
-      onError("");
       for (const row of selectedRows) {
         const detail = await apiRequest<StudentDetail>(`/students/${row.student.id}`, token);
         const enrollment = detail.enrollments.find((e) => e.academicSession.id === toSessionId);
@@ -140,6 +139,7 @@ export function CarryPanel({
           }),
         });
       }
+      notifySuccess(`Carried forward ${selectedRows.length} student balance(s)`);
       await onSaved();
       setSummary(
         await apiRequest<FeeSummary>(`/fees/reports/summary?sessionId=${fromSessionId}`, token),

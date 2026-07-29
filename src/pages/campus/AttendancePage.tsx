@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useAuth } from "../../auth/AuthContext";
 import { PageHeader } from "../../components/AppShell";
 import { apiRequest } from "../../lib/api";
+import { notifyError, notifySuccess } from "../../lib/notify";
 
 type AttendanceStatus = "PRESENT" | "LATE" | "ABSENT" | "HALF_DAY" | "HOLIDAY";
 interface Named { id: string; name: string }
@@ -54,8 +55,6 @@ export function AttendancePage() {
   const [periodKey, setPeriodKey] = useState("PERIOD-1");
   const [setup, setSetup] = useState<Setup | null>(null);
   const [statuses, setStatuses] = useState<Record<string, AttendanceStatus>>({});
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
 
   async function load(sectionId = classSectionId, selectedDate = date) {
     try {
@@ -68,7 +67,7 @@ export function AttendancePage() {
         item.attendanceRecords[0]?.status ?? (item.leaveRequests.length ? "ABSENT" : "PRESENT"),
       ])));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to load attendance");
+      notifyError(cause instanceof Error ? cause.message : "Unable to load attendance");
     }
   }
   useEffect(() => { void load("", today); }, [accessToken]);
@@ -88,10 +87,10 @@ export function AttendancePage() {
           })),
         }),
       });
-      setMessage(`${result.marked} attendance records saved`);
+      notifySuccess(`${result.marked} attendance records saved`);
       await load();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to mark attendance");
+      notifyError(cause instanceof Error ? cause.message : "Unable to mark attendance");
     }
   }
 
@@ -102,8 +101,8 @@ export function AttendancePage() {
         method: "POST",
         body: JSON.stringify({ studentEnrollmentId: enrollmentId, pointDate: date, points: 1, note: "Attendance point" }),
       });
-      setMessage("Attendance point awarded");
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to award point"); }
+      notifySuccess("Attendance point awarded");
+    } catch (cause) { notifyError(cause instanceof Error ? cause.message : "Unable to award point"); }
   }
 
   return (
@@ -114,8 +113,6 @@ export function AttendancePage() {
         description="Mark day or period attendance, approve leave, and review summaries."
         action={setup && <span className="badge">{setup.attendanceType.replaceAll("_", " ")}</span>}
       />
-      {error && <p className="alert-error mt-6">{error}</p>}
-      {message && <p className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">{message}</p>}
       <div className="mt-8 flex gap-2 border-b border-slate-200">
         {(["mark", "leave", "reports"] as const).map((item) => (
           <button key={item} className={`tab ${tab === item ? "tab-active" : ""}`} onClick={() => setTab(item)}>
@@ -181,10 +178,10 @@ export function AttendancePage() {
 
       {tab === "leave" && setup && (
         <LeavePanel setup={setup} classSectionId={classSectionId} token={accessToken}
-          onSaved={() => load()} onError={setError} />
+          onSaved={() => load()} onError={notifyError} />
       )}
       {tab === "reports" && setup && (
-        <AttendanceReportPanel setup={setup} token={accessToken} onError={setError} />
+        <AttendanceReportPanel setup={setup} token={accessToken} onError={notifyError} />
       )}
     </main>
   );
@@ -201,6 +198,7 @@ function LeavePanel({ setup, classSectionId, token, onSaved, onError }: {
     try {
       await apiRequest("/attendance/leaves", token, { method: "POST", body: JSON.stringify(form) });
       setForm({ studentEnrollmentId: "", fromDate: today, toDate: today, reason: "" });
+      notifySuccess("Leave request submitted");
       await onSaved();
     } catch (cause) { onError(cause instanceof Error ? cause.message : "Unable to create leave request"); }
   }
@@ -209,6 +207,7 @@ function LeavePanel({ setup, classSectionId, token, onSaved, onError }: {
       await apiRequest(`/attendance/leaves/${id}/review`, token, {
         method: "PUT", body: JSON.stringify({ status }),
       });
+      notifySuccess(`Leave ${status.toLowerCase()}`);
       await onSaved();
     } catch (cause) { onError(cause instanceof Error ? cause.message : "Unable to review leave"); }
   }

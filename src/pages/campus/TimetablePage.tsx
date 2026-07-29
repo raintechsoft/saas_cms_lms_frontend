@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useAuth } from "../../auth/AuthContext";
 import { PageHeader } from "../../components/AppShell";
 import { apiRequest } from "../../lib/api";
+import { notifyError, notifySuccess } from "../../lib/notify";
 
 type Weekday = "MONDAY" | "TUESDAY" | "WEDNESDAY" | "THURSDAY" | "FRIDAY" | "SATURDAY" | "SUNDAY";
 interface Named { id: string; name: string }
@@ -49,8 +50,6 @@ export function TimetablePage() {
     room: "",
   });
   const [free, setFree] = useState<ClassSection[]>([]);
-  const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
   const section = setup?.classSections.find(({ id }) => id === form.classSectionId);
   const visible = useMemo(
     () => setup?.entries.filter((entry) =>
@@ -68,7 +67,7 @@ export function TimetablePage() {
         academicSessionId: current.academicSessionId || next.currentSession?.id || "",
       }));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to load timetable");
+      notifyError(cause instanceof Error ? cause.message : "Unable to load timetable");
     }
   }
   useEffect(() => { void load(); }, [accessToken]);
@@ -84,19 +83,20 @@ export function TimetablePage() {
           room: form.room || null,
         }),
       });
-      setMessage("Timetable period added");
+      notifySuccess("Timetable period added");
       await load();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to add timetable period");
+      notifyError(cause instanceof Error ? cause.message : "Unable to add timetable period");
     }
   }
 
   async function remove(id: string) {
     try {
       await apiRequest(`/timetable/entries/${id}`, accessToken, { method: "DELETE" });
+      notifySuccess("Timetable period deleted");
       await load();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to delete timetable period");
+      notifyError(cause instanceof Error ? cause.message : "Unable to delete timetable period");
     }
   }
 
@@ -111,7 +111,7 @@ export function TimetablePage() {
       });
       setFree(await apiRequest<ClassSection[]>(`/timetable/reports/free-periods?${query}`, accessToken));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to generate free-period report");
+      notifyError(cause instanceof Error ? cause.message : "Unable to generate free-period report");
     }
   }
 
@@ -123,8 +123,6 @@ export function TimetablePage() {
         description="Schedule periods with automatic class and teacher conflict checks."
         action={<span className="badge">{setup?.currentSession?.name ?? "No current session"}</span>}
       />
-      {error && <p className="alert-error mt-6">{error}</p>}
-      {message && <p className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">{message}</p>}
       <section className={`mt-8 grid gap-5 ${canManage ? "lg:grid-cols-[360px_1fr]" : ""}`}>
         {canManage && <form className="card p-5" onSubmit={submit}>
           <h2 className="font-semibold">Add period</h2>

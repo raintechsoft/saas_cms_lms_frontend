@@ -14,6 +14,7 @@ import { useAuth } from "../../../auth/AuthContext";
 import { CmsFooter, CmsPage, CmsTabs, CmsTab } from "../../../components/cms/CmsLayout";
 import { InitialsAvatar } from "../../../components/InitialsAvatar";
 import { apiRequest } from "../../../lib/api";
+import { notifyError, notifySuccess } from "../../../lib/notify";
 import {
   formatMoney,
   studentDisplayName,
@@ -110,10 +111,6 @@ export function StudentProfilePage() {
   const [tab, setTab] = useState<DetailTab>("profile");
   const [editing, setEditing] = useState(false);
   const [attendancePct, setAttendancePct] = useState<number | null>(null);
-  const [error, setError] = useState("");
-  const [message, setMessage] = useState(
-    createState?.justCreated ? "Student added successfully" : "",
-  );
   const [credentials] = useState<PortalCredential[]>(createState?.credentials ?? []);
   const [loading, setLoading] = useState(true);
 
@@ -128,9 +125,15 @@ export function StudentProfilePage() {
   }
 
   useEffect(() => {
+    if (createState?.justCreated) {
+      notifySuccess("Student added successfully");
+    }
+  }, [createState?.justCreated]);
+
+  useEffect(() => {
     setLoading(true);
     void load()
-      .catch((cause) => setError(cause instanceof Error ? cause.message : "Unable to load student"))
+      .catch((cause) => notifyError(cause instanceof Error ? cause.message : "Unable to load student"))
       .finally(() => setLoading(false));
   }, [id, accessToken]);
 
@@ -166,12 +169,6 @@ export function StudentProfilePage() {
         )}
       </div>
 
-      {error && <p className="alert-error mb-4">{error}</p>}
-      {message && (
-        <p className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3.5 text-sm text-emerald-700">
-          {message}
-        </p>
-      )}
       {credentials.length > 0 && (
         <div className="mb-4 rounded-xl border border-indigo-200 bg-indigo-50 p-4">
           <p className="text-[13px] font-bold text-indigo-900">Portal login credentials</p>
@@ -211,8 +208,8 @@ export function StudentProfilePage() {
               setEditing(true);
             }}
             onUpdated={load}
-            onError={setError}
-            onMessage={setMessage}
+            onError={notifyError}
+            onMessage={notifySuccess}
           />
 
           <CmsTabs>
@@ -239,8 +236,8 @@ export function StudentProfilePage() {
               onEditingChange={setEditing}
               classLabel={classLabel}
               onUpdated={load}
-              onError={setError}
-              onMessage={setMessage}
+              onError={notifyError}
+              onMessage={notifySuccess}
             />
           )}
           {tab === "parents" && (
@@ -248,8 +245,8 @@ export function StudentProfilePage() {
               detail={detail}
               token={accessToken}
               onUpdated={load}
-              onError={setError}
-              onMessage={setMessage}
+              onError={notifyError}
+              onMessage={notifySuccess}
             />
           )}
           {tab === "fees" && <FeesTab detail={detail} />}
@@ -1055,7 +1052,6 @@ const STATUS_PILL: Record<string, string> = {
 
 function AttendanceTab({ studentId, token }: { studentId: string; token: string }) {
   const [report, setReport] = useState<AttendanceReport | null>(null);
-  const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<"list" | "calendar">("list");
   const [range, setRange] = useState(() => {
@@ -1070,7 +1066,7 @@ function AttendanceTab({ studentId, token }: { studentId: string; token: string 
     const params = new URLSearchParams({ studentId, fromDate: range.from, toDate: range.to });
     apiRequest<AttendanceReport>(`/attendance/reports?${params}`, token)
       .then(setReport)
-      .catch((cause) => setError(cause instanceof Error ? cause.message : "Unable to load attendance"))
+      .catch((cause) => notifyError(cause instanceof Error ? cause.message : "Unable to load attendance"))
       .finally(() => setLoading(false));
   }, [studentId, token, range.from, range.to]);
 
@@ -1144,8 +1140,6 @@ function AttendanceTab({ studentId, token }: { studentId: string; token: string 
             </button>
           </div>
         </div>
-
-        {error && <p className="alert-error">{error}</p>}
 
         <div className="nx-card overflow-hidden">
           {view === "list" ? (

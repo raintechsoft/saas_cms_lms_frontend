@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useAuth } from "../../auth/AuthContext";
 import { PageHeader } from "../../components/AppShell";
 import { apiRequest } from "../../lib/api";
+import { notifyError, notifySuccess } from "../../lib/notify";
 
 interface Settings {
   address: string | null;
@@ -40,22 +41,18 @@ function settingsUpdatePayload(settings: Settings | SettingsResponse) {
 export function SettingsPage() {
   const { accessToken } = useAuth();
   const [settings, setSettings] = useState<Settings | null>(null);
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
 
   useEffect(() => {
     apiRequest<SettingsResponse>("/settings", accessToken)
       .then((data) => setSettings(data))
       .catch((cause) => {
-        setError(cause instanceof Error ? cause.message : "Unable to load settings");
+        notifyError(cause instanceof Error ? cause.message : "Unable to load settings");
       });
   }, [accessToken]);
 
   async function save(event: FormEvent) {
     event.preventDefault();
     if (!settings) return;
-    setMessage("");
-    setError("");
     try {
       const payload = settingsUpdatePayload(settings);
       const saved = await apiRequest<SettingsResponse>("/settings", accessToken, {
@@ -63,9 +60,9 @@ export function SettingsPage() {
         body: JSON.stringify(payload),
       });
       setSettings(saved);
-      setMessage("Settings saved");
+      notifySuccess("Settings saved");
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to save settings");
+      notifyError(cause instanceof Error ? cause.message : "Unable to save settings");
     }
   }
 
@@ -76,7 +73,6 @@ export function SettingsPage() {
         title="General settings"
         description="Configure the tenant profile and academic defaults."
       />
-      {error && <p className="alert-error mt-6">{error}</p>}
       {!settings ? (
         <p className="mt-8 text-sm text-slate-500">Loading settings…</p>
       ) : (
@@ -168,7 +164,6 @@ export function SettingsPage() {
           </label>
           <div className="flex items-center gap-4 md:col-span-2">
             <button className="button-primary" type="submit">Save settings</button>
-            {message && <span className="text-sm text-emerald-700">{message}</span>}
           </div>
         </form>
       )}

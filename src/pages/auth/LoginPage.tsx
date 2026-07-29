@@ -8,7 +8,9 @@ import { LoginAuthExtras } from "../../components/auth/LoginAuthExtras";
 
 import { isPlatformUser, isPortalUser } from "../../components/AppShell";
 
-import { getAuthConfig, requestLoginOtp, verifyLoginOtp } from "../../lib/api";
+import { getAuthConfig, loginWithMsg91Otp, requestLoginOtp, verifyLoginOtp } from "../../lib/api";
+import { verifyWithMsg91Widget } from "../../lib/msg91Otp";
+import { notifyError, notifyInfo, notifySuccess } from "../../lib/notify";
 
 
 
@@ -90,7 +92,7 @@ const loginOptions = [
 
 type LoginOption = (typeof loginOptions)[number];
 
-type AuthMethod = "password" | "otp";
+type AuthMethod = "password" | "otp" | "mobile_otp";
 
 
 
@@ -127,16 +129,20 @@ export function LoginPage() {
 
   );
 
-  const [error, setError] = useState("");
+  const [msg91Otp, setMsg91Otp] = useState<{ widgetId: string; tokenAuth: string } | null>(null);
+
+  const [mobilePhone, setMobilePhone] = useState("");
 
   const [submitting, setSubmitting] = useState(false);
 
 
 
   useEffect(() => {
-    if (viteGoogleClientId?.trim()) return;
     getAuthConfig()
-      .then((config) => setGoogleClientId(config.googleClientId))
+      .then((config) => {
+        if (!viteGoogleClientId?.trim()) setGoogleClientId(config.googleClientId);
+        setMsg91Otp(config.msg91Otp);
+      })
       .catch(() => undefined);
   }, []);
 
@@ -188,8 +194,6 @@ export function LoginPage() {
 
     event.preventDefault();
 
-    setError("");
-
     setSubmitting(true);
 
     try {
@@ -204,11 +208,13 @@ export function LoginPage() {
 
       });
 
+      notifySuccess("Signed in successfully");
+
       navigateAfterLogin(selectedLogin?.id);
 
     } catch (cause) {
 
-      setError(cause instanceof Error ? cause.message : "Unable to sign in");
+      notifyError(cause instanceof Error ? cause.message : "Unable to sign in");
 
     } finally {
 
@@ -224,13 +230,11 @@ export function LoginPage() {
 
     if (!email.trim()) {
 
-      setError("Enter your email before requesting a code");
+      notifyError("Enter your email before requesting a code");
 
       return;
 
     }
-
-    setError("");
 
     setOtpInfo("");
 
@@ -248,19 +252,19 @@ export function LoginPage() {
 
       setOtpRequested(true);
 
-      setOtpInfo(
+      const info = result.devCode
 
-        result.devCode
+        ? `${result.message} Dev code: ${result.devCode}`
 
-          ? `${result.message} Dev code: ${result.devCode}`
+        : result.message;
 
-          : result.message,
+      setOtpInfo(info);
 
-      );
+      notifyInfo(info);
 
     } catch (cause) {
 
-      setError(cause instanceof Error ? cause.message : "Unable to send code");
+      notifyError(cause instanceof Error ? cause.message : "Unable to send code");
 
     } finally {
 
@@ -273,8 +277,6 @@ export function LoginPage() {
 
 
   async function handleVerifyOtp() {
-
-    setError("");
 
     setSubmitting(true);
 
@@ -292,11 +294,68 @@ export function LoginPage() {
 
       completeLogin(result);
 
+      notifySuccess("Signed in successfully");
+
       navigateAfterLogin(selectedLogin?.id);
 
     } catch (cause) {
 
-      setError(cause instanceof Error ? cause.message : "Invalid sign-in code");
+      notifyError(cause instanceof Error ? cause.message : "Invalid sign-in code");
+
+    } finally {
+
+      setSubmitting(false);
+
+    }
+
+  }
+
+
+
+  async function handleMsg91Otp() {
+
+    if (!msg91Otp) {
+
+      notifyError("MSG91 mobile OTP is not configured");
+
+      return;
+
+    }
+
+    setSubmitting(true);
+
+    try {
+
+      const digits = mobilePhone.replace(/\D/g, "");
+      const identifier =
+        digits.length === 10
+          ? `91${digits}`
+          : digits.length >= 11
+            ? digits
+            : "";
+
+      const accessToken = await verifyWithMsg91Widget(
+        msg91Otp,
+        identifier || undefined,
+      );
+
+      const result = await loginWithMsg91Otp({
+
+        accessToken,
+
+        tenantSlug: tenantSlug.trim() || undefined,
+
+      });
+
+      completeLogin(result);
+
+      notifySuccess("Signed in successfully");
+
+      navigateAfterLogin(selectedLogin?.id);
+
+    } catch (cause) {
+
+      notifyError(cause instanceof Error ? cause.message : "Mobile OTP sign-in failed");
 
     } finally {
 
@@ -310,8 +369,6 @@ export function LoginPage() {
 
   async function handleGoogleCredential(idToken: string) {
 
-    setError("");
-
     setSubmitting(true);
 
     try {
@@ -324,11 +381,13 @@ export function LoginPage() {
 
       });
 
+      notifySuccess("Signed in successfully");
+
       navigateAfterLogin(selectedLogin?.id);
 
     } catch (cause) {
 
-      setError(cause instanceof Error ? cause.message : "Google sign-in failed");
+      notifyError(cause instanceof Error ? cause.message : "Google sign-in failed");
 
     } finally {
 
@@ -357,8 +416,6 @@ export function LoginPage() {
     setOtpRequested(false);
 
     setOtpInfo("");
-
-    setError("");
 
   }
 
@@ -588,8 +645,6 @@ export function LoginPage() {
 
                     setAuthMethod(method);
 
-                    setError("");
-
                   }}
 
                   tenantSlug={tenantSlug}
@@ -614,9 +669,17 @@ export function LoginPage() {
 
                   onGoogleCredential={handleGoogleCredential}
 
-                  onGoogleError={setError}
+                  onGoogleError={notifyError}
 
                   forgotPasswordPath="/forgot-password"
+
+                  msg91Enabled={Boolean(msg91Otp)}
+
+                  mobilePhone={mobilePhone}
+
+                  onMobilePhoneChange={setMobilePhone}
+
+                  onMsg91Verify={handleMsg91Otp}
 
                 />
 
@@ -652,18 +715,6 @@ export function LoginPage() {
 
 
 
-                    {error && (
-
-                      <p className="rounded-lg border border-rose-900 bg-rose-950/60 px-4 py-3 text-sm text-rose-200">
-
-                        {error}
-
-                      </p>
-
-                    )}
-
-
-
                     <button
 
                       className="w-full rounded-lg bg-indigo-500 px-4 py-3 font-semibold text-white transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-60"
@@ -679,18 +730,6 @@ export function LoginPage() {
                     </button>
 
                   </form>
-
-                )}
-
-
-
-                {authMethod === "otp" && error && (
-
-                  <p className="rounded-lg border border-rose-900 bg-rose-950/60 px-4 py-3 text-sm text-rose-200">
-
-                    {error}
-
-                  </p>
 
                 )}
 

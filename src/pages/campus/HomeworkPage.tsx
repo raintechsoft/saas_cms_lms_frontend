@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useAuth } from "../../auth/AuthContext";
 import { PageHeader } from "../../components/AppShell";
 import { apiRequest } from "../../lib/api";
+import { notifyError, notifySuccess } from "../../lib/notify";
 
 interface Named { id: string; name: string }
 interface Student { firstName: string; lastName: string | null; admissionNumber: string }
@@ -68,14 +69,12 @@ export function HomeworkPage() {
   const [roster, setRoster] = useState<HomeworkRoster | null>(null);
   const [report, setReport] = useState<ReportRow[]>([]);
   const [review, setReview] = useState("Reviewed");
-  const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
 
   async function load() {
     try {
       setSetup(await apiRequest<Setup>("/homework/setup", accessToken));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to load homework");
+      notifyError(cause instanceof Error ? cause.message : "Unable to load homework");
     }
   }
   useEffect(() => { void load(); }, [accessToken]);
@@ -86,7 +85,7 @@ export function HomeworkPage() {
     try {
       setRoster(await apiRequest<HomeworkRoster>(`/homework/${id}/submissions`, accessToken));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to load homework submissions");
+      notifyError(cause instanceof Error ? cause.message : "Unable to load homework submissions");
     }
   }
 
@@ -96,10 +95,10 @@ export function HomeworkPage() {
         method: "PUT",
         body: JSON.stringify({ status, review }),
       });
-      setMessage(status === "RESUBMIT_REQUESTED" ? "Resubmission requested" : "Homework evaluated");
+      notifySuccess(status === "RESUBMIT_REQUESTED" ? "Resubmission requested" : "Homework evaluated");
       await loadRoster(selectedId);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to evaluate homework");
+      notifyError(cause instanceof Error ? cause.message : "Unable to evaluate homework");
     }
   }
 
@@ -108,7 +107,7 @@ export function HomeworkPage() {
     try {
       setReport(await apiRequest<ReportRow[]>(`/homework-reports?sessionId=${setup.currentSession.id}`, accessToken));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to load homework report");
+      notifyError(cause instanceof Error ? cause.message : "Unable to load homework report");
     }
   }
 
@@ -120,12 +119,10 @@ export function HomeworkPage() {
         description="Assign work, accept controlled submissions, evaluate, request resubmission, and track completion."
         action={<span className="badge">{setup?.homework.length ?? 0} assignments</span>}
       />
-      {error && <p className="alert-error mt-6">{error}</p>}
-      {message && <p className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">{message}</p>}
       <div className="mt-8 flex gap-2 border-b border-slate-200">
         {(["assignments", "evaluate", "reports"] as const).filter((item) => item === "assignments" || user?.permissions.includes("homework.evaluate")).map((item) => <button className={`tab ${tab === item ? "tab-active" : ""}`} key={item} onClick={() => { setTab(item); if (item === "reports") void runReport(); }}>{item === "assignments" ? "Assignments" : item === "evaluate" ? "Submissions & evaluation" : "Reports"}</button>)}
       </div>
-      {setup && tab === "assignments" && <AssignmentsPanel setup={setup} token={accessToken} canManage={Boolean(user?.permissions.includes("homework.manage"))} canSubmit={Boolean(user?.permissions.includes("homework.submit"))} onSaved={load} onError={setError} />}
+      {setup && tab === "assignments" && <AssignmentsPanel setup={setup} token={accessToken} canManage={Boolean(user?.permissions.includes("homework.manage"))} canSubmit={Boolean(user?.permissions.includes("homework.submit"))} onSaved={load} onError={notifyError} />}
       {setup && tab === "evaluate" && (
         <section className="mt-6">
           <select className="input max-w-xl" value={selectedId} onChange={(e) => void loadRoster(e.target.value)}><option value="">Select homework</option>{setup.homework.map((item) => <option key={item.id} value={item.id}>{item.classSection.academicClass.name} {item.classSection.section.name} · {item.classSubject.subject.name} · {item.title}</option>)}</select>
@@ -136,7 +133,7 @@ export function HomeworkPage() {
             })}</div>
             <div>
               <label className="label">Teacher review</label><textarea className="input min-h-24" value={review} onChange={(e) => setReview(e.target.value)} />
-              <StudentSubmissionForm homeworkId={roster.homework.id} roster={roster.roster} token={accessToken} onSaved={() => loadRoster(roster.homework.id)} onError={setError} />
+              <StudentSubmissionForm homeworkId={roster.homework.id} roster={roster.roster} token={accessToken} onSaved={() => loadRoster(roster.homework.id)} onError={notifyError} />
             </div>
           </div>}
         </section>
@@ -157,7 +154,9 @@ function AssignmentsPanel({ setup, token, canManage, canSubmit, onSaved, onError
     event.preventDefault();
     try {
       await apiRequest("/homework", token, { method: "POST", body: JSON.stringify({ ...form, attachmentUrl: form.attachmentUrl || null }) });
-      setForm({ ...form, title: "", description: "", attachmentUrl: "" }); await onSaved();
+      setForm({ ...form, title: "", description: "", attachmentUrl: "" });
+      notifySuccess("Homework published");
+      await onSaved();
     } catch (cause) { onError(cause instanceof Error ? cause.message : "Unable to create homework"); }
   }
   return <section className={`mt-6 grid gap-5 ${canManage ? "lg:grid-cols-[380px_1fr]" : ""}`}>
@@ -188,7 +187,9 @@ function SelfSubmissionForm({ homeworkId, enrollmentId, token, onSaved, onError 
     event.preventDefault();
     try {
       await apiRequest(`/homework/${homeworkId}/submissions`, token, { method: "POST", body: JSON.stringify({ studentEnrollmentId: enrollmentId, answerText, attachmentUrl: attachmentUrl || null }) });
-      setAnswerText(""); setAttachmentUrl(""); await onSaved();
+      setAnswerText(""); setAttachmentUrl("");
+      notifySuccess("Homework submitted");
+      await onSaved();
     } catch (cause) { onError(cause instanceof Error ? cause.message : "Unable to submit homework"); }
   }}><p className="text-sm font-semibold">My submission</p><textarea className="input mt-2" required value={answerText} onChange={(e) => setAnswerText(e.target.value)} placeholder="Answer or submission note" /><input className="input mt-2" type="url" value={attachmentUrl} onChange={(e) => setAttachmentUrl(e.target.value)} placeholder="Attachment URL" /><button className="button-primary mt-3">Submit homework</button></form>;
 }
@@ -202,7 +203,9 @@ function StudentSubmissionForm({ homeworkId, roster, token, onSaved, onError }: 
     event.preventDefault();
     try {
       await apiRequest(`/homework/${homeworkId}/submissions`, token, { method: "POST", body: JSON.stringify({ ...form, attachmentUrl: form.attachmentUrl || null }) });
-      setForm({ studentEnrollmentId: "", answerText: "", attachmentUrl: "" }); await onSaved();
+      setForm({ studentEnrollmentId: "", answerText: "", attachmentUrl: "" });
+      notifySuccess("Homework submitted");
+      await onSaved();
     } catch (cause) { onError(cause instanceof Error ? cause.message : "Unable to submit homework"); }
   }
   return <form className="card mt-5 p-5" onSubmit={submit}><h3 className="font-semibold">Record student submission</h3><p className="mt-1 text-xs text-slate-500">A submitted student appears again only after resubmission is requested.</p><select className="input mt-4" required value={form.studentEnrollmentId} onChange={(e) => setForm({ ...form, studentEnrollmentId: e.target.value })}><option value="">Eligible student</option>{eligible.map((item) => <option key={item.id} value={item.id}>{item.student.firstName} {item.student.lastName}</option>)}</select><textarea className="input mt-3" required placeholder="Answer or submission note" value={form.answerText} onChange={(e) => setForm({ ...form, answerText: e.target.value })} /><input className="input mt-3" type="url" placeholder="Attachment URL" value={form.attachmentUrl} onChange={(e) => setForm({ ...form, attachmentUrl: e.target.value })} /><button className="button-primary mt-4" disabled={!eligible.length}>Submit</button></form>;

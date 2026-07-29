@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { CloseOutlined, DeleteOutline, EditOutlined } from "@mui/icons-material";
 import { ListPagination, paginateItems } from "../../../components/ListPagination";
 import { apiRequest } from "../../../lib/api";
+import { notifySuccess } from "../../../lib/notify";
 import { confirmDelete } from "../../../lib/confirm";
 import type { FeeDiscount, FeeSetup } from "./types";
 import { formatMoney } from "./utils";
@@ -73,7 +74,6 @@ export function DiscountsPanel({
     event.preventDefault();
     setSaving(true);
     try {
-      onError("");
       const payload = {
         name: name.trim(),
         code: code.trim() || null,
@@ -95,6 +95,7 @@ export function DiscountsPanel({
       }
       reset();
       setPage(1);
+      notifySuccess(editing ? "Discount updated" : "Discount saved");
       await onSaved();
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : "Unable to save discount");
@@ -113,6 +114,7 @@ export function DiscountsPanel({
     try {
       await apiRequest(`/fees/discounts/${item.id}`, token, { method: "DELETE" });
       if (editing?.id === item.id) reset();
+      notifySuccess("Discount deleted");
       await onSaved();
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : "Unable to delete discount");

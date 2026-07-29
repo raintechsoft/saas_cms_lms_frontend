@@ -22,6 +22,7 @@ import { CmsPage } from "../../components/cms/CmsLayout";
 import { InitialsAvatar } from "../../components/InitialsAvatar";
 import { BarChart } from "../../components/charts/PremiumCharts";
 import { apiRequest, getDashboard, type DashboardResult } from "../../lib/api";
+import { notifyError } from "../../lib/notify";
 
 const formatMoney = (value: number) =>
   new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(value);
@@ -141,7 +142,6 @@ export function DashboardPage() {
   const [payments, setPayments] = useState<FeePayment[]>([]);
   const [attendanceAlerts, setAttendanceAlerts] = useState<AttendanceReport["records"]>([]);
   const [pendingAdmissions, setPendingAdmissions] = useState<OnlineAdmission[]>([]);
-  const [error, setError] = useState("");
   const [bottomTab, setBottomTab] = useState<"invoices" | "logs" | "approvals">("invoices");
   const [invoiceQuery, setInvoiceQuery] = useState("");
 
@@ -195,7 +195,7 @@ export function DashboardPage() {
 
         await Promise.all(jobs);
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : "Unable to load dashboard");
+        notifyError(cause instanceof Error ? cause.message : "Unable to load dashboard");
       }
     })();
   }, [accessToken]);
@@ -262,7 +262,6 @@ export function DashboardPage() {
   return (
     <CmsPage>
       <div className="ov-stack">
-        {error ? <p className="alert-error">{error}</p> : null}
 
         <section className="ov-hero">
           <div className="ov-hero-glow" />

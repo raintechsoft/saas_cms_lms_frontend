@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import type { FeeSetup, PaymentMode, Student, StudentFees } from "./types";
 import { PAYMENT_MODES, formatMoney, studentDisplayName, today } from "./utils";
 import { apiRequest } from "../../../lib/api";
+import { notifySuccess } from "../../../lib/notify";
 
 export function CollectPanel({
   setup,
@@ -78,6 +79,7 @@ export function CollectPanel({
         }),
       });
       setForm((current) => ({ ...current, note: "" }));
+      notifySuccess("Payment collected");
       await onSaved();
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : "Unable to collect payment");

@@ -22,6 +22,7 @@ import { useAuth } from "../../auth/AuthContext";
 import { CmsFooter, CmsPage, CmsPageHeader, CmsTab, CmsTabs } from "../../components/cms/CmsLayout";
 import { InitialsAvatar } from "../../components/InitialsAvatar";
 import { apiRequest } from "../../lib/api";
+import { notifyError, notifySuccess } from "../../lib/notify";
 import type {
   ImportResult,
   MasterResource,
@@ -172,8 +173,6 @@ export function StudentsPage() {
   const [page, setPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [admissions, setAdmissions] = useState<OnlineAdmission[]>([]);
-  const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
 
   const classOptions = useMemo(() => {
     if (!setup) return [] as string[];
@@ -259,14 +258,14 @@ export function StudentsPage() {
       try {
         await refreshDirectory();
       } catch (cause) {
-        setError(cause instanceof Error ? cause.message : "Unable to load students");
+        notifyError(cause instanceof Error ? cause.message : "Unable to load students");
       }
     })();
   }, [accessToken]);
 
   useEffect(() => {
     void loadStudents(search, page).catch((cause) => {
-      setError(cause instanceof Error ? cause.message : "Unable to load students");
+      notifyError(cause instanceof Error ? cause.message : "Unable to load students");
     });
   }, [page, statusFilter, classSectionId, classFilter]);
 
@@ -274,7 +273,7 @@ export function StudentsPage() {
     event.preventDefault();
     setPage(1);
     void loadStudents(search, 1).catch((cause) => {
-      setError(cause instanceof Error ? cause.message : "Unable to search students");
+      notifyError(cause instanceof Error ? cause.message : "Unable to search students");
     });
   }
 
@@ -285,10 +284,10 @@ export function StudentsPage() {
         method: "POST",
         body: JSON.stringify({ ids: [id] }),
       });
-      setMessage("Student deleted");
+      notifySuccess("Student deleted");
       await refreshDirectory();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to delete student");
+      notifyError(cause instanceof Error ? cause.message : "Unable to delete student");
     }
   }
 
@@ -329,13 +328,6 @@ export function StudentsPage() {
           )
         }
       />
-
-      {error ? <p className="alert-error mt-4">{error}</p> : null}
-      {message ? (
-        <p className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3.5 text-sm text-emerald-700">
-          {message}
-        </p>
-      ) : null}
 
       <CmsTabs>
         {(
@@ -622,8 +614,8 @@ export function StudentsPage() {
             await loadAdmissions();
             await refreshDirectory();
           }}
-          onError={setError}
-          onMessage={setMessage}
+          onError={notifyError}
+          onMessage={notifySuccess}
         />
       ) : null}
 
@@ -634,8 +626,8 @@ export function StudentsPage() {
             setTab("directory");
             await refreshDirectory();
           }}
-          onError={setError}
-          onMessage={setMessage}
+          onError={notifyError}
+          onMessage={notifySuccess}
         />
       ) : null}
 
@@ -646,8 +638,8 @@ export function StudentsPage() {
           onRefresh={async () => {
             await loadSetup();
           }}
-          onError={setError}
-          onMessage={setMessage}
+          onError={notifyError}
+          onMessage={notifySuccess}
         />
       ) : null}
 

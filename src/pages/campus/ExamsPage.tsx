@@ -3,6 +3,7 @@ import { useAuth } from "../../auth/AuthContext";
 import { PageHeader } from "../../components/AppShell";
 import { apiRequest } from "../../lib/api";
 import { confirmDelete } from "../../lib/confirm";
+import { notifyError, notifySuccess } from "../../lib/notify";
 
 interface Named { id: string; name: string }
 interface ClassSection {
@@ -85,8 +86,6 @@ export function ExamsPage() {
   const [scores, setScores] = useState<Record<string, string>>({});
   const [absences, setAbsences] = useState<Record<string, boolean>>({});
   const [results, setResults] = useState<Result[]>([]);
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
 
   const exams = useMemo(
     () => setup?.groups.flatMap((group) => group.exams.map((exam) => ({ ...exam, group }))) ?? [],
@@ -100,7 +99,7 @@ export function ExamsPage() {
     try {
       setSetup(await apiRequest<Setup>("/exams/setup", accessToken));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to load examinations");
+      notifyError(cause instanceof Error ? cause.message : "Unable to load examinations");
     }
   }
   useEffect(() => { void load(); }, [accessToken]);
@@ -120,7 +119,7 @@ export function ExamsPage() {
         item.marks[0]?.isAbsent ?? false,
       ])));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to load mark roster");
+      notifyError(cause instanceof Error ? cause.message : "Unable to load mark roster");
     }
   }
 
@@ -136,10 +135,10 @@ export function ExamsPage() {
           })),
         }),
       });
-      setMessage("Marks saved");
+      notifySuccess("Marks saved");
       await loadRoster(selectedSchedule);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to save marks");
+      notifyError(cause instanceof Error ? cause.message : "Unable to save marks");
     }
   }
 
@@ -163,9 +162,9 @@ export function ExamsPage() {
       }
       setScores(nextScores);
       setAbsences(nextAbsences);
-      setMessage("CSV imported. Review and save the marks.");
+      notifySuccess("CSV imported. Review and save the marks.");
     } catch {
-      setError("Unable to read CSV. Use admissionNumber,marks,absent columns.");
+      notifyError("Unable to read CSV. Use admissionNumber,marks,absent columns.");
     }
   }
 
@@ -179,17 +178,17 @@ export function ExamsPage() {
       const data = await apiRequest<{ results: Result[] }>(path, accessToken);
       setResults(data.results);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to load results");
+      notifyError(cause instanceof Error ? cause.message : "Unable to load results");
     }
   }
 
   async function publish() {
     try {
       await apiRequest(`/exams/${selectedExam}/publish`, accessToken, { method: "PUT" });
-      setMessage("Result published");
+      notifySuccess("Result published");
       await Promise.all([load(), loadResults(selectedExam)]);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to publish result");
+      notifyError(cause instanceof Error ? cause.message : "Unable to publish result");
     }
   }
 
@@ -201,8 +200,6 @@ export function ExamsPage() {
         description="Configure grading, schedule subjects, enter marks, rank students, and publish results."
         action={<span className="badge">{setup?.currentSession?.name ?? "No current session"}</span>}
       />
-      {error && <p className="alert-error mt-6">{error}</p>}
-      {message && <p className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">{message}</p>}
       <div className="mt-8 flex gap-2 overflow-x-auto border-b border-slate-200">
         {(["setup", "schedule", "fields", "marks", "results"] as const).map((item) => (
           <button key={item} className={`tab ${tab === item ? "tab-active" : ""}`} onClick={() => setTab(item)}>
@@ -212,13 +209,13 @@ export function ExamsPage() {
       </div>
 
       {tab === "setup" && setup && (
-        <ExamSetupPanel setup={setup} token={accessToken} onSaved={load} onError={setError} />
+        <ExamSetupPanel setup={setup} token={accessToken} onSaved={load} onError={notifyError} />
       )}
       {tab === "schedule" && setup && (
-        <SchedulePanel setup={setup} exams={exams} token={accessToken} onSaved={load} onError={setError} />
+        <SchedulePanel setup={setup} exams={exams} token={accessToken} onSaved={load} onError={notifyError} />
       )}
       {tab === "fields" && setup && (
-        <ExamFieldsPanel setup={setup} exams={exams} schedules={schedules} token={accessToken} onSaved={load} onError={setError} />
+        <ExamFieldsPanel setup={setup} exams={exams} schedules={schedules} token={accessToken} onSaved={load} onError={notifyError} />
       )}
       {tab === "marks" && (
         <section className="mt-6">
@@ -296,14 +293,18 @@ function ExamSetupPanel({ setup, token, onSaved, onError }: {
     event.preventDefault();
     try {
       await apiRequest("/exams/groups", token, { method: "POST", body: JSON.stringify(group) });
-      setGroup({ ...group, name: "" }); await onSaved();
+      setGroup({ ...group, name: "" });
+      notifySuccess("Exam group created");
+      await onSaved();
     } catch (cause) { onError(cause instanceof Error ? cause.message : "Unable to create exam group"); }
   }
   async function submitExam(event: FormEvent) {
     event.preventDefault();
     try {
       await apiRequest("/exams", token, { method: "POST", body: JSON.stringify(exam) });
-      setExam({ ...exam, name: "" }); await onSaved();
+      setExam({ ...exam, name: "" });
+      notifySuccess("Exam created");
+      await onSaved();
     } catch (cause) { onError(cause instanceof Error ? cause.message : "Unable to create exam"); }
   }
   async function renameGroup(item: ExamGroup) {
@@ -311,6 +312,7 @@ function ExamSetupPanel({ setup, token, onSaved, onError }: {
     if (!name || name === item.name) return;
     try {
       await apiRequest(`/exams/groups/${item.id}`, token, { method: "PUT", body: JSON.stringify({ name }) });
+      notifySuccess("Exam group renamed");
       await onSaved();
     } catch (cause) { onError(cause instanceof Error ? cause.message : "Unable to rename group"); }
   }
@@ -323,6 +325,7 @@ function ExamSetupPanel({ setup, token, onSaved, onError }: {
     if (!ok) return;
     try {
       await apiRequest(`/exams/groups/${item.id}`, token, { method: "DELETE" });
+      notifySuccess("Exam group deleted");
       await onSaved();
     } catch (cause) { onError(cause instanceof Error ? cause.message : "Unable to delete group"); }
   }
@@ -339,6 +342,7 @@ function ExamSetupPanel({ setup, token, onSaved, onError }: {
         method: "PUT",
         body: JSON.stringify({ name, startDate, endDate }),
       });
+      notifySuccess("Exam updated");
       await onSaved();
     } catch (cause) { onError(cause instanceof Error ? cause.message : "Unable to update exam"); }
   }
@@ -346,6 +350,7 @@ function ExamSetupPanel({ setup, token, onSaved, onError }: {
     if (item.status === "ARCHIVED") return;
     try {
       await apiRequest(`/exams/${item.id}/archive`, token, { method: "PUT" });
+      notifySuccess("Exam archived");
       await onSaved();
     } catch (cause) { onError(cause instanceof Error ? cause.message : "Unable to archive exam"); }
   }
@@ -358,6 +363,7 @@ function ExamSetupPanel({ setup, token, onSaved, onError }: {
     if (!ok) return;
     try {
       await apiRequest(`/exams/${item.id}`, token, { method: "DELETE" });
+      notifySuccess("Exam deleted");
       await onSaved();
     } catch (cause) { onError(cause instanceof Error ? cause.message : "Unable to delete exam"); }
   }
@@ -456,6 +462,7 @@ function SchedulePanel({ setup, exams, token, onSaved, onError }: {
       await apiRequest(`/exams/${examId}/students`, token, {
         method: "POST", body: JSON.stringify({ classSectionId: form.classSectionId }),
       });
+      notifySuccess("Schedule created and students assigned");
       await onSaved();
     } catch (cause) { onError(cause instanceof Error ? cause.message : "Unable to create schedule"); }
   }
@@ -471,6 +478,7 @@ function SchedulePanel({ setup, exams, token, onSaved, onError }: {
         method: "PUT",
         body: JSON.stringify({ examDate, startTime, endTime }),
       });
+      notifySuccess("Schedule updated");
       await onSaved();
     } catch (cause) { onError(cause instanceof Error ? cause.message : "Unable to update schedule"); }
   }
@@ -482,6 +490,7 @@ function SchedulePanel({ setup, exams, token, onSaved, onError }: {
     if (!ok) return;
     try {
       await apiRequest(`/exams/schedules/${schedule.id}`, token, { method: "DELETE" });
+      notifySuccess("Schedule deleted");
       await onSaved();
     } catch (cause) { onError(cause instanceof Error ? cause.message : "Unable to delete schedule"); }
   }
@@ -566,7 +575,9 @@ function ExamFieldsPanel({ setup, exams, schedules, token, onSaved, onError }: {
           gradePoint: grade.gradePoint ? Number(grade.gradePoint) : null,
         }),
       });
-      setGrade({ ...grade, name: "", minPercent: "", maxPercent: "", gradePoint: "" }); await onSaved();
+      setGrade({ ...grade, name: "", minPercent: "", maxPercent: "", gradePoint: "" });
+      notifySuccess("Marks grade added");
+      await onSaved();
     } catch (cause) { onError(cause instanceof Error ? cause.message : "Unable to create marks grade"); }
   }
   async function editGrade(item: Setup["grades"][number]) {
@@ -585,6 +596,7 @@ function ExamFieldsPanel({ setup, exams, schedules, token, onSaved, onError }: {
           maxPercent: Number(maxPercent),
         }),
       });
+      notifySuccess("Grade updated");
       await onSaved();
     } catch (cause) { onError(cause instanceof Error ? cause.message : "Unable to update grade"); }
   }
@@ -596,6 +608,7 @@ function ExamFieldsPanel({ setup, exams, schedules, token, onSaved, onError }: {
     if (!ok) return;
     try {
       await apiRequest(`/exams/grades/${item.id}`, token, { method: "DELETE" });
+      notifySuccess("Grade deleted");
       await onSaved();
     } catch (cause) { onError(cause instanceof Error ? cause.message : "Unable to delete grade"); }
   }
@@ -606,7 +619,9 @@ function ExamFieldsPanel({ setup, exams, schedules, token, onSaved, onError }: {
         method: "POST",
         body: JSON.stringify({ name: component.name, maximumMarks: Number(component.maximumMarks) }),
       });
-      setComponent({ ...component, name: "", maximumMarks: "" }); await onSaved();
+      setComponent({ ...component, name: "", maximumMarks: "" });
+      notifySuccess("Subject mark field added");
+      await onSaved();
     } catch (cause) { onError(cause instanceof Error ? cause.message : "Unable to add subject mark field"); }
   }
   async function createAspect(event: FormEvent) {
@@ -616,7 +631,9 @@ function ExamFieldsPanel({ setup, exams, schedules, token, onSaved, onError }: {
         method: "POST",
         body: JSON.stringify({ name: aspect.name, maximumValue: Number(aspect.maximumValue) }),
       });
-      setAspect({ ...aspect, name: "" }); await onSaved();
+      setAspect({ ...aspect, name: "" });
+      notifySuccess("Aspect field created");
+      await onSaved();
     } catch (cause) { onError(cause instanceof Error ? cause.message : "Unable to create aspect field"); }
   }
   async function selectAspectSchedule(scheduleId: string) {
@@ -639,6 +656,7 @@ function ExamFieldsPanel({ setup, exams, schedules, token, onSaved, onError }: {
           })),
         }),
       });
+      notifySuccess("Aspect values saved");
       await onSaved();
     } catch (cause) { onError(cause instanceof Error ? cause.message : "Unable to save aspect values"); }
   }

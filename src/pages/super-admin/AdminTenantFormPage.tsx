@@ -85,6 +85,7 @@ const emptyForm = {
   logoText: "",
   customDomain: "",
   adminEmail: "",
+  adminPhone: "",
   adminFirstName: "",
   adminLastName: "",
   adminPassword: "",
@@ -169,6 +170,11 @@ export function AdminTenantFormPage() {
         setStep(1);
         return;
       }
+      if (form.adminPhone.replace(/\D/g, "").length < 10) {
+        notifyError("Enter a valid institution admin mobile number on Plan & Limits");
+        setStep(1);
+        return;
+      }
       if (!form.name.trim() || !form.slug.trim()) {
         notifyError("Enter tenant name and subdomain");
         setStep(0);
@@ -193,6 +199,7 @@ export function AdminTenantFormPage() {
           ? {}
           : {
               adminEmail: form.adminEmail,
+              adminPhone: form.adminPhone.trim(),
               adminFirstName: form.adminFirstName || "Admin",
               adminLastName: form.adminLastName || "User",
               adminPassword: form.adminPassword || undefined,
@@ -476,6 +483,17 @@ export function AdminTenantFormPage() {
                   <Grid size={{ xs: 12, md: 4 }}>
                     <TextField
                       fullWidth
+                      label="Admin Mobile"
+                      required
+                      placeholder="10-digit mobile"
+                      helperText="Required for mobile OTP login"
+                      value={form.adminPhone}
+                      onChange={(e) => setForm((p) => ({ ...p, adminPhone: e.target.value }))}
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, md: 4 }}>
+                    <TextField
+                      fullWidth
                       label="Admin First Name"
                       value={form.adminFirstName}
                       onChange={(e) => setForm((p) => ({ ...p, adminFirstName: e.target.value }))}
@@ -561,6 +579,12 @@ export function AdminTenantFormPage() {
                 ["Product Mode", form.productMode],
                 ["Distribution", form.distributionModel],
                 ["Primary Color", form.primaryColor],
+                ...(!isEdit
+                  ? [
+                      ["Admin Email", form.adminEmail],
+                      ["Admin Mobile", form.adminPhone],
+                    ]
+                  : []),
               ].map(([label, value]) => (
                 <Grid key={label} size={{ xs: 12, sm: 6, md: 4 }}>
                   <Typography variant="caption" color="text.secondary">
@@ -603,6 +627,10 @@ export function AdminTenantFormPage() {
                 }
                 if (step === 1 && !form.adminEmail.trim()) {
                   notifyError("Enter the institution admin email");
+                  return;
+                }
+                if (step === 1 && form.adminPhone.replace(/\D/g, "").length < 10) {
+                  notifyError("Enter a valid institution admin mobile number");
                   return;
                 }
                 setStep((s) => s + 1);

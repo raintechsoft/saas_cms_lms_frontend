@@ -10,6 +10,7 @@ import {
 import { ListPagination, paginateItems } from "../../../components/ListPagination";
 import { confirmDelete } from "../../../lib/confirm";
 import { apiRequest } from "../../../lib/api";
+import { notifySuccess } from "../../../lib/notify";
 import type { FeeGroup, FeeMaster, FeeSetup } from "./types";
 import { formatMoney, today } from "./utils";
 
@@ -135,13 +136,13 @@ export function SetupPanel({
     event.preventDefault();
     setSaving(true);
     try {
-      onError("");
       await apiRequest("/fees/types", token, {
         method: "POST",
         body: JSON.stringify({ name: typeName.trim(), code: typeCode.trim() || null }),
       });
       setTypeName("");
       setTypeCode("");
+      notifySuccess("Fee type created");
       await onSaved();
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : "Unable to create fee type");
@@ -159,7 +160,6 @@ export function SetupPanel({
     }
     setSaving(true);
     try {
-      onError("");
       const payload = { name: groupName.trim(), feeTypeIds: groupTypeIds };
       if (editingGroupId) {
         await apiRequest(`/fees/groups/${editingGroupId}`, token, {
@@ -174,6 +174,7 @@ export function SetupPanel({
       }
       resetGroupForm();
       setGroupPage(1);
+      notifySuccess(editingGroupId ? "Fee group updated" : "Fee group saved");
       await onSaved();
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : "Unable to save fee group");
@@ -192,6 +193,7 @@ export function SetupPanel({
     try {
       await apiRequest(`/fees/groups/${group.id}`, token, { method: "DELETE" });
       if (editingGroupId === group.id) resetGroupForm();
+      notifySuccess("Fee group deleted");
       await onSaved();
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : "Unable to delete fee group");
@@ -206,13 +208,13 @@ export function SetupPanel({
     }
     setSaving(true);
     try {
-      onError("");
       for (const item of masters) {
         await apiRequest(`/fees/masters/${item.id}/assign`, token, {
           method: "POST",
           body: JSON.stringify({}),
         });
       }
+      notifySuccess("Fee group assigned");
       await onSaved();
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : "Unable to assign fee group");
@@ -262,7 +264,6 @@ export function SetupPanel({
     }
     setSaving(true);
     try {
-      onError("");
       const fineType =
         master.fineUi === "NONE" ? "NONE" : master.fineUi === "DATE_RANGE" || master.fineUi === "PER_DAY" || master.fineUi === "FIXED"
           ? "FIXED"
@@ -292,6 +293,7 @@ export function SetupPanel({
       }
       resetMasterForm();
       setMasterPage(1);
+      notifySuccess(editingMasterId ? "Fee master updated" : "Fee master saved");
       await onSaved();
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : "Unable to save fee master");
@@ -310,6 +312,7 @@ export function SetupPanel({
     try {
       await apiRequest(`/fees/masters/${item.id}`, token, { method: "DELETE" });
       if (editingMasterId === item.id) resetMasterForm();
+      notifySuccess("Fee master deleted");
       await onSaved();
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : "Unable to delete fee master");
