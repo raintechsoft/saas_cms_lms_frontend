@@ -54,6 +54,7 @@ import { AdminPaymentGatewayPage } from "./pages/super-admin/AdminPaymentGateway
 import { PortalRedirect } from "./pages/student-parent/PortalRedirect";
 import { PortalShell } from "./pages/student-parent/PortalShell";
 import { PortalHomePage } from "./pages/student-parent/PortalHomePage";
+import { PortalNotificationsPage } from "./pages/student-parent/PortalNotificationsPage";
 import { PortalNoticesPage } from "./pages/student-parent/PortalNoticesPage";
 import { PortalAttendancePage } from "./pages/student-parent/PortalAttendancePage";
 import { PortalLeavePage } from "./pages/student-parent/PortalLeavePage";
@@ -70,6 +71,7 @@ function portalRoutes() {
     <>
       <Route index element={<PortalHomePage />} />
       <Route path="profile" element={<PortalProfilePage />} />
+      <Route path="notifications" element={<PortalNotificationsPage />} />
       <Route path="notices" element={<PortalNoticesPage />} />
       <Route path="attendance" element={<PortalAttendancePage />} />
       <Route path="leave" element={<PortalLeavePage />} />

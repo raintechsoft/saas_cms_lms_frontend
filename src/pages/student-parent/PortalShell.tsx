@@ -13,6 +13,7 @@ function getNavItems(basePath: string, productMode: PortalOverview["productMode"
   const items = [
     { to: basePath, label: "Home", icon: "HM", end: true },
     { to: `${basePath}/profile`, label: "Update Profile", icon: "PR", end: false },
+    { to: `${basePath}/notifications`, label: "Notifications", icon: "NO", end: false },
     { to: `${basePath}/notices`, label: "Notices", icon: "NT", end: false },
     { to: `${basePath}/attendance`, label: "Attendance", icon: "AT", end: false },
     { to: `${basePath}/leave`, label: "Leave", icon: "LV", end: false },

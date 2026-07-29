@@ -187,23 +187,31 @@ export function NotificationsPage() {
     setError("");
     setMessage("");
     try {
-      await apiRequest("/notifications", accessToken, {
-        method: "POST",
-        body: JSON.stringify({
-          title,
-          body,
-          type,
-          audience,
-          sendEmail: Boolean(sendEmail),
-        }),
-      });
+      const result = await apiRequest<{ pushSent?: number; pushFailed?: number }>(
+        "/notifications",
+        accessToken,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            title,
+            body,
+            type,
+            audience,
+            sendEmail: Boolean(sendEmail),
+          }),
+        },
+      );
 
       setTitle("");
       setBody("");
       setType("ANNOUNCEMENT");
       setAudience("ALL");
       setSendEmail(false);
-      setMessage("Notification sent");
+      const pushSent = result?.pushSent ?? 0;
+      const pushFailed = result?.pushFailed ?? 0;
+      setMessage(
+        `Notification sent · Push delivered ${pushSent}, failed ${pushFailed}`,
+      );
       await refreshNotifications();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to send notification");
