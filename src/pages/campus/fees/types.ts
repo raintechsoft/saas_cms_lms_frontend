@@ -5,6 +5,7 @@ export interface Named {
 
 export interface FeeType extends Named {
   code: string | null;
+  description?: string | null;
   isActive?: boolean;
 }
 
@@ -35,6 +36,8 @@ export interface FeeMaster {
   id: string;
   amount: string;
   dueDate: string;
+  createdAt?: string;
+  isCustom?: boolean;
   fineType?: "NONE" | "FIXED" | "PERCENTAGE";
   fineValue?: string;
   graceDays?: number;
@@ -146,6 +149,7 @@ export type FeesTab =
   | "carry"
   | "reminders"
   | "receipts"
+  | "custom"
   | "invoices"
   | "discounts"
   | "structure";

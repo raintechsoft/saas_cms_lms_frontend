@@ -79,6 +79,11 @@ export function headerForTab(tab: FeesTab) {
         title: "Receipts Management",
         description: "View and manage fee collection receipts generated for students.",
       };
+    case "custom":
+      return {
+        title: "Custom Fees",
+        description: "Configure and manage individual or group-based custom fee structures.",
+      };
     case "invoices":
       return {
         title: "Fees Management",

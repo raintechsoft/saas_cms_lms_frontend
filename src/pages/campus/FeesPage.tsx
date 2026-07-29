@@ -9,6 +9,7 @@ import { CmsFooter, CmsPage, CmsPageHeader, CmsTab, CmsTabs } from "../../compon
 import { apiRequest } from "../../lib/api";
 import { CarryPanel } from "./fees/CarryPanel";
 import { CollectPanel } from "./fees/CollectPanel";
+import { CustomFeesPanel } from "./fees/CustomFeesPanel";
 import { DuesPanel } from "./fees/DuesPanel";
 import { FeeInvoicesPanel } from "./fees/FeeInvoicesPanel";
 import { ReceiptsPanel } from "./fees/ReceiptsPanel";
@@ -25,13 +26,14 @@ const TABS: Array<[FeesTab, string]> = [
   ["carry", "Carry Forward"],
   ["reminders", "Auto Reminders"],
   ["receipts", "Receipts"],
+  ["custom", "Custom Fees"],
   ["invoices", "Fee Invoices"],
   ["discounts", "Discounts"],
   ["structure", "Structure Setup"],
 ];
 
 export function FeesPage() {
-  const { accessToken } = useAuth();
+  const { accessToken, user } = useAuth();
   const [setup, setSetup] = useState<FeeSetup | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [tab, setTab] = useState<FeesTab>("dues");
@@ -43,6 +45,7 @@ export function FeesPage() {
   const [error, setError] = useState("");
   const [showCollect, setShowCollect] = useState(false);
   const [duesExport, setDuesExport] = useState<(() => void) | null>(null);
+  const [customFocusSignal, setCustomFocusSignal] = useState(0);
 
   const students = useMemo(() => {
     const byId = new Map<string, Student>();
@@ -205,6 +208,44 @@ export function FeesPage() {
           </button>
         </>
       ) : null}
+      {tab === "custom" ? (
+        <>
+          <button
+            type="button"
+            className="nx-btn-secondary"
+            onClick={() =>
+              downloadCsv(
+                "custom-fees.csv",
+                ["name", "target", "amount", "status", "createdAt"],
+                (setup?.masters ?? [])
+                  .filter((master) => master.isCustom)
+                  .map((master) => [
+                    master.feeType.name,
+                    master.classSection
+                      ? `${master.classSection.academicClass.name} - ${master.classSection.section.name}`
+                      : (master.feeType.code ?? "").startsWith("CUSTOM_IND")
+                        ? "Individual Basis"
+                        : "All Students",
+                    String(master.amount),
+                    master.feeType.isActive === false ? "Inactive" : "Active",
+                    master.createdAt ? master.createdAt.slice(0, 10) : "",
+                  ]),
+              )
+            }
+          >
+            <DownloadOutlined sx={{ fontSize: 16 }} />
+            Export CSV
+          </button>
+          <button
+            type="button"
+            className="nx-btn-primary"
+            onClick={() => setCustomFocusSignal((value) => value + 1)}
+          >
+            <AddOutlined sx={{ fontSize: 16 }} />
+            New Category
+          </button>
+        </>
+      ) : null}
       {tab === "invoices" ? (
         <>
           <button type="button" className="nx-btn-secondary" onClick={exportReceipts}>
@@ -283,6 +324,8 @@ export function FeesPage() {
                   ? "Configure automated schedule for payment due notices and overdue reminders."
                   : tab === "receipts"
                     ? "View and manage fee collection receipts generated for students."
+                    : tab === "custom"
+                      ? "Configure and manage individual or group-based custom fee structures."
                     : tab === "invoices"
                       ? "Manage student billing, arrears, receipt generation, and automated financial reminders."
                       : tab === "discounts"
@@ -375,6 +418,17 @@ export function FeesPage() {
             onCollectClick={() => setShowCollect(true)}
           />
         )
+      ) : null}
+
+      {tab === "custom" && setup ? (
+        <CustomFeesPanel
+          setup={setup}
+          token={accessToken}
+          schoolName={user?.tenant?.name}
+          onSaved={load}
+          onError={setError}
+          focusCreateSignal={customFocusSignal}
+        />
       ) : null}
 
       {tab === "invoices" ? (
