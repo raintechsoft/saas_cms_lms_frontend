@@ -146,7 +146,7 @@ export function HrPage() {
         description="Maintain staff profiles, attendance, leave, earnings, deductions, and monthly payroll."
         action={<input className="input w-44" type="month" value={month} onChange={(e) => { setMonth(e.target.value); void load(e.target.value); }} />}
       />
-      <div className="mt-8 flex gap-2 overflow-x-auto border-b border-slate-200">
+      <div className="mt-3 flex shrink-0 gap-2 overflow-x-auto border-b border-slate-200">
         {(["staff", "attendance", "leave", "payroll", "setup"] as const).map((item) => (
           <button className={`tab ${tab === item ? "tab-active" : ""}`} key={item} onClick={() => setTab(item)}>
             {item === "staff" ? "Staff 360" : item === "attendance" ? "Attendance" : item === "leave" ? "Leave approval" : item === "payroll" ? "Payroll" : "HR setup & ratings"}
@@ -154,6 +154,7 @@ export function HrPage() {
         ))}
       </div>
 
+      <div className="page-scroll">
       {setup && tab === "staff" && (
         <StaffPanel setup={setup} users={users} token={accessToken} onSaved={load} onError={notifyError} />
       )}
@@ -219,6 +220,7 @@ export function HrPage() {
       {setup && tab === "setup" && (
         <HrSetupPanel setup={setup} token={accessToken} onSaved={load} onError={notifyError} />
       )}
+      </div>
     </main>
   );
 }

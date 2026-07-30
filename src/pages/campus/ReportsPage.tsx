@@ -338,6 +338,7 @@ export function ReportsPage() {
         }
       />
 
+      <div className="page-scroll">
       <section className="mt-6 overflow-hidden rounded-2xl border border-indigo-100 bg-gradient-to-r from-indigo-50 via-white to-sky-50 shadow-sm">
         <div className="flex items-center gap-2 border-b border-indigo-100/80 px-5 py-3">
           <span className="inline-flex size-8 items-center justify-center rounded-lg bg-indigo-100 text-indigo-700">
@@ -473,6 +474,7 @@ export function ReportsPage() {
         </div>
         {module && moduleData ? <ModuleDump module={module} data={moduleData} /> : null}
       </section>
+      </div>
     </main>
   );
 }

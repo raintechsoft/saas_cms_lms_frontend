@@ -552,10 +552,10 @@ export function AcademicsPage() {
   const selectedSection = setup?.sections.find((item) => item.id === group.sectionId);
 
   const stats = [
-    { label: "Classes", value: setup?.classes.length ?? 0, icon: SchoolOutlined, tint: "#6366f1" },
-    { label: "Sections", value: setup?.sections.length ?? 0, icon: GroupsOutlined, tint: "#0ea5e9" },
-    { label: "Subjects", value: setup?.subjects.length ?? 0, icon: MenuBookOutlined, tint: "#8b5cf6" },
-    { label: "Class sections", value: setup?.classSections.length ?? 0, icon: SchoolOutlined, tint: "#10b981" },
+    { label: "Classes", value: setup?.classes.length ?? 0, icon: SchoolOutlined, tint: "#6366f1", soft: "from-indigo-50 to-white" },
+    { label: "Sections", value: setup?.sections.length ?? 0, icon: GroupsOutlined, tint: "#0ea5e9", soft: "from-sky-50 to-white" },
+    { label: "Subjects", value: setup?.subjects.length ?? 0, icon: MenuBookOutlined, tint: "#8b5cf6", soft: "from-violet-50 to-white" },
+    { label: "Class sections", value: setup?.classSections.length ?? 0, icon: SchoolOutlined, tint: "#10b981", soft: "from-emerald-50 to-white" },
   ];
 
   async function addSession(event: FormEvent) {
@@ -831,7 +831,9 @@ export function AcademicsPage() {
     return (
       <main className="page-main">
         <PageHeader eyebrow="Academics" title="Academic structure" description="Loading…" />
-        <p className="mt-8 text-sm text-slate-500">Please wait…</p>
+        <div className="page-scroll">
+          <p className="mt-8 text-sm text-slate-500">Please wait…</p>
+        </div>
       </main>
     );
   }
@@ -855,20 +857,35 @@ export function AcademicsPage() {
         }
       />
 
+      <div className="page-scroll">
       <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {stats.map((stat) => {
           const Icon = stat.icon;
           return (
-            <div key={stat.label} className="nx-card flex items-center gap-3 px-4 py-3.5">
+            <div
+              key={stat.label}
+              className={`nx-card relative flex items-center gap-3.5 overflow-hidden bg-gradient-to-br ${stat.soft} px-4 py-4`}
+            >
               <span
-                className="grid size-10 place-items-center rounded-xl"
-                style={{ background: `${stat.tint}18`, color: stat.tint }}
+                aria-hidden
+                className="pointer-events-none absolute -right-3 -top-3 size-16 rounded-full opacity-30 blur-2xl"
+                style={{ background: stat.tint }}
+              />
+              <span
+                className="relative grid size-12 shrink-0 place-items-center rounded-2xl shadow-sm"
+                style={{
+                  background: `${stat.tint}1f`,
+                  color: stat.tint,
+                  boxShadow: `inset 0 0 0 1px ${stat.tint}33`,
+                }}
               >
-                <Icon sx={{ fontSize: 20 }} />
+                <Icon sx={{ fontSize: 24 }} />
               </span>
-              <div>
-                <p className="text-[22px] font-bold leading-none text-slate-900">{stat.value}</p>
-                <p className="mt-1 text-[12px] font-medium text-slate-500">{stat.label}</p>
+              <div className="relative min-w-0">
+                <p className="text-[26px] font-extrabold leading-none tracking-tight text-slate-900">
+                  {stat.value}
+                </p>
+                <p className="mt-1.5 text-[12.5px] font-semibold text-slate-500">{stat.label}</p>
               </div>
             </div>
           );
@@ -1985,6 +2002,8 @@ export function AcademicsPage() {
         ) : null}
 
       </section>
+
+      </div>
 
       {teacherModalOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">

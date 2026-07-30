@@ -6,7 +6,7 @@ import {
 } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
-import { CmsFooter, CmsPage, CmsPageHeader, CmsTab, CmsTabs } from "../../components/cms/CmsLayout";
+import { CmsFooter, CmsPage, CmsPageHeader, CmsScrollBody, CmsTab, CmsTabs } from "../../components/cms/CmsLayout";
 import { apiRequest } from "../../lib/api";
 import { notifyError, notifySuccess } from "../../lib/notify";
 import { CarryPanel } from "./fees/CarryPanel";
@@ -335,6 +335,7 @@ export function FeesPage() {
         ))}
       </CmsTabs>
 
+      <CmsScrollBody>
       {tab === "dues" && setup ? (
         <DuesPanel
           setup={setup}
@@ -454,6 +455,7 @@ export function FeesPage() {
       {!setup ? (
         <p className="mt-8 text-center text-sm text-slate-500">Loading fees…</p>
       ) : null}
+      </CmsScrollBody>
 
       <CmsFooter />
     </CmsPage>

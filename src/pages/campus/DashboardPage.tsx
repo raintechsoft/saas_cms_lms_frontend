@@ -17,7 +17,7 @@ import {
 } from "@mui/icons-material";
 import { Link } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
-import { CmsPage } from "../../components/cms/CmsLayout";
+import { CmsPage, CmsScrollBody } from "../../components/cms/CmsLayout";
 import { InitialsAvatar } from "../../components/InitialsAvatar";
 import { BarChart } from "../../components/charts/PremiumCharts";
 import { apiRequest, getDashboard, type DashboardResult } from "../../lib/api";
@@ -261,6 +261,7 @@ export function DashboardPage() {
 
   return (
     <CmsPage>
+      <CmsScrollBody>
       <div className="ov-stack">
 
         <section className="ov-hero">
@@ -669,6 +670,7 @@ export function DashboardPage() {
           </div>
         </footer>
       </div>
+      </CmsScrollBody>
     </CmsPage>
   );
 }

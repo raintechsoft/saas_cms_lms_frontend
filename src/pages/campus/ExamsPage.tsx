@@ -200,7 +200,7 @@ export function ExamsPage() {
         description="Configure grading, schedule subjects, enter marks, rank students, and publish results."
         action={<span className="badge">{setup?.currentSession?.name ?? "No current session"}</span>}
       />
-      <div className="mt-8 flex gap-2 overflow-x-auto border-b border-slate-200">
+      <div className="mt-3 flex shrink-0 gap-2 overflow-x-auto border-b border-slate-200">
         {(["setup", "schedule", "fields", "marks", "results"] as const).map((item) => (
           <button key={item} className={`tab ${tab === item ? "tab-active" : ""}`} onClick={() => setTab(item)}>
             {item === "setup" ? "Groups & exams" : item === "schedule" ? "Schedule & assign" : item === "fields" ? "Grades & fields" : item === "marks" ? "Marks entry" : "Results & rank"}
@@ -208,6 +208,7 @@ export function ExamsPage() {
         ))}
       </div>
 
+      <div className="page-scroll">
       {tab === "setup" && setup && (
         <ExamSetupPanel setup={setup} token={accessToken} onSaved={load} onError={notifyError} />
       )}
@@ -280,6 +281,7 @@ export function ExamsPage() {
           )}
         </section>
       )}
+      </div>
     </main>
   );
 }

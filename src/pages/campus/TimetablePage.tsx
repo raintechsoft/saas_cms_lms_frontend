@@ -123,6 +123,7 @@ export function TimetablePage() {
         description="Schedule periods with automatic class and teacher conflict checks."
         action={<span className="badge">{setup?.currentSession?.name ?? "No current session"}</span>}
       />
+      <div className="page-scroll">
       <section className={`mt-8 grid gap-5 ${canManage ? "lg:grid-cols-[360px_1fr]" : ""}`}>
         {canManage && <form className="card p-5" onSubmit={submit}>
           <h2 className="font-semibold">Add period</h2>
@@ -169,6 +170,7 @@ export function TimetablePage() {
           </div>
         </div>
       </section>
+      </div>
     </main>
   );
 }

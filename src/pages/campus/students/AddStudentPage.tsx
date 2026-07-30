@@ -12,7 +12,7 @@ import {
   PhoneOutlined,
 } from "@mui/icons-material";
 import { useAuth } from "../../../auth/AuthContext";
-import { CmsFooter, CmsPage, CmsPageHeader } from "../../../components/cms/CmsLayout";
+import { CmsFooter, CmsPage, CmsPageHeader, CmsScrollBody } from "../../../components/cms/CmsLayout";
 import { apiRequest } from "../../../lib/api";
 import { notifyError, notifySuccess } from "../../../lib/notify";
 import type { Setup } from "./types";
@@ -434,7 +434,8 @@ export function AddStudentPage() {
         }
       />
 
-      <form className="nx-card mt-5 overflow-hidden" onSubmit={submit}>
+      <CmsScrollBody>
+      <form className="nx-card overflow-hidden" onSubmit={submit}>
         <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
           <div>
             <h2 className="text-[16px] font-bold text-slate-900">
@@ -1099,6 +1100,7 @@ export function AddStudentPage() {
           )}
         </div>
       </form>
+      </CmsScrollBody>
 
       <CmsFooter />
     </CmsPage>

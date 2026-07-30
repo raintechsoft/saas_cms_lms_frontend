@@ -161,6 +161,7 @@ export function NoticesPage() {
         description="Publish announcements for students, parents, or everyone."
       />
 
+      <div className="page-scroll">
       {canManage && (
         <section className="card mt-8 p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -284,6 +285,7 @@ export function NoticesPage() {
           </>
         )}
       </section>
+      </div>
     </main>
   );
 }

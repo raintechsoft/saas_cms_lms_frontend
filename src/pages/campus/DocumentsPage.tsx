@@ -132,13 +132,14 @@ export function DocumentsPage() {
         description="Design reusable backgrounds and fields, then generate barcoded exam and identity documents."
         action={<span className="badge">{templates.length} templates</span>}
       />
-      <div className="mt-8 flex gap-2 border-b border-slate-200">
+      <div className="mt-3 flex shrink-0 gap-2 border-b border-slate-200">
         {(["templates", "generate", "history"] as const).map((item) => (
           <button className={`tab ${tab === item ? "tab-active" : ""}`} key={item} onClick={() => setTab(item)}>
             {item === "templates" ? "Design templates" : item === "generate" ? "Generate" : "Print history"}
           </button>
         ))}
       </div>
+      <div className="page-scroll">
       {tab === "templates" && <TemplatePanel templates={templates} token={accessToken} onSaved={load} onError={notifyError} />}
       {tab === "generate" && (
         <GeneratePanel templates={templates} students={students} staff={staff} exams={exams}
@@ -159,6 +160,7 @@ export function DocumentsPage() {
           {!documents.length && <p className="p-8 text-center text-sm text-slate-500">No generated documents yet.</p>}
         </div>
       )}
+      </div>
     </main>
   );
 }

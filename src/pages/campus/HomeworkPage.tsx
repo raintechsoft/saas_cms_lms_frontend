@@ -119,9 +119,10 @@ export function HomeworkPage() {
         description="Assign work, accept controlled submissions, evaluate, request resubmission, and track completion."
         action={<span className="badge">{setup?.homework.length ?? 0} assignments</span>}
       />
-      <div className="mt-8 flex gap-2 border-b border-slate-200">
+      <div className="mt-3 flex shrink-0 gap-2 border-b border-slate-200">
         {(["assignments", "evaluate", "reports"] as const).filter((item) => item === "assignments" || user?.permissions.includes("homework.evaluate")).map((item) => <button className={`tab ${tab === item ? "tab-active" : ""}`} key={item} onClick={() => { setTab(item); if (item === "reports") void runReport(); }}>{item === "assignments" ? "Assignments" : item === "evaluate" ? "Submissions & evaluation" : "Reports"}</button>)}
       </div>
+      <div className="page-scroll">
       {setup && tab === "assignments" && <AssignmentsPanel setup={setup} token={accessToken} canManage={Boolean(user?.permissions.includes("homework.manage"))} canSubmit={Boolean(user?.permissions.includes("homework.submit"))} onSaved={load} onError={notifyError} />}
       {setup && tab === "evaluate" && (
         <section className="mt-6">
@@ -141,6 +142,7 @@ export function HomeworkPage() {
       {tab === "reports" && (
         <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">{report.map((item) => <div className="card p-5" key={item.homework.id}><div className="flex justify-between gap-3"><p className="font-semibold">{item.homework.title}</p><span className="badge">{item.progressPercent}%</span></div><p className="mt-1 text-sm text-slate-500">{item.homework.classSection.academicClass.name} {item.homework.classSection.section.name} · {item.homework.classSubject.subject.name}</p><div className="mt-4 grid grid-cols-2 gap-2 text-sm"><span>Assigned {item.assigned}</span><span>Submitted {item.submitted}</span><span>Complete {item.completed}</span><span className={item.due ? "text-rose-600" : "text-emerald-700"}>Due {item.due}</span></div></div>)}</section>
       )}
+      </div>
     </main>
   );
 }

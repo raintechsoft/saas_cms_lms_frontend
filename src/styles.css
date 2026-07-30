@@ -171,42 +171,71 @@
     color: #1d4ed8;
   }
 
-  /* Full-width dense page body for campus screens */
+  /* Full-width dense page body for campus screens (desktop EXE mode) */
   .page-main {
     width: 100%;
-    padding: 0.75rem 1rem 1.25rem;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+    padding: 0.65rem 0.9rem 0.5rem;
+  }
+  .page-main > .nx-scroll-body,
+  .page-main > .page-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
   }
 
   /* ---- CMS desktop structure (Figma Nexus Tenant Admin) ---- */
   .nx-page {
     width: 100%;
-    min-height: calc(100vh - 4rem);
+    height: 100%;
     background: #f6f7f9;
+  }
+  .nx-page-fill {
+    height: 100%;
+    overflow: hidden;
   }
   .nx-page-inner {
     width: 100%;
     max-width: none;
     margin: 0;
-    padding: 0.85rem 1.15rem 1.25rem;
+    padding: 0.65rem 0.9rem 0.75rem;
+  }
+  .nx-page-inner-fill {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+    padding-bottom: 0.45rem;
+    gap: 0.55rem;
+  }
+  .nx-scroll-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
   }
   .nx-page-header {
     display: flex;
     flex-wrap: wrap;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
-    gap: 0.75rem;
+    gap: 0.5rem;
   }
   .nx-page-title {
-    font-size: 1.25rem;
+    font-size: 1.15rem;
     font-weight: 700;
     letter-spacing: -0.02em;
-    line-height: 1.25;
+    line-height: 1.2;
     color: #1d1f23;
   }
   .nx-page-desc {
-    margin-top: 0.15rem;
-    font-size: 0.8125rem;
-    line-height: 1.4;
+    margin-top: 0.1rem;
+    font-size: 0.75rem;
+    line-height: 1.35;
     color: #696d72;
   }
   .nx-page-actions {
@@ -220,7 +249,7 @@
   .nx-kpi-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.65rem;
+    gap: 0.75rem;
     margin-top: 0.85rem;
   }
   @media (min-width: 1280px) {
@@ -229,33 +258,55 @@
     }
   }
   .nx-kpi-card {
-    border-radius: 0.5rem;
-    border: 1px solid #e5e7eb;
-    background: white;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-    padding: 0.75rem 0.85rem;
+    position: relative;
+    overflow: hidden;
+    border-radius: 1rem;
+    border: 1px solid color-mix(in srgb, #c7d2fe 55%, #e5e7eb);
+    background: linear-gradient(165deg, #ffffff 0%, #f8f9ff 55%, #f3f5fb 100%);
+    box-shadow:
+      0 1px 2px rgba(99, 102, 241, 0.05),
+      0 8px 20px rgba(15, 23, 42, 0.04);
+    padding: 1rem 1.05rem;
+    transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+  }
+  .nx-kpi-card::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    height: 3px;
+    background: linear-gradient(90deg, #6366f1, #a78bfa, #38bdf8);
+    opacity: 0.85;
+  }
+  .nx-kpi-card:hover {
+    transform: translateY(-2px);
+    border-color: color-mix(in srgb, #818cf8 45%, #e5e7eb);
+    box-shadow:
+      0 4px 10px rgba(99, 102, 241, 0.08),
+      0 14px 28px rgba(15, 23, 42, 0.06);
   }
   .nx-kpi-icon {
     display: grid;
     place-items: center;
-    width: 2.15rem;
-    height: 2.15rem;
-    border-radius: 0.5rem;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 0.75rem;
     flex-shrink: 0;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.55);
   }
   .nx-kpi-value {
-    margin-top: 0.5rem;
-    font-size: 1.25rem;
-    font-weight: 700;
-    letter-spacing: -0.02em;
+    margin-top: 0.65rem;
+    font-size: 1.45rem;
+    font-weight: 800;
+    letter-spacing: -0.03em;
     line-height: 1;
-    color: #1d1f23;
+    color: #111827;
   }
   .nx-kpi-label {
-    margin-top: 0.25rem;
-    font-size: 0.7rem;
-    font-weight: 500;
-    color: #696d72;
+    margin-top: 0.35rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #64748b;
   }
 
   /* Underline tabs (Directory / Admissions / Import / Masters) — matches Figma */
@@ -324,10 +375,20 @@
 
   /* ---- "Nexus" design system: indigo redesign ---- */
   .nx-card {
-    border-radius: 0.5rem;
-    border: 1px solid #e5e7eb;
-    background: white;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.08);
+    position: relative;
+    border-radius: 1rem;
+    border: 1px solid color-mix(in srgb, #c7d2fe 40%, #e5e7eb);
+    background: linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);
+    box-shadow:
+      0 1px 2px rgba(99, 102, 241, 0.04),
+      0 8px 22px rgba(15, 23, 42, 0.04);
+    transition: box-shadow 160ms ease, border-color 160ms ease, transform 160ms ease;
+  }
+  .nx-card:hover {
+    border-color: color-mix(in srgb, #a5b4fc 50%, #e5e7eb);
+    box-shadow:
+      0 2px 6px rgba(99, 102, 241, 0.06),
+      0 12px 28px rgba(15, 23, 42, 0.05);
   }
 
   .nx-input {
@@ -583,14 +644,35 @@
     }
   }
   .ov-kpi {
+    position: relative;
+    overflow: hidden;
     display: flex;
     flex-direction: column;
-    min-height: 7.5rem;
-    border-radius: 0.75rem;
-    border: 1px solid #e8eaef;
-    background: #fff;
-    padding: 1rem 1.05rem;
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 12px rgba(15, 23, 42, 0.03);
+    min-height: 7.75rem;
+    border-radius: 1rem;
+    border: 1px solid color-mix(in srgb, #c7d2fe 50%, #e8eaef);
+    background: linear-gradient(165deg, #ffffff 0%, #f8f9ff 60%, #f3f5fb 100%);
+    padding: 1.05rem 1.1rem;
+    box-shadow:
+      0 1px 2px rgba(99, 102, 241, 0.05),
+      0 10px 24px rgba(15, 23, 42, 0.04);
+    transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+  }
+  .ov-kpi::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    height: 3px;
+    background: linear-gradient(90deg, #6366f1, #a78bfa, #38bdf8);
+    opacity: 0.8;
+  }
+  .ov-kpi:hover {
+    transform: translateY(-2px);
+    border-color: color-mix(in srgb, #818cf8 45%, #e8eaef);
+    box-shadow:
+      0 4px 12px rgba(99, 102, 241, 0.08),
+      0 16px 32px rgba(15, 23, 42, 0.06);
   }
   .ov-kpi-top {
     display: flex;
@@ -601,22 +683,23 @@
   .ov-kpi-icon {
     display: grid;
     place-items: center;
-    width: 2.35rem;
-    height: 2.35rem;
-    border-radius: 0.65rem;
+    width: 2.65rem;
+    height: 2.65rem;
+    border-radius: 0.8rem;
     flex-shrink: 0;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.55);
   }
   .ov-kpi-value {
-    margin-top: 0.75rem;
-    font-size: 1.5rem;
-    font-weight: 700;
+    margin-top: 0.8rem;
+    font-size: 1.6rem;
+    font-weight: 800;
     letter-spacing: -0.03em;
     line-height: 1;
     color: #111827;
   }
   .ov-kpi-label {
     margin-top: 0.45rem;
-    font-size: 0.75rem;
+    font-size: 0.78rem;
     font-weight: 600;
     color: #4b5563;
   }
@@ -657,11 +740,20 @@
     display: flex;
     flex-direction: column;
     min-height: 18rem;
-    border-radius: 0.75rem;
-    border: 1px solid #e8eaef;
-    background: #fff;
+    border-radius: 1rem;
+    border: 1px solid color-mix(in srgb, #c7d2fe 45%, #e8eaef);
+    background: linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);
     padding: 1.1rem 1.15rem;
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 12px rgba(15, 23, 42, 0.03);
+    box-shadow:
+      0 1px 2px rgba(99, 102, 241, 0.04),
+      0 10px 24px rgba(15, 23, 42, 0.04);
+    transition: box-shadow 160ms ease, border-color 160ms ease, transform 160ms ease;
+  }
+  .ov-widget:hover {
+    border-color: color-mix(in srgb, #a5b4fc 45%, #e8eaef);
+    box-shadow:
+      0 2px 8px rgba(99, 102, 241, 0.07),
+      0 14px 30px rgba(15, 23, 42, 0.05);
   }
   .ov-widget-head {
     display: flex;
@@ -720,10 +812,12 @@
     text-align: right;
   }
   .ov-panel {
-    border-radius: 0.75rem;
-    border: 1px solid #e8eaef;
-    background: #fff;
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 12px rgba(15, 23, 42, 0.03);
+    border-radius: 1rem;
+    border: 1px solid color-mix(in srgb, #c7d2fe 45%, #e8eaef);
+    background: linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);
+    box-shadow:
+      0 1px 2px rgba(99, 102, 241, 0.04),
+      0 10px 24px rgba(15, 23, 42, 0.04);
     overflow: hidden;
   }
   .ov-panel-bar {

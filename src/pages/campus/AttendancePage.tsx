@@ -113,7 +113,7 @@ export function AttendancePage() {
         description="Mark day or period attendance, approve leave, and review summaries."
         action={setup && <span className="badge">{setup.attendanceType.replaceAll("_", " ")}</span>}
       />
-      <div className="mt-8 flex gap-2 border-b border-slate-200">
+      <div className="mt-3 flex shrink-0 gap-2 border-b border-slate-200">
         {(["mark", "leave", "reports"] as const).map((item) => (
           <button key={item} className={`tab ${tab === item ? "tab-active" : ""}`} onClick={() => setTab(item)}>
             {item === "mark" ? "Mark attendance" : item === "leave" ? "Leave approval" : "Reports"}
@@ -121,6 +121,7 @@ export function AttendancePage() {
         ))}
       </div>
 
+      <div className="page-scroll">
       {tab === "mark" && (
         <section className="mt-6">
           <div className="card grid gap-4 p-5 md:grid-cols-3">
@@ -183,6 +184,7 @@ export function AttendancePage() {
       {tab === "reports" && setup && (
         <AttendanceReportPanel setup={setup} token={accessToken} onError={notifyError} />
       )}
+      </div>
     </main>
   );
 }

@@ -6,7 +6,7 @@ import {
 } from "@mui/icons-material";
 import { useAuth } from "../../auth/AuthContext";
 import { ListPagination, paginateItems } from "../../components/ListPagination";
-import { CmsFooter, CmsPage, CmsPageHeader } from "../../components/cms/CmsLayout";
+import { CmsFooter, CmsPage, CmsPageHeader, CmsScrollBody } from "../../components/cms/CmsLayout";
 import { apiRequest } from "../../lib/api";
 import { notifyError, notifySuccess } from "../../lib/notify";
 import { useSearchParams } from "react-router-dom";
@@ -346,6 +346,7 @@ export function NotificationsPage() {
         description="Manage communications and send overdue fee reminders."
       />
 
+      <CmsScrollBody>
       <section className="mt-8 grid gap-6 lg:grid-cols-[1fr_420px]">
         <div className="nx-card p-5">
           <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-4">
@@ -626,6 +627,7 @@ export function NotificationsPage() {
           ) : null}
         </aside>
       </section>
+      </CmsScrollBody>
 
       <CmsFooter />
     </CmsPage>

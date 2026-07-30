@@ -11,7 +11,7 @@ import {
   ViewListOutlined,
 } from "@mui/icons-material";
 import { useAuth } from "../../../auth/AuthContext";
-import { CmsFooter, CmsPage, CmsTabs, CmsTab } from "../../../components/cms/CmsLayout";
+import { CmsFooter, CmsPage, CmsScrollBody, CmsTabs, CmsTab } from "../../../components/cms/CmsLayout";
 import { InitialsAvatar } from "../../../components/InitialsAvatar";
 import { apiRequest } from "../../../lib/api";
 import { notifyError, notifySuccess } from "../../../lib/notify";
@@ -160,7 +160,7 @@ export function StudentProfilePage() {
 
   return (
     <CmsPage>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <div className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-3">
         <button className="nx-btn-secondary" type="button" onClick={() => navigate("/students")}>
           <ArrowBackOutlined sx={{ fontSize: 16 }} /> Back to directory
         </button>
@@ -169,6 +169,7 @@ export function StudentProfilePage() {
         )}
       </div>
 
+      <CmsScrollBody>
       {credentials.length > 0 && (
         <div className="mb-4 rounded-xl border border-indigo-200 bg-indigo-50 p-4">
           <p className="text-[13px] font-bold text-indigo-900">Portal login credentials</p>
@@ -256,6 +257,7 @@ export function StudentProfilePage() {
       )}
 
       {loading && !detail && <p className="mt-10 text-center text-sm text-slate-500">Loading…</p>}
+      </CmsScrollBody>
 
       <CmsFooter />
     </CmsPage>

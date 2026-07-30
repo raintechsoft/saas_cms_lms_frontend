@@ -159,10 +159,10 @@ export function StaffProfilePage() {
     </form>
   );
 
-  return (
-    <div className={isOps ? "mx-auto max-w-3xl space-y-6" : "page-main space-y-3"}>
-      {Header}
-      {isOps ? (
+  if (isOps) {
+    return (
+      <div className="mx-auto max-w-3xl space-y-6">
+        {Header}
         <div className="space-y-6">
           <OpsPanel title="Profile photo" code="07">
             {photoBody}
@@ -171,12 +171,17 @@ export function StaffProfilePage() {
             {formBody}
           </OpsPanel>
         </div>
-      ) : (
-        <div className="space-y-3">
-          <PanelCard title="Profile photo">{photoBody}</PanelCard>
-          <PanelCard title="Personal details">{formBody}</PanelCard>
-        </div>
-      )}
-    </div>
+      </div>
+    );
+  }
+
+  return (
+    <main className="page-main">
+      {Header}
+      <div className="page-scroll space-y-3">
+        <PanelCard title="Profile photo">{photoBody}</PanelCard>
+        <PanelCard title="Personal details">{formBody}</PanelCard>
+      </div>
+    </main>
   );
 }

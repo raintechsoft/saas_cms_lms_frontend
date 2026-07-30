@@ -19,7 +19,7 @@ import {
   VerifiedUserOutlined,
 } from "@mui/icons-material";
 import { useAuth } from "../../auth/AuthContext";
-import { CmsFooter, CmsPage, CmsPageHeader, CmsTab, CmsTabs } from "../../components/cms/CmsLayout";
+import { CmsFooter, CmsPage, CmsPageHeader, CmsScrollBody, CmsTab, CmsTabs } from "../../components/cms/CmsLayout";
 import { InitialsAvatar } from "../../components/InitialsAvatar";
 import { apiRequest } from "../../lib/api";
 import { notifyError, notifySuccess } from "../../lib/notify";
@@ -469,6 +469,7 @@ export function StudentsPage() {
         ))}
       </CmsTabs>
 
+      <CmsScrollBody>
       {tab === "directory" ? (
         <section className="mt-4">
           <div className="nx-card overflow-hidden">
@@ -762,6 +763,7 @@ export function StudentsPage() {
           onMessage={notifySuccess}
         />
       ) : null}
+      </CmsScrollBody>
 
       <CmsFooter />
     </CmsPage>

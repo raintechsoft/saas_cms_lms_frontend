@@ -39,7 +39,8 @@ export function ErpSettingsPage() {
   };
   return <main className="page-main">
     <PageHeader eyebrow="ERP settings" title="CMS control center" description="Configure providers, payment methods, panel modules, fields, holidays, documents, and recoverable tenant settings." />
-    <div className="mt-8 flex flex-wrap gap-2 border-b border-slate-200">{(["integrations", "access", "fields", "calendar", "documents", "backups"] as Tab[]).map((item) => <button className={`tab ${tab === item ? "tab-active" : ""}`} key={item} onClick={() => setTab(item)}>{item === "access" ? "Modules & languages" : item[0].toUpperCase() + item.slice(1)}</button>)}</div>
+    <div className="mt-3 flex shrink-0 flex-wrap gap-2 border-b border-slate-200">{(["integrations", "access", "fields", "calendar", "documents", "backups"] as Tab[]).map((item) => <button className={`tab ${tab === item ? "tab-active" : ""}`} key={item} onClick={() => setTab(item)}>{item === "access" ? "Modules & languages" : item[0].toUpperCase() + item.slice(1)}</button>)}</div>
+    <div className="page-scroll">
     {!setup ? <p className="mt-8 text-sm text-slate-500">Loading ERP settings…</p> : <>
       {tab === "integrations" && <IntegrationPanel setup={setup} token={accessToken} run={run} />}
       {tab === "access" && <AccessPanel setup={setup} token={accessToken} run={run} />}
@@ -48,6 +49,7 @@ export function ErpSettingsPage() {
       {tab === "documents" && <DocumentsPanel setup={setup} token={accessToken} run={run} />}
       {tab === "backups" && <BackupsPanel setup={setup} token={accessToken} run={run} />}
     </>}
+    </div>
   </main>;
 }
 

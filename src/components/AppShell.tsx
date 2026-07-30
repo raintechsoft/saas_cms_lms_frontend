@@ -71,26 +71,6 @@ function staffPanelTitle(roles: string[] = []) {
   return "Staff";
 }
 
-const navIcons: Record<string, NavIcon> = {
-  "/dashboard": DashboardOutlined,
-  "/profile": PersonOutlined,
-  "/students": SchoolOutlined,
-  "/academics": MenuBookOutlined,
-  "/attendance": EventNoteOutlined,
-  "/notices": CampaignOutlined,
-  "/notifications": NotificationsOutlined,
-  "/exams": QuizOutlined,
-  "/timetable": CalendarMonthOutlined,
-  "/homework": AssignmentOutlined,
-  "/fees": PaymentsOutlined,
-  "/hr": WorkOutlineOutlined,
-  "/documents": BadgeOutlined,
-  "/erp": TuneOutlined,
-  "/reports": SummarizeOutlined,
-  "/users": GroupsOutlined,
-  "/settings": SettingsOutlined,
-};
-
 const SECTION_LABEL: Record<Extract<NavSection, "cms" | "lms" | "management">, string> = {
   cms: "CMS Modules",
   lms: "LMS Modules",
@@ -128,6 +108,87 @@ function useBreadcrumb() {
   }, [location.pathname, user?.tenant?.productMode]);
 }
 
+const navIcons: Record<string, NavIcon> = {
+  "/dashboard": DashboardOutlined,
+  "/profile": PersonOutlined,
+  "/students": SchoolOutlined,
+  "/academics": MenuBookOutlined,
+  "/attendance": EventNoteOutlined,
+  "/notices": CampaignOutlined,
+  "/notifications": NotificationsOutlined,
+  "/exams": QuizOutlined,
+  "/timetable": CalendarMonthOutlined,
+  "/homework": AssignmentOutlined,
+  "/fees": PaymentsOutlined,
+  "/hr": WorkOutlineOutlined,
+  "/documents": BadgeOutlined,
+  "/erp": TuneOutlined,
+  "/reports": SummarizeOutlined,
+  "/users": GroupsOutlined,
+  "/settings": SettingsOutlined,
+};
+
+/** Soft tinted chips so each module is easy to spot at a glance. */
+const navIconTone: Record<string, string> = {
+  "/dashboard": "bg-indigo-100 text-indigo-600",
+  "/notifications": "bg-violet-100 text-violet-600",
+  "/students": "bg-sky-100 text-sky-700",
+  "/academics": "bg-blue-100 text-blue-700",
+  "/attendance": "bg-amber-100 text-amber-700",
+  "/notices": "bg-orange-100 text-orange-700",
+  "/exams": "bg-fuchsia-100 text-fuchsia-700",
+  "/timetable": "bg-cyan-100 text-cyan-700",
+  "/homework": "bg-teal-100 text-teal-700",
+  "/fees": "bg-emerald-100 text-emerald-700",
+  "/hr": "bg-slate-200 text-slate-700",
+  "/documents": "bg-rose-100 text-rose-700",
+  "/erp": "bg-purple-100 text-purple-700",
+  "/reports": "bg-indigo-100 text-indigo-700",
+  "/users": "bg-blue-100 text-blue-700",
+  "/settings": "bg-slate-200 text-slate-600",
+  "/profile": "bg-slate-100 text-slate-600",
+};
+
+const sectionTone: Record<string, string> = {
+  "CMS Modules": "bg-indigo-100 text-indigo-700",
+  "LMS Modules": "bg-cyan-100 text-cyan-700",
+};
+
+function NavIconBadge({
+  to,
+  Icon,
+  active = false,
+  solidActive = false,
+  size = "md",
+}: {
+  to: string;
+  Icon: NavIcon;
+  active?: boolean;
+  /** Filled primary row (Overview) — white icon on solid bg */
+  solidActive?: boolean;
+  size?: "sm" | "md";
+}) {
+  const box = size === "md" ? "size-8" : "size-7";
+  const font = size === "md" ? 20 : 18;
+  if (solidActive && active) {
+    return (
+      <span className={`inline-grid ${box} shrink-0 place-items-center rounded-lg bg-white/20 text-white`}>
+        <Icon sx={{ fontSize: font }} />
+      </span>
+    );
+  }
+  const tone = navIconTone[to] ?? "bg-slate-100 text-slate-600";
+  return (
+    <span
+      className={`inline-grid ${box} shrink-0 place-items-center rounded-lg ${tone} ${
+        active ? "ring-2 ring-indigo-200/80" : ""
+      }`}
+    >
+      <Icon sx={{ fontSize: font }} />
+    </span>
+  );
+}
+
 function NavGroup({
   label,
   items,
@@ -145,17 +206,20 @@ function NavGroup({
   }, [active]);
   if (!items.length) return null;
   const GroupIcon = icons[items[0].to] ?? GridViewRounded;
+  const groupTone = sectionTone[label] ?? "bg-slate-100 text-slate-600";
 
   return (
     <div>
       <button
         type="button"
         onClick={() => setOpen((current) => !current)}
-        className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-semibold transition ${
-          active ? "text-indigo-700" : "text-slate-500 hover:bg-slate-50 hover:text-slate-700"
+        className={`flex w-full items-center gap-2.5 rounded-xl px-2 py-2 text-[13px] font-semibold transition ${
+          active ? "bg-white/80 text-indigo-800 shadow-sm" : "text-slate-600 hover:bg-white/60 hover:text-slate-800"
         }`}
       >
-        <GroupIcon sx={{ fontSize: 19 }} className="shrink-0" />
+        <span className={`inline-grid size-8 shrink-0 place-items-center rounded-lg ${groupTone}`}>
+          <GroupIcon sx={{ fontSize: 20 }} />
+        </span>
         <span className="flex-1 text-left">{label}</span>
         <ExpandMoreOutlined
           sx={{ fontSize: 18 }}
@@ -163,7 +227,7 @@ function NavGroup({
         />
       </button>
       {open && (
-        <div className="ml-4 mt-0.5 space-y-0.5 border-l border-slate-200 pl-3">
+        <div className="ml-3 mt-1 space-y-1 border-l-2 border-indigo-100 pl-2.5">
           {items.map(({ to, label: itemLabel }) => {
             const Icon = icons[to] ?? GridViewRounded;
             return (
@@ -171,15 +235,19 @@ function NavGroup({
                 key={to}
                 to={to}
                 className={({ isActive }) =>
-                  `relative flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-[13px] font-medium transition ${
+                  `relative flex items-center gap-2.5 rounded-xl px-2 py-2 text-[13px] font-medium transition ${
                     isActive
-                      ? "bg-indigo-50 text-[#4b41e1] before:absolute before:inset-y-1 before:left-0 before:w-[3px] before:rounded-full before:bg-[#4b41e1]"
-                      : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
+                      ? "bg-white text-[#4b41e1] shadow-sm before:absolute before:inset-y-1.5 before:left-0 before:w-[3px] before:rounded-full before:bg-[#4b41e1]"
+                      : "text-slate-600 hover:bg-white/70 hover:text-slate-900"
                   }`
                 }
               >
-                <Icon sx={{ fontSize: 17 }} className="shrink-0" />
-                <span className="truncate">{itemLabel}</span>
+                {({ isActive }) => (
+                  <>
+                    <NavIconBadge to={to} Icon={Icon} active={isActive} size="md" />
+                    <span className="truncate">{itemLabel}</span>
+                  </>
+                )}
               </NavLink>
             );
           })}
@@ -417,25 +485,25 @@ export function AppShell() {
   const fullName = `${user.firstName} ${user.lastName ?? ""}`.trim();
 
   return (
-    <div className="min-h-screen bg-[#f6f7f9] text-[#1d1f23] lg:flex">
-      <aside className="border-b border-[#dfe1e4] bg-white lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col lg:border-b-0 lg:border-r lg:border-[#dfe1e4]">
-        <div className="flex h-16 items-center gap-2.5 border-b border-[#eaecee] px-4">
+    <div className="flex h-screen min-h-0 bg-[#f6f7f9] text-[#1d1f23] lg:flex">
+      <aside className="border-b border-indigo-100/80 bg-gradient-to-b from-[#eef1fb] via-[#f3f5fb] to-[#f7f8fc] lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col lg:border-b-0 lg:border-r lg:border-indigo-100/80">
+        <div className="flex h-16 items-center gap-2.5 border-b border-indigo-100/70 px-4">
           {branding.logoUrl ? (
             <img src={branding.logoUrl} alt="" className="size-9 rounded-lg object-cover" />
           ) : (
-            <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-[#6366f1] text-white">
+            <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-[#6366f1] text-white shadow-sm shadow-indigo-200">
               <GridViewRounded sx={{ fontSize: 20 }} />
             </div>
           )}
           <div className="min-w-0">
             <p className="truncate text-[14px] font-bold leading-tight text-[#1d1f23]">{schoolName}</p>
-            <p className="truncate text-[10px] font-medium text-[#9ca3af]">{panelTitle} panel</p>
+            <p className="truncate text-[10px] font-medium text-indigo-400/90">{panelTitle} panel</p>
           </div>
         </div>
 
         <nav className="flex flex-1 flex-col gap-4 overflow-y-auto px-3 py-4">
           <div className="space-y-0.5">
-            <p className="px-2.5 pb-1 text-[10px] font-bold uppercase tracking-wider text-[#9ca3af]">Dashboard</p>
+            <p className="px-2.5 pb-1 text-[10px] font-bold uppercase tracking-wider text-indigo-400/80">Dashboard</p>
             {topLinks.map(({ to, label }) => {
               const Icon = navIcons[to] ?? DashboardOutlined;
               return (
@@ -443,15 +511,19 @@ export function AppShell() {
                   key={to}
                   to={to}
                   className={({ isActive }) =>
-                    `relative flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-semibold transition ${
+                    `relative flex items-center gap-2.5 rounded-xl px-2 py-2 text-[13px] font-semibold transition ${
                       isActive
                         ? "bg-[#6366f1] text-white shadow-sm shadow-indigo-200"
-                        : "text-slate-600 hover:bg-slate-50"
+                        : "text-slate-700 hover:bg-white/70"
                     }`
                   }
                 >
-                  <Icon sx={{ fontSize: 19 }} className="shrink-0" />
-                  {label}
+                  {({ isActive }) => (
+                    <>
+                      <NavIconBadge to={to} Icon={Icon} active={isActive} solidActive size="md" />
+                      {label}
+                    </>
+                  )}
                 </NavLink>
               );
             })}
@@ -462,7 +534,7 @@ export function AppShell() {
 
           {managementLinks.length > 0 && (
             <div className="space-y-0.5">
-              <p className="px-2.5 pb-1 text-[10px] font-bold uppercase tracking-wider text-[#9ca3af]">Management</p>
+              <p className="px-2.5 pb-1 text-[10px] font-bold uppercase tracking-wider text-indigo-400/80">Management</p>
               {managementLinks.map(({ to, label }) => {
                 const Icon = navIcons[to] ?? SettingsOutlined;
                 return (
@@ -470,15 +542,19 @@ export function AppShell() {
                     key={to}
                     to={to}
                     className={({ isActive }) =>
-                      `relative flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-[13px] font-medium transition ${
+                      `relative flex items-center gap-2.5 rounded-xl px-2 py-2 text-[13px] font-medium transition ${
                         isActive
-                          ? "bg-indigo-50 text-[#4b41e1] before:absolute before:inset-y-1 before:left-0 before:w-[3px] before:rounded-full before:bg-[#4b41e1]"
-                          : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"
+                          ? "bg-white text-[#4b41e1] shadow-sm before:absolute before:inset-y-1.5 before:left-0 before:w-[3px] before:rounded-full before:bg-[#4b41e1]"
+                          : "text-slate-600 hover:bg-white/70 hover:text-slate-900"
                       }`
                     }
                   >
-                    <Icon sx={{ fontSize: 18 }} className="shrink-0" />
-                    {label}
+                    {({ isActive }) => (
+                      <>
+                        <NavIconBadge to={to} Icon={Icon} active={isActive} size="md" />
+                        {label}
+                      </>
+                    )}
                   </NavLink>
                 );
               })}
@@ -486,7 +562,7 @@ export function AppShell() {
           )}
         </nav>
 
-        <div className="relative border-t border-slate-100 p-2.5">
+        <div className="relative border-t border-indigo-100/70 bg-white/40 p-2.5 backdrop-blur-[2px]">
           {accountMenuOpen && (
             <div className="absolute inset-x-2.5 bottom-[calc(100%+4px)] rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg">
               <Link
@@ -520,23 +596,32 @@ export function AppShell() {
         </div>
       </aside>
 
-      <div className="min-w-0 flex-1 lg:ml-64">
-        <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-3 border-b border-[#dfe1e4] bg-[#f6f7f9] px-5 lg:px-6">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden lg:ml-64">
+        <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center justify-between gap-3 border-b border-indigo-100/80 bg-gradient-to-r from-[#eef1fb] via-[#f3f5fb] to-[#f7f8fc] px-5 backdrop-blur-sm lg:px-6">
           <div className="flex min-w-0 items-center gap-1.5 text-[13px]">
             {breadcrumb.map((crumb, index) => (
               <span key={`${crumb}-${index}`} className="flex items-center gap-1.5">
-                {index > 0 && <span className="text-slate-300">&gt;</span>}
-                <span className={index === breadcrumb.length - 1 ? "font-semibold text-[#1d1f23]" : "text-[#696d72]"}>
+                {index > 0 && <span className="text-indigo-300">&gt;</span>}
+                <span
+                  className={
+                    index === breadcrumb.length - 1
+                      ? "font-semibold text-[#1d1f23]"
+                      : "font-medium text-indigo-400/90"
+                  }
+                >
                   {crumb}
                 </span>
               </span>
             ))}
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             <div className="relative hidden sm:block" ref={searchRef}>
-              <SearchOutlined sx={{ fontSize: 18 }} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <SearchOutlined
+                sx={{ fontSize: 18 }}
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-indigo-400"
+              />
               <input
-                className="nx-input w-72 !rounded-lg !border-[#dfe1e4] !bg-white pl-9"
+                className="nx-input w-72 !rounded-xl !border-indigo-100 !bg-white/80 pl-9 shadow-sm shadow-indigo-100/40 placeholder:text-slate-400"
                 placeholder="Search students, fees, logs..."
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
@@ -545,7 +630,7 @@ export function AppShell() {
                 }}
               />
               {searchOpen && (
-                <div className="absolute right-0 z-30 mt-2 w-80 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
+                <div className="absolute right-0 z-30 mt-2 w-80 overflow-hidden rounded-xl border border-indigo-100 bg-white shadow-lg shadow-indigo-100/50">
                   {searchLoading ? (
                     <p className="px-3 py-3 text-center text-[12px] text-slate-500">Searching...</p>
                   ) : searchResults.students.length === 0 && searchResults.payments.length === 0 ? (
@@ -554,7 +639,7 @@ export function AppShell() {
                     <div className="max-h-96 overflow-y-auto py-1">
                       {searchResults.students.length > 0 ? (
                         <div>
-                          <p className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                          <p className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-sky-500">
                             Students
                           </p>
                           {searchResults.students.map((student) => (
@@ -562,7 +647,7 @@ export function AppShell() {
                               key={student.id}
                               type="button"
                               onClick={() => goToStudent(student.id)}
-                              className="flex w-full flex-col gap-0.5 px-3 py-2 text-left hover:bg-indigo-50"
+                              className="flex w-full flex-col gap-0.5 px-3 py-2 text-left hover:bg-sky-50"
                             >
                               <span className="truncate text-[13px] font-semibold text-slate-800">
                                 {studentDisplayName(student)}
@@ -576,7 +661,7 @@ export function AppShell() {
                       ) : null}
                       {searchResults.payments.length > 0 ? (
                         <div>
-                          <p className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                          <p className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-emerald-500">
                             Payments
                           </p>
                           {searchResults.payments.map((payment) => (
@@ -584,7 +669,7 @@ export function AppShell() {
                               key={payment.id}
                               type="button"
                               onClick={goToFees}
-                              className="flex w-full flex-col gap-0.5 px-3 py-2 text-left hover:bg-indigo-50"
+                              className="flex w-full flex-col gap-0.5 px-3 py-2 text-left hover:bg-emerald-50"
                             >
                               <span className="truncate text-[13px] font-semibold text-slate-800">
                                 {payment.receiptNumber || payment.paymentId || payment.id}
@@ -609,14 +694,16 @@ export function AppShell() {
                 type="button"
                 aria-label="Notifications"
                 onClick={onBellClick}
-                className="relative grid size-9 place-items-center rounded-lg text-slate-500 transition hover:bg-white"
+                className="relative inline-grid size-9 place-items-center rounded-xl bg-violet-100 text-violet-600 shadow-sm shadow-violet-100 transition hover:bg-violet-200/80"
               >
-                <BellIcon sx={{ fontSize: 21 }} />
-                {unreadCount > 0 ? <span className="absolute right-2 top-2 size-1.5 rounded-full bg-rose-500" /> : null}
+                <BellIcon sx={{ fontSize: 20 }} />
+                {unreadCount > 0 ? (
+                  <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-rose-500 ring-2 ring-[#eef1fb]" />
+                ) : null}
               </button>
               {bellOpen && (
-                <div className="absolute right-0 mt-3 w-[380px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
-                  <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-3 py-2">
+                <div className="absolute right-0 mt-3 w-[380px] overflow-hidden rounded-xl border border-indigo-100 bg-white shadow-lg shadow-indigo-100/50">
+                  <div className="flex items-center justify-between gap-3 border-b border-indigo-50 bg-gradient-to-r from-violet-50 to-white px-3 py-2">
                     <p className="text-[12px] font-semibold text-slate-800">Notifications</p>
                     <button
                       type="button"
@@ -637,7 +724,7 @@ export function AppShell() {
                           return (
                             <div
                               key={n.id}
-                              className="flex items-start gap-3 rounded-lg px-2 py-2 hover:bg-indigo-50/70"
+                              className="flex items-start gap-3 rounded-lg px-2 py-2 hover:bg-violet-50/70"
                             >
                               <span className={`mt-1 size-2 rounded-full ${n.isRead ? "bg-slate-300" : "bg-rose-500"}`} />
                               <div className="min-w-0 flex-1">
@@ -659,14 +746,16 @@ export function AppShell() {
                 </div>
               )}
             </div>
-            <div className="hidden items-center gap-2 sm:flex">
-              <InitialsAvatar name={fullName || "Admin User"} photoUrl={user.avatarUrl ? assetUrl(user.avatarUrl) : undefined} size={34} />
+            <div className="hidden items-center gap-2 rounded-xl border border-indigo-100/80 bg-white/70 px-2 py-1 shadow-sm shadow-indigo-100/40 sm:flex">
+              <InitialsAvatar name={fullName || "Admin User"} photoUrl={user.avatarUrl ? assetUrl(user.avatarUrl) : undefined} size={32} />
               <span className="text-[12.5px] font-semibold text-slate-700">{fullName || "Admin User"}</span>
-              <ExpandMoreOutlined sx={{ fontSize: 16 }} className="text-slate-400" />
+              <ExpandMoreOutlined sx={{ fontSize: 16 }} className="text-indigo-300" />
             </div>
           </div>
         </header>
-        <Outlet />
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <Outlet />
+        </div>
       </div>
     </div>
   );
@@ -685,7 +774,7 @@ export function PageHeader({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-col justify-between gap-3 pb-1 sm:flex-row sm:items-center">
+    <div className="flex shrink-0 flex-col justify-between gap-3 pb-1 sm:flex-row sm:items-center">
       <div className="min-w-0">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-indigo-500">{eyebrow}</p>
         <h1 className="mt-0.5 text-[22px] font-bold leading-tight text-slate-900">{title}</h1>

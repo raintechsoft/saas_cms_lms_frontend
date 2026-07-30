@@ -73,6 +73,7 @@ export function SettingsPage() {
         title="General settings"
         description="Configure the tenant profile and academic defaults."
       />
+      <div className="page-scroll">
       {!settings ? (
         <p className="mt-8 text-sm text-slate-500">Loading settings…</p>
       ) : (
@@ -167,6 +168,7 @@ export function SettingsPage() {
           </div>
         </form>
       )}
+      </div>
     </main>
   );
 }
