@@ -256,7 +256,12 @@ export function ReceiptsPanel({
             >
               Previous
             </button>
-            {Array.from({ length: Math.min(pageCount, 3) }, (_, i) => i + 1).map((n) => (
+            {(() => {
+              const windowSize = Math.min(5, pageCount);
+              let start = Math.max(1, page - Math.floor(windowSize / 2));
+              const end = Math.min(pageCount, start + windowSize - 1);
+              start = Math.max(1, end - windowSize + 1);
+              return Array.from({ length: end - start + 1 }, (_, i) => start + i).map((n) => (
               <button
                 key={n}
                 type="button"
@@ -267,7 +272,8 @@ export function ReceiptsPanel({
               >
                 {n}
               </button>
-            ))}
+              ));
+            })()}
             <button
               type="button"
               className="nx-btn-secondary !px-3 !py-1.5 text-[12px]"

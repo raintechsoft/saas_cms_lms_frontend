@@ -40,12 +40,8 @@ export function FeeReceiptPrintPage() {
 
   useEffect(() => {
     if (!id || !isAuthenticated) return;
-    apiRequest<Payment[]>("/fees/payments", accessToken)
-      .then((payments) => {
-        const match = payments.find((item) => item.id === id || item.paymentId === id);
-        if (!match) throw new Error("Receipt not found");
-        setPayment(match);
-      })
+    apiRequest<Payment>(`/fees/payments/${id}`, accessToken)
+      .then(setPayment)
       .catch((cause: unknown) =>
         setError(cause instanceof Error ? cause.message : "Unable to load receipt"),
       );

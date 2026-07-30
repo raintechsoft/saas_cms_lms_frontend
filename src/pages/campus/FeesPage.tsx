@@ -4,10 +4,11 @@ import {
   DownloadOutlined,
   ReceiptLongOutlined,
 } from "@mui/icons-material";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import { CmsFooter, CmsPage, CmsPageHeader, CmsTab, CmsTabs } from "../../components/cms/CmsLayout";
 import { apiRequest } from "../../lib/api";
-import { notifyError } from "../../lib/notify";
+import { notifyError, notifySuccess } from "../../lib/notify";
 import { CarryPanel } from "./fees/CarryPanel";
 import { CollectPanel } from "./fees/CollectPanel";
 import { CustomFeesPanel } from "./fees/CustomFeesPanel";
@@ -35,6 +36,7 @@ const TABS: Array<[FeesTab, string]> = [
 
 export function FeesPage() {
   const { accessToken, user } = useAuth();
+  const navigate = useNavigate();
   const [setup, setSetup] = useState<FeeSetup | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [tab, setTab] = useState<FeesTab>("dues");
@@ -43,6 +45,7 @@ export function FeesPage() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [receiptSearch, setReceiptSearch] = useState("");
   const [showCollect, setShowCollect] = useState(false);
+  const [preselectAssignmentIds, setPreselectAssignmentIds] = useState<string[]>([]);
   const [duesExport, setDuesExport] = useState<(() => void) | null>(null);
   const [customFocusSignal, setCustomFocusSignal] = useState(0);
   const [discountCreateSignal, setDiscountCreateSignal] = useState(0);
@@ -117,8 +120,18 @@ export function FeesPage() {
   }, [tab, accessToken]);
 
   useEffect(() => {
-    setShowCollect(false);
+    if (tab !== "receipts") {
+      setShowCollect(false);
+      setPreselectAssignmentIds([]);
+    }
   }, [tab]);
+
+  async function openCollect(forStudentId: string, assignmentIds: string[] = []) {
+    setPreselectAssignmentIds(assignmentIds);
+    setTab("receipts");
+    setShowCollect(true);
+    await loadStudent(forStudentId);
+  }
 
   function exportReceipts() {
     downloadCsv(
@@ -181,7 +194,10 @@ export function FeesPage() {
           <button
             type="button"
             className="nx-btn-primary"
-            onClick={() => setShowCollect(true)}
+            onClick={() => {
+              setPreselectAssignmentIds([]);
+              setShowCollect(true);
+            }}
           >
             <AddOutlined sx={{ fontSize: 16 }} />
             Generate New Receipt
@@ -291,16 +307,6 @@ export function FeesPage() {
             <DownloadOutlined sx={{ fontSize: 16 }} />
             Export CSV
           </button>
-          <button
-            type="button"
-            className="rounded-lg border border-[#6366f1] bg-white px-3 py-2 text-[13px] font-semibold text-[#6366f1] hover:bg-indigo-50"
-            onClick={exportMasters}
-          >
-            <span className="inline-flex items-center gap-1.5">
-              <AddOutlined sx={{ fontSize: 16 }} />
-              Bulk Export
-            </span>
-          </button>
         </>
       ) : null}
       {setup?.currentSession ? (
@@ -336,6 +342,7 @@ export function FeesPage() {
           token={accessToken}
           onError={notifyError}
           onExportReady={onExportReady}
+          onCollect={(id) => void openCollect(id)}
         />
       ) : null}
 
@@ -379,13 +386,17 @@ export function FeesPage() {
               studentId={studentId}
               studentFees={studentFees}
               defaultReceiptBookId={defaultReceiptBookId}
+              preselectAssignmentIds={preselectAssignmentIds}
               token={accessToken}
               onStudentChange={loadStudent}
-              onSaved={async () => {
+              onSaved={async (payment) => {
                 if (studentId) await loadStudent(studentId);
                 await load();
                 await loadPayments(receiptSearch);
                 setShowCollect(false);
+                setPreselectAssignmentIds([]);
+                notifySuccess("Opening receipt for print…");
+                navigate(`/print/fees/${payment.id}`);
               }}
               onError={notifyError}
             />
@@ -421,6 +432,7 @@ export function FeesPage() {
           token={accessToken}
           openCreateSignal={invoiceCreateSignal}
           exportSignal={invoiceExportSignal}
+          onCollect={(id, assignmentIds) => void openCollect(id, assignmentIds)}
         />
       ) : null}
 

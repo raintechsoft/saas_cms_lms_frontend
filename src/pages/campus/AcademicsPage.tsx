@@ -53,7 +53,7 @@ interface Setup {
 }
 
 type MasterType = "classes" | "sections" | "subjects";
-type MainTab = "masters" | "sections" | "subjects" | "electives" | "promote";
+type MainTab = "masters" | "sections" | "subjects" | "electives" | "bulk-section" | "promote";
 
 type ElectiveBoard = {
   classSection: { id: string; academicClass: Item; section: Item };
@@ -107,6 +107,14 @@ type PromoteRow = {
   action: PromoteAction;
 };
 
+type BulkSectionRow = {
+  studentEnrollmentId: string;
+  studentName: string;
+  admissionNumber: string;
+  rollNumber: string;
+  selected: boolean;
+};
+
 export function AcademicsPage() {
   const { accessToken } = useAuth();
   const [setup, setSetup] = useState<Setup | null>(null);
@@ -135,6 +143,12 @@ export function AcademicsPage() {
   const [promotePassSectionId, setPromotePassSectionId] = useState("");
   const [promoteRows, setPromoteRows] = useState<PromoteRow[]>([]);
   const [promoteLoading, setPromoteLoading] = useState(false);
+
+  // Bulk section update (same session, same class, different section).
+  const [bulkFromClassSectionId, setBulkFromClassSectionId] = useState("");
+  const [bulkToClassSectionId, setBulkToClassSectionId] = useState("");
+  const [bulkRows, setBulkRows] = useState<BulkSectionRow[]>([]);
+  const [bulkLoading, setBulkLoading] = useState(false);
 
   // Electives workflow
   const [electiveCategoryForm, setElectiveCategoryForm] = useState({
@@ -238,6 +252,40 @@ export function AcademicsPage() {
       notifyError("Nothing to promote. Load students first.");
       return;
     }
+
+    const source = setup.classSections.find((cs) => cs.id === promoteFromClassSectionId);
+    try {
+      const promoteSetup = await apiRequest<Setup>(
+        `/academics/setup?sessionId=${encodeURIComponent(promoteSessionId)}`,
+        accessToken,
+      );
+      const passExists = promoteSetup.classSections.some(
+        (cs) => cs.academicClass.id === promotePassClassId && cs.section.id === promotePassSectionId,
+      );
+      if (!passExists) {
+        notifyError(
+          "Pass target class/section does not exist in the promote session. Create that class section first.",
+        );
+        return;
+      }
+      if (source) {
+        const failExists = promoteSetup.classSections.some(
+          (cs) =>
+            cs.academicClass.id === source.academicClass.id && cs.section.id === source.section.id,
+        );
+        const needsFailTarget = promoteRows.some((row) => row.result === "FAIL" && row.action === "CONTINUE");
+        if (needsFailTarget && !failExists) {
+          notifyError(
+            `Fail + Continue needs ${source.academicClass.name} · ${source.section.name} in the promote session. Create it first, or mark Fail students as Leave.`,
+          );
+          return;
+        }
+      }
+    } catch (cause) {
+      notifyError(cause instanceof Error ? cause.message : "Unable to validate promote session");
+      return;
+    }
+
     setSaving("promote");
     try {
       await apiRequest("/academics/promote", accessToken, {
@@ -260,6 +308,106 @@ export function AcademicsPage() {
       setPromoteRows([]);
     } catch (cause) {
       notifyError(cause instanceof Error ? cause.message : "Unable to promote students");
+    } finally {
+      setSaving("");
+    }
+  }
+
+  const bulkTargetOptions = useMemo(() => {
+    if (!setup || !bulkFromClassSectionId) return [];
+    const source = setup.classSections.find((cs) => cs.id === bulkFromClassSectionId);
+    if (!source) return [];
+    return setup.classSections.filter(
+      (cs) => cs.id !== source.id && cs.academicClass.id === source.academicClass.id,
+    );
+  }, [setup, bulkFromClassSectionId]);
+
+  async function loadBulkSectionStudents() {
+    if (!setup) return;
+    if (!bulkFromClassSectionId) {
+      notifyError("Select the source class section first.");
+      return;
+    }
+    setBulkLoading(true);
+    try {
+      const limit = 100;
+      const allItems: StudentListItem[] = [];
+      let page = 1;
+      for (;;) {
+        const data = await apiRequest<{ items: StudentListItem[]; total: number; page: number; limit: number }>(
+          `/students?status=ACTIVE&classSectionId=${encodeURIComponent(bulkFromClassSectionId)}&page=${page}&limit=${limit}`,
+          accessToken,
+        );
+        allItems.push(...(data.items ?? []));
+        if (!data.items?.length || data.items.length < limit || allItems.length >= (data.total ?? 0)) {
+          break;
+        }
+        page += 1;
+      }
+
+      const sessionId = setup.currentSession?.id ?? "";
+      const rows: BulkSectionRow[] = allItems
+        .map((student) => {
+          const enrollment = student.enrollments.find(
+            (e) => e.classSection.id === bulkFromClassSectionId && (!sessionId || e.academicSession.id === sessionId),
+          );
+          if (!enrollment) return null;
+          return {
+            studentEnrollmentId: enrollment.id,
+            studentName: `${student.firstName} ${student.lastName ?? ""}`.trim(),
+            admissionNumber: student.admissionNumber,
+            rollNumber: enrollment.rollNumber ?? "",
+            selected: true,
+          } satisfies BulkSectionRow;
+        })
+        .filter(Boolean) as BulkSectionRow[];
+
+      setBulkRows(rows);
+      notifySuccess(`Found ${rows.length} students.`);
+    } catch (cause) {
+      notifyError(cause instanceof Error ? cause.message : "Unable to load students");
+    } finally {
+      setBulkLoading(false);
+    }
+  }
+
+  async function submitBulkSection() {
+    if (!bulkFromClassSectionId) {
+      notifyError("Select source class section.");
+      return;
+    }
+    if (!bulkToClassSectionId) {
+      notifyError("Select target class section.");
+      return;
+    }
+    if (bulkFromClassSectionId === bulkToClassSectionId) {
+      notifyError("Source and target sections must be different.");
+      return;
+    }
+    const selected = bulkRows.filter((row) => row.selected);
+    if (!selected.length) {
+      notifyError("Select at least one student to move.");
+      return;
+    }
+    setSaving("bulk-section");
+    try {
+      const result = await apiRequest<{ moved: number; toLabel: string }>("/academics/bulk-section", accessToken, {
+        method: "POST",
+        body: JSON.stringify({
+          fromClassSectionId: bulkFromClassSectionId,
+          toClassSectionId: bulkToClassSectionId,
+          items: selected.map((row) => ({
+            studentEnrollmentId: row.studentEnrollmentId,
+            rollNumber: row.rollNumber.trim() || null,
+          })),
+        }),
+      });
+      notifySuccess(`Moved ${result.moved} student(s) to ${result.toLabel}.`);
+      await load();
+      setBulkRows([]);
+      setBulkToClassSectionId("");
+    } catch (cause) {
+      notifyError(cause instanceof Error ? cause.message : "Unable to update sections");
     } finally {
       setSaving("");
     }
@@ -836,6 +984,13 @@ export function AcademicsPage() {
             onClick={() => setMainTab("electives")}
           >
             Electives
+          </button>
+          <button
+            type="button"
+            className={tabClass(mainTab === "bulk-section")}
+            onClick={() => setMainTab("bulk-section")}
+          >
+            Bulk section
           </button>
           <button
             type="button"
@@ -1524,6 +1679,159 @@ export function AcademicsPage() {
                   )}
                 </div>
               ) : null}
+            </div>
+          </div>
+        ) : null}
+
+        {mainTab === "bulk-section" ? (
+          <div className="p-5">
+            <div className="rounded-xl border border-slate-200 bg-white p-4">
+              <h3 className="text-[16px] font-bold text-slate-900">Bulk section update</h3>
+              <p className="mt-1 text-sm text-slate-500">
+                Move selected students from one section to another within the same class and current session.
+                For next-session class changes, use Promote students.
+              </p>
+
+              <div className="mt-4 grid gap-3 md:grid-cols-3 md:items-end">
+                <label>
+                  <span className="nx-label">From class section</span>
+                  <select
+                    className="nx-input"
+                    value={bulkFromClassSectionId}
+                    onChange={(e) => {
+                      setBulkFromClassSectionId(e.target.value);
+                      setBulkToClassSectionId("");
+                      setBulkRows([]);
+                    }}
+                  >
+                    <option value="">Select source</option>
+                    {(setup?.classSections ?? []).map((cs) => (
+                      <option key={cs.id} value={cs.id}>
+                        {cs.academicClass.name} · {cs.section.name} ({cs._count.enrollments})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label>
+                  <span className="nx-label">To class section</span>
+                  <select
+                    className="nx-input"
+                    value={bulkToClassSectionId}
+                    onChange={(e) => setBulkToClassSectionId(e.target.value)}
+                    disabled={!bulkFromClassSectionId}
+                  >
+                    <option value="">Select target</option>
+                    {bulkTargetOptions.map((cs) => (
+                      <option key={cs.id} value={cs.id}>
+                        {cs.academicClass.name} · {cs.section.name} ({cs._count.enrollments})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    className="nx-btn-secondary"
+                    disabled={bulkLoading || saving === "bulk-section"}
+                    onClick={() => void loadBulkSectionStudents()}
+                  >
+                    {bulkLoading ? "Loading…" : "Load students"}
+                  </button>
+                  <span className="nx-pill nx-pill-neutral">
+                    {bulkRows.length
+                      ? `${bulkRows.filter((r) => r.selected).length}/${bulkRows.length} selected`
+                      : "Same class only"}
+                  </span>
+                </div>
+              </div>
+
+              {!bulkFromClassSectionId || bulkTargetOptions.length ? null : (
+                <p className="mt-3 text-sm text-amber-700">
+                  No other section exists for this class. Create another class section first (Sections tab).
+                </p>
+              )}
+
+              {!bulkRows.length ? null : (
+                <div className="mt-5 overflow-hidden rounded-xl border border-slate-200">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50 px-3 py-2">
+                    <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={bulkRows.length > 0 && bulkRows.every((r) => r.selected)}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setBulkRows((prev) => prev.map((row) => ({ ...row, selected: checked })));
+                        }}
+                      />
+                      Select all
+                    </label>
+                  </div>
+                  <table className="nx-table min-w-[760px]">
+                    <thead>
+                      <tr>
+                        <th className="w-[48px]" />
+                        <th>Student</th>
+                        <th>Admission no.</th>
+                        <th className="w-[140px]">Roll no.</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {bulkRows.map((row) => (
+                        <tr key={row.studentEnrollmentId}>
+                          <td>
+                            <input
+                              type="checkbox"
+                              checked={row.selected}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                setBulkRows((prev) =>
+                                  prev.map((p) =>
+                                    p.studentEnrollmentId === row.studentEnrollmentId
+                                      ? { ...p, selected: checked }
+                                      : p,
+                                  ),
+                                );
+                              }}
+                            />
+                          </td>
+                          <td className="font-semibold text-slate-900">{row.studentName}</td>
+                          <td className="text-slate-600">{row.admissionNumber}</td>
+                          <td>
+                            <input
+                              className="nx-input !py-1.5"
+                              value={row.rollNumber}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                setBulkRows((prev) =>
+                                  prev.map((p) =>
+                                    p.studentEnrollmentId === row.studentEnrollmentId
+                                      ? { ...p, rollNumber: value }
+                                      : p,
+                                  ),
+                                );
+                              }}
+                              placeholder="Optional"
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+
+                  <div className="mt-4 flex justify-end">
+                    <button
+                      className="nx-btn-primary"
+                      type="button"
+                      disabled={saving === "bulk-section" || !bulkToClassSectionId}
+                      onClick={() => void submitBulkSection()}
+                    >
+                      {saving === "bulk-section" ? "Moving…" : "Move selected students"}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         ) : null}

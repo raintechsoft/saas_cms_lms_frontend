@@ -71,6 +71,7 @@ export interface FeeDiscount extends Named {
 
 export interface ReceiptBook extends Named {
   prefix: string;
+  nextNumber: number;
   isDefault: boolean;
 }
 

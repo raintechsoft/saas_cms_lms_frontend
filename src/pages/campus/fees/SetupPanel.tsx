@@ -11,7 +11,7 @@ import { ListPagination, paginateItems } from "../../../components/ListPaginatio
 import { confirmDelete } from "../../../lib/confirm";
 import { apiRequest } from "../../../lib/api";
 import { notifySuccess } from "../../../lib/notify";
-import type { FeeGroup, FeeMaster, FeeSetup } from "./types";
+import type { FeeGroup, FeeMaster, FeeSetup, ReceiptBook } from "./types";
 import { formatMoney, today } from "./utils";
 
 const GROUP_PAGE_SIZE = 6;
@@ -51,7 +51,7 @@ export function SetupPanel({
   onSaved: () => Promise<void>;
   onError: (message: string) => void;
 }) {
-  const [subTab, setSubTab] = useState<"types" | "groups" | "masters">("types");
+  const [subTab, setSubTab] = useState<"types" | "groups" | "masters" | "books">("types");
   const [saving, setSaving] = useState(false);
 
   const [typeName, setTypeName] = useState("");
@@ -61,6 +61,14 @@ export function SetupPanel({
   const [groupTypeIds, setGroupTypeIds] = useState<string[]>([]);
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const [groupPage, setGroupPage] = useState(1);
+
+  const [bookForm, setBookForm] = useState({
+    name: "",
+    prefix: "RCPT-",
+    nextNumber: "1",
+    isDefault: false,
+  });
+  const [editingBookId, setEditingBookId] = useState<string | null>(null);
 
   const [master, setMaster] = useState({
     feeGroupId: "",
@@ -363,9 +371,79 @@ export function SetupPanel({
     }
   }
 
+  function resetBookForm() {
+    setEditingBookId(null);
+    setBookForm({ name: "", prefix: "RCPT-", nextNumber: "1", isDefault: false });
+  }
+
+  function editBook(book: ReceiptBook) {
+    setEditingBookId(book.id);
+    setBookForm({
+      name: book.name,
+      prefix: book.prefix,
+      nextNumber: String(book.nextNumber ?? 1),
+      isDefault: book.isDefault,
+    });
+    setSubTab("books");
+  }
+
+  async function saveBook(event: FormEvent) {
+    event.preventDefault();
+    const nextNumber = Number(bookForm.nextNumber);
+    if (!bookForm.name.trim() || !bookForm.prefix.trim() || !Number.isInteger(nextNumber) || nextNumber < 1) {
+      onError("Enter a valid name, prefix, and starting number");
+      return;
+    }
+    setSaving(true);
+    try {
+      const body = {
+        name: bookForm.name.trim(),
+        prefix: bookForm.prefix.trim(),
+        nextNumber,
+        isDefault: bookForm.isDefault,
+      };
+      if (editingBookId) {
+        await apiRequest(`/fees/receipt-books/${editingBookId}`, token, {
+          method: "PUT",
+          body: JSON.stringify(body),
+        });
+        notifySuccess("Receipt book updated");
+      } else {
+        await apiRequest("/fees/receipt-books", token, {
+          method: "POST",
+          body: JSON.stringify(body),
+        });
+        notifySuccess("Receipt book created");
+      }
+      resetBookForm();
+      await onSaved();
+    } catch (cause) {
+      onError(cause instanceof Error ? cause.message : "Unable to save receipt book");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function removeBook(book: ReceiptBook) {
+    const ok = await confirmDelete({
+      title: "Delete receipt book?",
+      text: `"${book.name}" can only be deleted if it has no payments and is not the default.`,
+      confirmText: "Delete",
+    });
+    if (!ok) return;
+    try {
+      await apiRequest(`/fees/receipt-books/${book.id}`, token, { method: "DELETE" });
+      notifySuccess("Receipt book deleted");
+      if (editingBookId === book.id) resetBookForm();
+      await onSaved();
+    } catch (cause) {
+      onError(cause instanceof Error ? cause.message : "Unable to delete receipt book");
+    }
+  }
+
   return (
     <section className="mt-5 space-y-4">
-      <div className="flex items-center gap-6 border-b border-slate-200 text-[14px] font-semibold">
+      <div className="flex flex-wrap items-center gap-6 border-b border-slate-200 text-[14px] font-semibold">
         <button type="button" className={subTabClass(subTab === "types")} onClick={() => setSubTab("types")}>
           Fees Type
         </button>
@@ -374,6 +452,9 @@ export function SetupPanel({
         </button>
         <button type="button" className={subTabClass(subTab === "masters")} onClick={() => setSubTab("masters")}>
           Fees Master
+        </button>
+        <button type="button" className={subTabClass(subTab === "books")} onClick={() => setSubTab("books")}>
+          Receipt Books
         </button>
       </div>
 
@@ -825,6 +906,133 @@ export function SetupPanel({
                 <p className="mt-0.5 text-xl font-bold text-slate-900">{assignedClassCount} Sections</p>
               </div>
             </article>
+          </div>
+        </div>
+      ) : null}
+
+      {subTab === "books" ? (
+        <div className="grid gap-5 xl:grid-cols-[0.85fr_1.15fr]">
+          <form className="nx-card p-5" onSubmit={(e) => void saveBook(e)}>
+            <h3 className="text-[18px] font-bold text-slate-900">
+              {editingBookId ? "Edit receipt book" : "Add receipt book"}
+            </h3>
+            <p className="mt-1 text-sm text-slate-500">
+              Receipt numbers use prefix + sequence, e.g. RCPT-000001.
+            </p>
+            <label className="nx-label mt-5">Book name</label>
+            <input
+              className="nx-input"
+              required
+              placeholder="Main"
+              value={bookForm.name}
+              onChange={(e) => setBookForm({ ...bookForm, name: e.target.value })}
+            />
+            <label className="nx-label mt-4">Prefix</label>
+            <input
+              className="nx-input"
+              required
+              placeholder="RCPT-"
+              value={bookForm.prefix}
+              onChange={(e) => setBookForm({ ...bookForm, prefix: e.target.value })}
+            />
+            <label className="nx-label mt-4">Next number</label>
+            <input
+              className="nx-input"
+              type="number"
+              min={1}
+              required
+              value={bookForm.nextNumber}
+              onChange={(e) => setBookForm({ ...bookForm, nextNumber: e.target.value })}
+            />
+            <p className="mt-1 text-[12px] text-slate-500">
+              Next receipt preview: {bookForm.prefix}
+              {String(Number(bookForm.nextNumber) || 1).padStart(6, "0")}
+            </p>
+            <label className="mt-4 flex items-center gap-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                checked={bookForm.isDefault}
+                onChange={(e) => setBookForm({ ...bookForm, isDefault: e.target.checked })}
+              />
+              Set as default receipt book
+            </label>
+            <div className="mt-5 flex flex-wrap gap-2">
+              <button className="nx-btn-primary" type="submit" disabled={saving}>
+                <AddOutlined sx={{ fontSize: 16 }} />
+                {saving ? "Saving…" : editingBookId ? "Update book" : "Add book"}
+              </button>
+              {editingBookId ? (
+                <button type="button" className="nx-btn-secondary" onClick={resetBookForm}>
+                  Cancel edit
+                </button>
+              ) : null}
+            </div>
+          </form>
+
+          <div className="nx-card overflow-hidden">
+            <div className="border-b border-slate-100 px-5 py-4">
+              <h3 className="text-[18px] font-bold text-slate-900">Receipt books</h3>
+              <p className="text-sm text-slate-500">Used when collecting fees and generating receipts.</p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="nx-table min-w-[640px]">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Prefix</th>
+                    <th>Next #</th>
+                    <th>Default</th>
+                    <th className="text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {setup.receiptBooks.map((book) => (
+                    <tr key={book.id}>
+                      <td className="font-semibold text-slate-900">{book.name}</td>
+                      <td className="font-mono text-sm">{book.prefix}</td>
+                      <td className="font-mono text-sm">
+                        {book.prefix}
+                        {String(book.nextNumber ?? 1).padStart(6, "0")}
+                      </td>
+                      <td>
+                        {book.isDefault ? (
+                          <span className="nx-pill nx-pill-indigo">Default</span>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                      <td className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            type="button"
+                            className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-indigo-600"
+                            title="Edit"
+                            onClick={() => editBook(book)}
+                          >
+                            <EditOutlined sx={{ fontSize: 18 }} />
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-rose-600"
+                            title="Delete"
+                            onClick={() => void removeBook(book)}
+                          >
+                            <DeleteOutline sx={{ fontSize: 18 }} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {!setup.receiptBooks.length ? (
+                    <tr>
+                      <td colSpan={5} className="px-5 py-12 text-center text-slate-500">
+                        No receipt books yet. Create one to start collecting fees.
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       ) : null}

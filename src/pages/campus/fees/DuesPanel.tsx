@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import {
   DownloadOutlined,
   MailOutline,
-  MoreVert,
+  PaymentsOutlined,
   PersonOutline,
   SearchOutlined,
   GroupsOutlined,
@@ -32,12 +32,14 @@ export function DuesPanel({
   token,
   onError,
   onExportReady,
+  onCollect,
 }: {
   setup: FeeSetup;
   sessions: Session[];
   token: string;
   onError: (message: string) => void;
   onExportReady?: (exportFn: (() => void) | null) => void;
+  onCollect?: (studentId: string) => void;
 }) {
   const [sessionId, setSessionId] = useState(setup.currentSession?.id ?? "");
   const [summary, setSummary] = useState<FeeSummary | null>(null);
@@ -321,11 +323,18 @@ export function DuesPanel({
                           </Link>
                           <button
                             type="button"
-                            className="rounded-md p-1.5 hover:bg-slate-100 hover:text-indigo-600"
-                            title="More"
-                            onClick={() => notifyInfo("Additional fee actions coming soon")}
+                            className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
+                            title="Collect fees"
+                            onClick={() => {
+                              if (onCollect) {
+                                onCollect(due.student.id);
+                                return;
+                              }
+                              notifyInfo("Open Receipts → Generate New Receipt to collect fees");
+                            }}
                           >
-                            <MoreVert sx={{ fontSize: 18 }} />
+                            <PaymentsOutlined sx={{ fontSize: 16 }} />
+                            Collect
                           </button>
                         </div>
                       </td>
@@ -357,7 +366,12 @@ export function DuesPanel({
             >
               Previous
             </button>
-            {Array.from({ length: Math.min(pageCount, 3) }, (_, i) => i + 1).map((n) => (
+            {(() => {
+              const windowSize = Math.min(5, pageCount);
+              let start = Math.max(1, page - Math.floor(windowSize / 2));
+              const end = Math.min(pageCount, start + windowSize - 1);
+              start = Math.max(1, end - windowSize + 1);
+              return Array.from({ length: end - start + 1 }, (_, i) => start + i).map((n) => (
               <button
                 key={n}
                 type="button"
@@ -370,7 +384,8 @@ export function DuesPanel({
               >
                 {n}
               </button>
-            ))}
+              ));
+            })()}
             <button
               type="button"
               className="nx-btn-secondary !px-3 !py-1.5 text-[12px]"

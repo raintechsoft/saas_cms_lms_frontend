@@ -3,10 +3,13 @@ import {
   CloseOutlined,
   CreditCardOutlined,
   DescriptionOutlined,
+  LocalPrintshopOutlined,
+  PaymentsOutlined,
   SearchOutlined,
   TaskAltOutlined,
   WarningAmberOutlined,
 } from "@mui/icons-material";
+import { Link } from "react-router-dom";
 import { InitialsAvatar } from "../../../components/InitialsAvatar";
 import { ListPagination, paginateItems } from "../../../components/ListPagination";
 import { apiRequest } from "../../../lib/api";
@@ -24,7 +27,7 @@ type Invoice = {
   total: string;
   paidAmount: string;
   student: Student;
-  items: Array<{ description: string }>;
+  items: Array<{ id: string; description: string; assignmentId: string; amount: string }>;
 };
 
 const PAGE_SIZE = 8;
@@ -47,11 +50,13 @@ export function FeeInvoicesPanel({
   token,
   openCreateSignal = 0,
   exportSignal = 0,
+  onCollect,
 }: {
   setup: FeeSetup;
   token: string;
   openCreateSignal?: number;
   exportSignal?: number;
+  onCollect?: (studentId: string, assignmentIds: string[]) => void;
 }) {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [filter, setFilter] = useState<InvoiceFilter>("all");
@@ -397,17 +402,40 @@ export function FeeInvoicesPanel({
                     </span>
                   </td>
                   <td className="text-right">
-                    {invoice.status === "DUE" || invoice.status === "OVERDUE" ? (
-                      <button
-                        type="button"
-                        className="text-xs font-semibold text-rose-600 hover:underline"
-                        onClick={() => void cancelInvoice(invoice.id)}
+                    <div className="flex items-center justify-end gap-2">
+                      <Link
+                        to={`/print/fee-invoices/${invoice.id}`}
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:underline"
+                        title="Print invoice"
                       >
-                        Cancel
-                      </button>
-                    ) : (
-                      "—"
-                    )}
+                        <LocalPrintshopOutlined sx={{ fontSize: 14 }} />
+                        Print
+                      </Link>
+                      {(invoice.status === "DUE" || invoice.status === "OVERDUE") && onCollect ? (
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:underline"
+                          onClick={() =>
+                            onCollect(
+                              invoice.student.id,
+                              invoice.items.map((item) => item.assignmentId),
+                            )
+                          }
+                        >
+                          <PaymentsOutlined sx={{ fontSize: 14 }} />
+                          Collect
+                        </button>
+                      ) : null}
+                      {invoice.status === "DUE" || invoice.status === "OVERDUE" ? (
+                        <button
+                          type="button"
+                          className="text-xs font-semibold text-rose-600 hover:underline"
+                          onClick={() => void cancelInvoice(invoice.id)}
+                        >
+                          Cancel
+                        </button>
+                      ) : null}
+                    </div>
                   </td>
                 </tr>
               ))}

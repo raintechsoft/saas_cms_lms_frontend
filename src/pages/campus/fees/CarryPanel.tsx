@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import {
   CalendarMonthOutlined,
   CheckCircleOutline,
-  FilterListOutlined,
   InfoOutlined,
   SearchOutlined,
   SwapHorizOutlined,
@@ -10,7 +9,7 @@ import {
 } from "@mui/icons-material";
 import { InitialsAvatar } from "../../../components/InitialsAvatar";
 import { apiRequest } from "../../../lib/api";
-import { notifyInfo, notifySuccess } from "../../../lib/notify";
+import { notifySuccess } from "../../../lib/notify";
 import type { FeeSetup, FeeSummary, Session, Student, StudentDetail } from "./types";
 import { buildStudentClassMap, formatMoney, studentDisplayName, today } from "./utils";
 
@@ -286,14 +285,6 @@ export function CarryPanel({
               </option>
             ))}
           </select>
-          <button
-            type="button"
-            className="nx-btn-secondary"
-            onClick={() => notifyInfo("Additional carry-forward filters coming soon")}
-          >
-            <FilterListOutlined sx={{ fontSize: 16 }} />
-            More Filters
-          </button>
           <button type="button" className="nx-btn-primary" onClick={() => setPage(1)}>
             Search
           </button>
@@ -399,7 +390,12 @@ export function CarryPanel({
             >
               Previous
             </button>
-            {Array.from({ length: Math.min(pageCount, 3) }, (_, i) => i + 1).map((n) => (
+            {(() => {
+              const windowSize = Math.min(5, pageCount);
+              let start = Math.max(1, page - Math.floor(windowSize / 2));
+              const end = Math.min(pageCount, start + windowSize - 1);
+              start = Math.max(1, end - windowSize + 1);
+              return Array.from({ length: end - start + 1 }, (_, i) => start + i).map((n) => (
               <button
                 key={n}
                 type="button"
@@ -412,7 +408,8 @@ export function CarryPanel({
               >
                 {n}
               </button>
-            ))}
+              ));
+            })()}
             <button
               type="button"
               className="nx-btn-secondary !px-3 !py-1.5 text-[12px]"

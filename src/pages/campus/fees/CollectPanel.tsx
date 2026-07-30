@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import type { FeeSetup, PaymentMode, Student, StudentFees } from "./types";
+import type { FeeSetup, Payment, PaymentMode, Student, StudentFees } from "./types";
 import { PAYMENT_MODES, formatMoney, studentDisplayName, today } from "./utils";
 import { apiRequest } from "../../../lib/api";
 import { notifySuccess } from "../../../lib/notify";
@@ -10,6 +10,7 @@ export function CollectPanel({
   studentId,
   studentFees,
   defaultReceiptBookId,
+  preselectAssignmentIds = [],
   token,
   onStudentChange,
   onSaved,
@@ -20,9 +21,10 @@ export function CollectPanel({
   studentId: string;
   studentFees: StudentFees | null;
   defaultReceiptBookId: string;
+  preselectAssignmentIds?: string[];
   token: string;
   onStudentChange: (id: string) => Promise<void>;
-  onSaved: () => Promise<void>;
+  onSaved: (payment: Payment) => Promise<void>;
   onError: (message: string) => void;
 }) {
   const [selected, setSelected] = useState<Record<string, { checked: boolean; amount: string }>>({});
@@ -39,14 +41,18 @@ export function CollectPanel({
       setSelected({});
       return;
     }
+    const preselected = new Set(preselectAssignmentIds);
     const next: Record<string, { checked: boolean; amount: string }> = {};
     studentFees.assignments.forEach((assignment) => {
       if (assignment.totals.balance > 0) {
-        next[assignment.id] = { checked: false, amount: String(assignment.totals.balance) };
+        next[assignment.id] = {
+          checked: preselected.size ? preselected.has(assignment.id) : false,
+          amount: String(assignment.totals.balance),
+        };
       }
     });
     setSelected(next);
-  }, [studentFees]);
+  }, [studentFees, preselectAssignmentIds]);
 
   useEffect(() => {
     if (defaultReceiptBookId && !form.receiptBookId) {
@@ -66,7 +72,7 @@ export function CollectPanel({
     }
     setSubmitting(true);
     try {
-      await apiRequest("/fees/payments", token, {
+      const payment = await apiRequest<Payment>("/fees/payments", token, {
         method: "POST",
         body: JSON.stringify({
           studentId,
@@ -80,7 +86,7 @@ export function CollectPanel({
       });
       setForm((current) => ({ ...current, note: "" }));
       notifySuccess("Payment collected");
-      await onSaved();
+      await onSaved(payment);
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : "Unable to collect payment");
     } finally {
@@ -88,11 +94,18 @@ export function CollectPanel({
     }
   }
 
+  const selectedBook = setup.receiptBooks.find((book) => book.id === form.receiptBookId)
+    ?? setup.receiptBooks.find((book) => book.isDefault)
+    ?? setup.receiptBooks[0];
+  const nextReceiptPreview = selectedBook
+    ? `${selectedBook.prefix}${String(selectedBook.nextNumber ?? 1).padStart(6, "0")}`
+    : null;
+
   return (
     <section className="space-y-4">
       {!setup.receiptBooks.length ? (
         <p className="alert-error">
-          No receipt book found. Open Custom Fees and create a receipt book before collecting fees.
+          No receipt book found. Open Structure Setup → Receipt Books and create one before collecting fees.
         </p>
       ) : null}
 
@@ -233,10 +246,14 @@ export function CollectPanel({
                       <option value="">Default receipt book</option>
                       {setup.receiptBooks.map((book) => (
                         <option key={book.id} value={book.id}>
-                          {book.name} ({book.prefix})
+                          {book.name} ({book.prefix}
+                          {String(book.nextNumber ?? 1).padStart(6, "0")})
                         </option>
                       ))}
                     </select>
+                    {nextReceiptPreview ? (
+                      <p className="mt-1 text-[11px] text-slate-500">Next receipt: {nextReceiptPreview}</p>
+                    ) : null}
                   </div>
                   <div>
                     <label className="nx-label">Note</label>

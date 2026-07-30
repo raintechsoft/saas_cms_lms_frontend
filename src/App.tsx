@@ -19,6 +19,7 @@ import { DocumentsPage } from "./pages/campus/DocumentsPage";
 import { ReportsPage } from "./pages/campus/ReportsPage";
 import { DocumentPrintPage } from "./pages/campus/DocumentPrintPage";
 import { FeeReceiptPrintPage } from "./pages/campus/FeeReceiptPrintPage";
+import { FeeInvoicePrintPage } from "./pages/campus/FeeInvoicePrintPage";
 import { TimetablePage } from "./pages/campus/TimetablePage";
 import { HomeworkPage } from "./pages/campus/HomeworkPage";
 import { ErpSettingsPage } from "./pages/campus/ErpSettingsPage";
@@ -95,6 +96,7 @@ export function App() {
       <Route path="/parent/login" element={<Navigate to="/login" replace />} />
       <Route path="/print/documents/:id" element={<DocumentPrintPage />} />
       <Route path="/print/fees/:id" element={<FeeReceiptPrintPage />} />
+      <Route path="/print/fee-invoices/:id" element={<FeeInvoicePrintPage />} />
       <Route path="/admit/:tenantSlug" element={<OnlineAdmissionPage />} />
       <Route path="/portal" element={<PortalRedirect />} />
       <Route path="/portal/student" element={<PortalShell />}>

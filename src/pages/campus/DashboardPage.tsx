@@ -8,7 +8,6 @@ import {
   CheckCircleOutline,
   DescriptionOutlined,
   GroupsOutlined,
-  IosShareOutlined,
   MoreHorizOutlined,
   PersonAddAltOutlined,
   SearchOutlined,
@@ -85,10 +84,15 @@ function studentName(person: { firstName: string; lastName?: string | null }) {
 }
 
 function paymentStatus(raw: string) {
-  const status = raw?.toUpperCase() ?? "PAID";
-  if (status.includes("PAID") || status === "SUCCESS") return { label: "PAID", className: "nx-pill-success" };
+  const status = raw?.toUpperCase() ?? "";
+  if (status === "COLLECTED" || status.includes("PAID") || status === "SUCCESS") {
+    return { label: "PAID", className: "nx-pill-success" };
+  }
+  if (status === "REVERTED" || status.includes("CANCEL")) {
+    return { label: "REVERTED", className: "nx-pill-neutral" };
+  }
   if (status.includes("OVERDUE")) return { label: "OVERDUE", className: "nx-pill-danger" };
-  return { label: "PENDING", className: "nx-pill-warning" };
+  return { label: status || "PENDING", className: "nx-pill-warning" };
 }
 
 function formatTrendPct(value: number) {
@@ -172,13 +176,9 @@ export function DashboardPage() {
           apiRequest<AttendanceReport>(`/attendance/reports?fromDate=${today}&toDate=${today}`, accessToken)
             .then((report) => {
               const alerts = (report.records ?? []).filter((item) =>
-                ["ABSENT", "LATE", "PRESENT"].includes(item.status),
+                ["ABSENT", "LATE"].includes(item.status),
               );
-              const prioritized = [
-                ...alerts.filter((item) => item.status !== "PRESENT"),
-                ...alerts.filter((item) => item.status === "PRESENT"),
-              ];
-              setAttendanceAlerts(prioritized.slice(0, 3));
+              setAttendanceAlerts(alerts.slice(0, 5));
             })
             .catch(() => setAttendanceAlerts([])),
         );
@@ -412,7 +412,7 @@ export function DashboardPage() {
                   const statusClass =
                     status === "ABSENT" ? "text-rose-600" : status === "LATE" ? "text-amber-600" : "text-emerald-600";
                   const statusLabel =
-                    status === "ABSENT" ? "Absent" : status === "LATE" ? "Late" : "Awaiting Check-in";
+                    status === "ABSENT" ? "Absent" : status === "LATE" ? "Late" : status;
                   const time = record.markedAt
                     ? new Date(record.markedAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })
                     : "—";
@@ -475,7 +475,7 @@ export function DashboardPage() {
             <div className="ov-tabs" role="tablist">
               {(
                 [
-                  ["invoices", "Recent Invoices"],
+                  ["invoices", "Recent Receipts"],
                   ["logs", "System Logs"],
                   ["approvals", "Pending Approvals"],
                 ] as const
@@ -500,13 +500,13 @@ export function DashboardPage() {
                 />
                 <input
                   className="nx-input w-52 !rounded-lg !bg-slate-50 !py-1.5 !pl-8 !pr-3"
-                  placeholder="Search invoices..."
+                  placeholder="Search receipts..."
                   value={invoiceQuery}
                   onChange={(event) => setInvoiceQuery(event.target.value)}
                 />
               </label>
               <Link to="/fees" className="nx-btn-secondary !rounded-lg !px-3 !py-1.5 text-[12px]">
-                <IosShareOutlined sx={{ fontSize: 15 }} /> Export Data
+                Open Fees
               </Link>
             </div>
           </div>
@@ -517,47 +517,42 @@ export function DashboardPage() {
                 <table className="nx-table">
                   <thead>
                     <tr>
-                      <th>ID</th>
+                      <th>Receipt #</th>
                       <th>Student Name</th>
-                      <th>Grade</th>
                       <th>Amount</th>
-                      <th>Due Date</th>
+                      <th>Paid On</th>
                       <th>Status</th>
                       <th className="text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredPayments.map((payment) => {
-                      const enrollment = payment.student.enrollments?.[0];
-                      const grade = enrollment?.classSection
-                        ? `${enrollment.classSection.academicClass?.name ?? ""}-${enrollment.classSection.section?.name ?? ""}`.replace(
-                            /-$/,
-                            "",
-                          )
-                        : "—";
                       const status = paymentStatus(payment.status);
                       return (
                         <tr key={payment.id}>
                           <td>
-                            <Link to="/fees" className="font-semibold text-indigo-600 hover:underline">
+                            <Link
+                              to={`/print/fees/${payment.id}`}
+                              className="font-semibold text-indigo-600 hover:underline"
+                            >
                               #{payment.receiptNumber || payment.id.slice(0, 8).toUpperCase()}
                             </Link>
                           </td>
                           <td className="font-medium text-slate-800">{studentName(payment.student)}</td>
-                          <td className="text-slate-500">{grade || "—"}</td>
                           <td className="font-semibold text-slate-800">{formatMoney(Number(payment.amount))}</td>
                           <td className="text-slate-500">{formatDate(payment.paymentDate)}</td>
                           <td>
                             <span className={`nx-pill ${status.className}`}>{status.label}</span>
                           </td>
                           <td className="text-right">
-                            <button
-                              type="button"
-                              className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                              aria-label="Invoice actions"
+                            <Link
+                              to={`/print/fees/${payment.id}`}
+                              className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-indigo-600"
+                              aria-label="Print receipt"
+                              title="Print receipt"
                             >
                               <MoreHorizOutlined sx={{ fontSize: 18 }} />
-                            </button>
+                            </Link>
                           </td>
                         </tr>
                       );
@@ -566,7 +561,7 @@ export function DashboardPage() {
                 </table>
                 {!filteredPayments.length ? (
                   <p className="px-5 py-12 text-center text-sm text-slate-500">
-                    No fee payments recorded yet.{" "}
+                    No fee receipts recorded yet.{" "}
                     <Link to="/fees" className="font-semibold text-indigo-600 hover:underline">
                       Collect fees
                     </Link>
@@ -576,7 +571,7 @@ export function DashboardPage() {
               {filteredPayments.length > 0 ? (
                 <div className="flex items-center justify-between border-t border-slate-100 px-5 py-3 text-[12px] text-slate-500">
                   <span>
-                    Showing {filteredPayments.length} recent invoice{filteredPayments.length === 1 ? "" : "s"}
+                    Showing {filteredPayments.length} recent receipt{filteredPayments.length === 1 ? "" : "s"}
                   </span>
                   <Link to="/fees" className="font-semibold text-indigo-600 hover:underline">
                     View all →

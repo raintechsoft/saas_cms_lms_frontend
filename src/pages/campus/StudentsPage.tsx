@@ -103,6 +103,33 @@ function exportStudentsCsv(items: StudentListItem[]) {
   URL.revokeObjectURL(url);
 }
 
+function exportAdmissionsCsv(items: OnlineAdmission[]) {
+  const header = ["firstName", "lastName", "email", "mobile", "status", "class", "createdAt"];
+  const rows = items.map((item) => {
+    const grade = item.classSection
+      ? `${item.classSection.academicClass.name} ${item.classSection.section.name}`
+      : "";
+    return [
+      item.firstName,
+      item.lastName ?? "",
+      item.email ?? "",
+      item.mobile ?? item.guardianPhone ?? "",
+      item.status,
+      grade,
+      item.createdAt?.slice(0, 10) ?? "",
+    ]
+      .map((cell) => `"${String(cell).replaceAll('"', '""')}"`)
+      .join(",");
+  });
+  const blob = new Blob([[header.join(","), ...rows].join("\n")], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = "admissions-export.csv";
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
 function DirectoryStatusBadge({ status }: { status: StudentStatus }) {
   if (status === "ACTIVE") {
     return (
@@ -207,26 +234,48 @@ export function StudentsPage() {
     });
     if (query) params.set("search", query);
     if (statusFilter) params.set("status", statusFilter);
+
     if (classSectionId) {
       params.set("classSectionId", classSectionId);
-    } else if (classFilter && setup) {
-      // Class-only filter: fetch a wider page then filter client-side by class name
-      params.set("limit", "100");
-      params.set("page", "1");
+      setStudents(await apiRequest<StudentList>(`/students?${params}`, accessToken));
+      setSelectedIds([]);
+      return;
     }
-    const result = await apiRequest<StudentList>(`/students?${params}`, accessToken);
-    if (!classSectionId && classFilter) {
-      const filtered = result.items.filter(
-        (item) => item.enrollments[0]?.classSection.academicClass.name === classFilter,
-      );
+
+    // Class-only filter: load every section under that class (paged), then client-paginate.
+    if (classFilter && setup) {
+      const sectionIds = setup.classSections
+        .filter((item) => item.academicClass.name === classFilter)
+        .map((item) => item.id);
+      const allItems: StudentListItem[] = [];
+      for (const sectionId of sectionIds) {
+        let sectionPage = 1;
+        for (;;) {
+          const sectionParams = new URLSearchParams({
+            limit: "100",
+            page: String(sectionPage),
+            classSectionId: sectionId,
+          });
+          if (query) sectionParams.set("search", query);
+          if (statusFilter) sectionParams.set("status", statusFilter);
+          const chunk = await apiRequest<StudentList>(`/students?${sectionParams}`, accessToken);
+          allItems.push(...(chunk.items ?? []));
+          if (!chunk.items?.length || chunk.items.length < 100) break;
+          sectionPage += 1;
+          if (sectionPage > 50) break;
+        }
+      }
+      const unique = [...new Map(allItems.map((item) => [item.id, item])).values()];
       const start = (pageNum - 1) * PAGE_SIZE;
       setStudents({
-        items: filtered.slice(start, start + PAGE_SIZE),
-        total: filtered.length,
+        items: unique.slice(start, start + PAGE_SIZE),
+        total: unique.length,
       });
-    } else {
-      setStudents(result);
+      setSelectedIds([]);
+      return;
     }
+
+    setStudents(await apiRequest<StudentList>(`/students?${params}`, accessToken));
     setSelectedIds([]);
   }
 
@@ -291,6 +340,55 @@ export function StudentsPage() {
     }
   }
 
+  async function deleteSelectedStudents() {
+    if (!selectedIds.length) return;
+    if (!window.confirm(`Delete ${selectedIds.length} selected student(s)?`)) return;
+    try {
+      await apiRequest("/students/delete", accessToken, {
+        method: "POST",
+        body: JSON.stringify({ ids: selectedIds }),
+      });
+      notifySuccess(`Deleted ${selectedIds.length} student(s)`);
+      setSelectedIds([]);
+      await refreshDirectory();
+    } catch (cause) {
+      notifyError(cause instanceof Error ? cause.message : "Unable to delete selected students");
+    }
+  }
+
+  async function exportDirectoryCsv() {
+    try {
+      const allItems: StudentListItem[] = [];
+      let pageNum = 1;
+      for (;;) {
+        const params = new URLSearchParams({ limit: "100", page: String(pageNum) });
+        if (search) params.set("search", search);
+        if (statusFilter) params.set("status", statusFilter);
+        if (classSectionId) params.set("classSectionId", classSectionId);
+        const chunk = await apiRequest<StudentList>(`/students?${params}`, accessToken);
+        let items = chunk.items ?? [];
+        if (!classSectionId && classFilter) {
+          items = items.filter(
+            (item) => item.enrollments[0]?.classSection.academicClass.name === classFilter,
+          );
+        }
+        allItems.push(...items);
+        if (!chunk.items?.length || chunk.items.length < 100) break;
+        pageNum += 1;
+        if (pageNum > 50) break;
+      }
+      const unique = [...new Map(allItems.map((item) => [item.id, item])).values()];
+      if (selectedIds.length) {
+        exportStudentsCsv(unique.filter((item) => selectedIds.includes(item.id)));
+      } else {
+        exportStudentsCsv(unique);
+      }
+      notifySuccess("Students CSV downloaded");
+    } catch (cause) {
+      notifyError(cause instanceof Error ? cause.message : "Unable to export students");
+    }
+  }
+
   const pendingAdmissions = useMemo(
     () => admissions.filter((item) => item.status === "PENDING").length,
     [admissions],
@@ -309,18 +407,40 @@ export function StudentsPage() {
         description={header.description}
         actions={
           tab === "admissions" ? (
-            <>
-              <button type="button" className="nx-btn-secondary">
-                <FilterListOutlined sx={{ fontSize: 16 }} /> Filters
+            <button
+              type="button"
+              className="nx-btn-primary !bg-slate-900 hover:!bg-slate-800"
+              onClick={() => {
+                exportAdmissionsCsv(admissions);
+                notifySuccess("Admissions CSV downloaded");
+              }}
+            >
+              <IosShareOutlined sx={{ fontSize: 16 }} /> Export List
+            </button>
+          ) : tab === "directory" ? (
+            <div className="flex flex-wrap items-center gap-2">
+              {selectedIds.length ? (
+                <>
+                  <button type="button" className="nx-btn-secondary" onClick={() => void exportDirectoryCsv()}>
+                    <IosShareOutlined sx={{ fontSize: 16 }} /> Export selected ({selectedIds.length})
+                  </button>
+                  <button
+                    type="button"
+                    className="nx-btn-secondary !text-rose-600"
+                    onClick={() => void deleteSelectedStudents()}
+                  >
+                    <DeleteOutline sx={{ fontSize: 16 }} /> Delete selected
+                  </button>
+                </>
+              ) : (
+                <button type="button" className="nx-btn-secondary" onClick={() => void exportDirectoryCsv()}>
+                  <IosShareOutlined sx={{ fontSize: 16 }} /> Export CSV
+                </button>
+              )}
+              <button type="button" className="nx-btn-primary" onClick={() => navigate("/students/new")}>
+                + Add New Student
               </button>
-              <button
-                type="button"
-                className="nx-btn-primary !bg-slate-900 hover:!bg-slate-800"
-                onClick={() => exportStudentsCsv(students.items)}
-              >
-                <IosShareOutlined sx={{ fontSize: 16 }} /> Export List
-              </button>
-            </>
+            </div>
           ) : (
             <button type="button" className="nx-btn-primary" onClick={() => navigate("/students/new")}>
               + Add New Student
