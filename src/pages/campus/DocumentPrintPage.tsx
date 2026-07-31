@@ -90,7 +90,14 @@ export function DocumentPrintPage() {
         style={{
           width: `min(100%, ${Math.min(document.template.width, 1000)}px)`,
           aspectRatio: `${document.template.width}/${document.template.height}`,
-          backgroundImage: document.template.backgroundUrl ? `url(${document.template.backgroundUrl})` : undefined,
+          backgroundImage: document.template.backgroundUrl
+            ? `url(${document.template.backgroundUrl})`
+            : undefined,
+          backgroundColor:
+            !document.template.backgroundUrl &&
+            typeof document.template.config.backgroundColor === "string"
+              ? document.template.config.backgroundColor
+              : undefined,
           backgroundSize: "cover",
           backgroundPosition: "center",
         }}
@@ -100,7 +107,22 @@ export function DocumentPrintPage() {
           <h1 className="mt-4 text-3xl font-serif font-bold">{title}</h1>
           <p className="mt-1 text-xs uppercase tracking-widest text-slate-500">{document.template.type.replaceAll("_", " ")}</p>
           <div className="mt-8 flex flex-1 flex-col items-center justify-center">
-            {document.student?.photoUrl && <img src={document.student.photoUrl} alt="" className="mb-5 size-28 rounded-xl border object-cover" />}
+            {document.student?.photoUrl &&
+              document.template.config.showPhoto !== false && (
+                <img
+                  src={document.student.photoUrl}
+                  alt=""
+                  className="mb-5 size-28 rounded-xl border object-cover"
+                />
+              )}
+            {document.template.config.showLogo !== false &&
+            typeof document.tenant.branding?.logoUrl === "string" ? (
+              <img
+                src={document.tenant.branding.logoUrl}
+                alt=""
+                className="mb-4 h-12 object-contain"
+              />
+            ) : null}
             <p className="text-sm text-slate-500">{document.template.type === "CERTIFICATE" ? "This is proudly presented to" : "Issued to"}</p>
             <h2 className="mt-2 text-3xl font-serif font-semibold">{person}</h2>
             {document.student && <p className="mt-2 text-sm">Admission No. {document.student.admissionNumber}</p>}
@@ -118,14 +140,44 @@ export function DocumentPrintPage() {
                     </div>
                   ))}
                 </div>
-                {document.payload.result.percentage !== undefined && <div className="mt-4 flex justify-center gap-3 text-sm"><span className="badge">Rank #{document.payload.result.rank ?? "—"}</span><span className="badge">{document.payload.result.percentage}%</span><span className={document.payload.result.passStatus === "PASS" ? "badge-success" : "badge-danger"}>{document.payload.result.grade ?? document.payload.result.passStatus}</span></div>}
+                {document.payload.result.percentage !== undefined && (
+                  <div className="mt-4 flex justify-center gap-3 text-sm">
+                    {document.template.config.showRank !== false ? (
+                      <span className="badge">Rank #{document.payload.result.rank ?? "—"}</span>
+                    ) : null}
+                    <span className="badge">{document.payload.result.percentage}%</span>
+                    {document.template.config.showGrade !== false ? (
+                      <span
+                        className={
+                          document.payload.result.passStatus === "PASS"
+                            ? "badge-success"
+                            : "badge-danger"
+                        }
+                      >
+                        {document.payload.result.grade ?? document.payload.result.passStatus}
+                      </span>
+                    ) : null}
+                  </div>
+                )}
               </div>
             )}
+            {typeof document.template.config.footerNote === "string" &&
+            document.template.config.footerNote ? (
+              <p className="mt-6 max-w-xl text-sm text-slate-500">{document.template.config.footerNote}</p>
+            ) : null}
           </div>
           <div className="mt-6 flex items-end justify-between gap-6 text-left">
-            <div><p className="text-xs text-slate-500">Serial number</p><p className="text-sm font-semibold">{document.serialNumber}</p></div>
-            <Barcode value={barcode} />
-            <div className="text-right"><p className="text-xs text-slate-500">Issued</p><p className="text-sm font-semibold">{new Date(document.generatedAt).toLocaleDateString()}</p></div>
+            <div>
+              <p className="text-xs text-slate-500">Serial number</p>
+              <p className="text-sm font-semibold">{document.serialNumber}</p>
+            </div>
+            {document.template.config.showBarcode !== false ? <Barcode value={barcode} /> : <div />}
+            <div className="text-right">
+              <p className="text-xs text-slate-500">Issued</p>
+              <p className="text-sm font-semibold">
+                {new Date(document.generatedAt).toLocaleDateString()}
+              </p>
+            </div>
           </div>
         </div>
       </article>

@@ -11,6 +11,7 @@ interface DonutChartProps {
   centerLabel?: string;
   centerValue?: string;
   size?: number;
+  showLegend?: boolean;
 }
 
 function polar(cx: number, cy: number, r: number, angleDeg: number) {
@@ -44,7 +45,13 @@ function donutSegment(
   ].join(" ");
 }
 
-export function DonutChart({ slices, centerLabel, centerValue, size = 280 }: DonutChartProps) {
+export function DonutChart({
+  slices,
+  centerLabel,
+  centerValue,
+  size = 280,
+  showLegend = true,
+}: DonutChartProps) {
   const filterId = `donut-shadow-${useId().replace(/:/g, "")}`;
   const total = slices.reduce((sum, slice) => sum + Math.max(0, slice.value), 0);
   const cx = size / 2;
@@ -135,22 +142,24 @@ export function DonutChart({ slices, centerLabel, centerValue, size = 280 }: Don
         </div>
       </div>
 
-      <div className="flex flex-col gap-3.5">
-        {slices.map((slice) => {
-          const pct = total > 0 ? Math.round((slice.value / total) * 100) : 0;
-          return (
-            <div key={slice.label} className="flex items-center gap-3">
-              <span className="size-3.5 shrink-0 rounded-[3px]" style={{ background: slice.color }} />
-              <div>
-                <p className="text-sm font-semibold text-slate-800">{slice.label}</p>
-                <p className="text-xs text-slate-500">
-                  {slice.value} · {pct}%
-                </p>
+      {showLegend ? (
+        <div className="flex flex-col gap-3.5">
+          {slices.map((slice) => {
+            const pct = total > 0 ? Math.round((slice.value / total) * 100) : 0;
+            return (
+              <div key={slice.label} className="flex items-center gap-3">
+                <span className="size-3.5 shrink-0 rounded-[3px]" style={{ background: slice.color }} />
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">{slice.label}</p>
+                  <p className="text-xs text-slate-500">
+                    {slice.value} · {pct}%
+                  </p>
+                </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      ) : null}
     </div>
   );
 }
