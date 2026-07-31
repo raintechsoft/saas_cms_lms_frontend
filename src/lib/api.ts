@@ -218,6 +218,16 @@ export function updateAuthProfile(
   });
 }
 
+export function changeOwnPassword(
+  accessToken: string,
+  payload: { currentPassword?: string; newPassword: string },
+) {
+  return apiRequest<{ message: string }>("/auth/change-password", accessToken, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function uploadStudentPhoto(accessToken: string, studentId: string, file: File) {
   const form = new FormData();
   form.append("avatar", file);

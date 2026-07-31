@@ -3,7 +3,7 @@ import { useLocation } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import { PageHeader } from "../../components/AppShell";
 import { PanelCard } from "../../components/charts/PremiumCharts";
-import { assetUrl, updateAuthProfile, uploadAvatar } from "../../lib/api";
+import { assetUrl, changeOwnPassword, updateAuthProfile, uploadAvatar } from "../../lib/api";
 import { notifyError, notifySuccess } from "../../lib/notify";
 import {
   OpsPageHeader,
@@ -21,6 +21,10 @@ export function StaffProfilePage() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [changingPassword, setChangingPassword] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -81,6 +85,30 @@ export function StaffProfilePage() {
       notifyError(cause instanceof Error ? cause.message : "Unable to upload photo");
     } finally {
       setUploading(false);
+    }
+  }
+
+  async function handleChangePassword(event: FormEvent) {
+    event.preventDefault();
+    if (newPassword.length < 8) {
+      notifyError("New password must be at least 8 characters");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      notifyError("New password and confirmation do not match");
+      return;
+    }
+    setChangingPassword(true);
+    try {
+      await changeOwnPassword(accessToken, { currentPassword, newPassword });
+      notifySuccess("Password changed successfully");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (cause) {
+      notifyError(cause instanceof Error ? cause.message : "Unable to change password");
+    } finally {
+      setChangingPassword(false);
     }
   }
 
@@ -159,6 +187,52 @@ export function StaffProfilePage() {
     </form>
   );
 
+  const passwordBody = (
+    <form className="grid gap-4 sm:grid-cols-3" onSubmit={handleChangePassword}>
+      <label className="block">
+        <span className="label">Current password</span>
+        <input
+          className="input"
+          type="password"
+          autoComplete="current-password"
+          placeholder="Your current password"
+          value={currentPassword}
+          onChange={(e) => setCurrentPassword(e.target.value)}
+        />
+      </label>
+      <label className="block">
+        <span className="label">New password</span>
+        <input
+          className="input"
+          type="password"
+          autoComplete="new-password"
+          required
+          minLength={8}
+          placeholder="At least 8 characters"
+          value={newPassword}
+          onChange={(e) => setNewPassword(e.target.value)}
+        />
+      </label>
+      <label className="block">
+        <span className="label">Confirm new password</span>
+        <input
+          className="input"
+          type="password"
+          autoComplete="new-password"
+          required
+          placeholder="Repeat new password"
+          value={confirmPassword}
+          onChange={(e) => setConfirmPassword(e.target.value)}
+        />
+      </label>
+      <div className="sm:col-span-3">
+        <button className={btnClass} type="submit" disabled={changingPassword}>
+          {changingPassword ? "Changing…" : "Change password"}
+        </button>
+      </div>
+    </form>
+  );
+
   if (isOps) {
     return (
       <div className="mx-auto max-w-3xl space-y-6">
@@ -169,6 +243,9 @@ export function StaffProfilePage() {
           </OpsPanel>
           <OpsPanel title="Personal details" code="ID">
             {formBody}
+          </OpsPanel>
+          <OpsPanel title="Change password" code="PW">
+            {passwordBody}
           </OpsPanel>
         </div>
       </div>
@@ -181,6 +258,7 @@ export function StaffProfilePage() {
       <div className="page-scroll space-y-3">
         <PanelCard title="Profile photo">{photoBody}</PanelCard>
         <PanelCard title="Personal details">{formBody}</PanelCard>
+        <PanelCard title="Change password">{passwordBody}</PanelCard>
       </div>
     </main>
   );
