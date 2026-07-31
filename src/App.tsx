@@ -153,7 +153,7 @@ export function App() {
         />
         <Route path="/exams" element={<ExamsPage />} />
         <Route path="/timetable" element={<RequireProductBucket bucket="LMS"><TimetablePage /></RequireProductBucket>} />
-        <Route path="/homework" element={<RequireProductBucket bucket="LMS"><HomeworkPage /></RequireProductBucket>} />
+        <Route path="/homework" element={<HomeworkPage />} />
         <Route path="/fees" element={<RequireProductBucket bucket="CMS"><FeesPage /></RequireProductBucket>} />
         <Route path="/hr" element={<RequireProductBucket bucket="CMS"><HrPage /></RequireProductBucket>} />
         <Route path="/documents" element={<RequireProductBucket bucket="CMS"><DocumentsPage /></RequireProductBucket>} />
