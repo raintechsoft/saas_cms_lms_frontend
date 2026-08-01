@@ -27,6 +27,9 @@ export function ClassesSectionsPanel({
   const [assignClassId, setAssignClassId] = useState<string | null>(null);
   const [assignSectionId, setAssignSectionId] = useState("");
   const [assignTeacherId, setAssignTeacherId] = useState("");
+  const [editClassId, setEditClassId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editCode, setEditCode] = useState("");
   const [busyKey, setBusyKey] = useState("");
 
   const hasSession = Boolean(setup.currentSession);
@@ -93,22 +96,34 @@ export function ClassesSectionsPanel({
     setClassSectionIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }
 
-  function promptEditClass(id: string, name: string, code: string | null | undefined) {
-    const nextName = window.prompt("Class name", name);
-    if (nextName == null || !nextName.trim()) return;
-    const nextCode = window.prompt("Short code (optional)", code ?? "");
-    if (nextCode == null) return;
-    void updateClass(id, nextName.trim(), nextCode.trim() || null);
+  function openEditClass(id: string, name: string, code: string | null | undefined) {
+    // Only one inline row (edit or assign) is open at a time.
+    setAssignClassId(null);
+    setEditClassId(id);
+    setEditName(name);
+    setEditCode(code ?? "");
   }
 
-  async function updateClass(id: string, name: string, code: string | null) {
+  function closeEditClass() {
+    setEditClassId(null);
+    setEditName("");
+    setEditCode("");
+  }
+
+  async function updateClass(id: string) {
+    const name = editName.trim();
+    if (!name) {
+      onError("Class name is required");
+      return;
+    }
     setBusyKey(`class-${id}`);
     try {
       await apiRequest(`/academics/classes/${id}`, token, {
         method: "PUT",
-        body: JSON.stringify({ name, code }),
+        body: JSON.stringify({ name, code: editCode.trim() || null }),
       });
       notifySuccess("Class updated.");
+      closeEditClass();
       await onSaved();
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : "Unable to update class");
@@ -138,6 +153,7 @@ export function ClassesSectionsPanel({
 
   function openTeacherAssignment(classId: string, sections: ClassSection[]) {
     const first = sections[0];
+    setEditClassId(null);
     setAssignClassId(classId);
     setAssignSectionId(first?.id ?? "");
     setAssignTeacherId(first?.classTeacher?.id ?? "");
@@ -294,7 +310,11 @@ export function ClassesSectionsPanel({
                         <button
                           type="button"
                           className="rounded border border-indigo-300 bg-white px-3 py-1.5 text-[11px] font-semibold text-indigo-700 hover:bg-indigo-50"
-                          onClick={() => promptEditClass(cls.id, cls.name, cls.code)}
+                          onClick={() =>
+                            editClassId === cls.id
+                              ? closeEditClass()
+                              : openEditClass(cls.id, cls.name, cls.code)
+                          }
                         >
                           Edit
                         </button>
@@ -302,6 +322,54 @@ export function ClassesSectionsPanel({
                     </td>
                   ) : null}
                 </tr>
+                {editClassId === cls.id ? (
+                  <tr key={`${cls.id}-edit`} className="!bg-indigo-50/40">
+                    <td colSpan={canManage ? 5 : 4}>
+                      <form
+                        className="flex flex-wrap items-end gap-3"
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          void updateClass(cls.id);
+                        }}
+                      >
+                        <label className="min-w-[210px] flex-1">
+                          <span className="nx-label">Class Name</span>
+                          <input
+                            className="nx-input bg-white !py-1.5"
+                            required
+                            autoFocus
+                            placeholder="Enter class name"
+                            value={editName}
+                            onChange={(event) => setEditName(event.target.value)}
+                          />
+                        </label>
+                        <label className="min-w-[150px]">
+                          <span className="nx-label">Short Code (optional)</span>
+                          <input
+                            className="nx-input bg-white !py-1.5"
+                            placeholder="e.g. C8"
+                            value={editCode}
+                            onChange={(event) => setEditCode(event.target.value)}
+                          />
+                        </label>
+                        <button
+                          type="submit"
+                          className="nx-btn-primary !py-1.5 text-[12px]"
+                          disabled={busyKey === `class-${cls.id}`}
+                        >
+                          {busyKey === `class-${cls.id}` ? "Saving…" : "Save"}
+                        </button>
+                        <button
+                          type="button"
+                          className="nx-btn-secondary !py-1.5 text-[12px]"
+                          onClick={closeEditClass}
+                        >
+                          Cancel
+                        </button>
+                      </form>
+                    </td>
+                  </tr>
+                ) : null}
                 {isAssigning ? (
                   <tr key={`${cls.id}-assignment`} className="!bg-indigo-50/40">
                     <td colSpan={canManage ? 5 : 4}>
