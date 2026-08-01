@@ -315,13 +315,13 @@ export function DashboardPage() {
       <CmsScrollBody>
       <div className="ov-stack">
 
-        <section className="ov-hero">
+        <section className="ov-hero" aria-labelledby="tenant-overview-title">
           <div className="ov-hero-glow" />
           <div className="ov-hero-inner">
             <span className="ov-hero-badge">Admin Dashboard</span>
-            <h1 className="ov-hero-title">Daily Operational Flow for {institution} Admin</h1>
+            <h1 id="tenant-overview-title" className="ov-hero-title">Daily Operational Flow for {institution} Admin</h1>
 
-            <div className="ov-status-row">
+            <div className="ov-status-row" aria-label="Operational status">
               <div className="ov-status ov-status-ok">
                 <span>Today&apos;s Attendance:</span>
                 <strong>{attendanceStatusLabel}</strong>
@@ -334,12 +334,13 @@ export function DashboardPage() {
                     : `${collectionPct}% Target Met`}
                 </strong>
               </div>
-              <div className="ov-status ov-status-danger">
+              <Link to="/students" state={{ tab: "admissions" }} className="ov-status ov-status-danger">
                 <span>Pending Approvals:</span>
                 <strong>
                   {criticalApprovals} critical, {regularApprovals} regular
                 </strong>
-              </div>
+                <span className="font-bold underline decoration-white/40 underline-offset-2">View approvals</span>
+              </Link>
             </div>
 
             <div className="ov-hero-actions">
@@ -357,7 +358,7 @@ export function DashboardPage() {
                 Process New Enrollments ({pendingAdmissions.length})
               </HeroBtn>
               <HeroBtn to="/fees" icon={<WarningAmberOutlined sx={{ fontSize: 15 }} />}>
-                Resolve Delinquent Accounts
+                Resolve Delinquent Accounts ({delinquentCount})
               </HeroBtn>
             </div>
           </div>
