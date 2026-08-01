@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
-import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   ArrowBackOutlined,
   CalendarMonthOutlined,
@@ -7,7 +7,10 @@ import {
   EditOutlined,
   FolderOutlined,
   InsertDriveFileOutlined,
+  PaymentsOutlined,
   SearchOutlined,
+  ThumbDownAltOutlined,
+  ThumbUpAltOutlined,
   ViewListOutlined,
 } from "@mui/icons-material";
 import { useAuth } from "../../../auth/AuthContext";
@@ -25,15 +28,34 @@ import {
   type StudentDetail,
   type StudentDocument,
 } from "./types";
+import {
+  ExamsTab,
+  LoginDetailsTab,
+  SubjectsTab,
+  TimelineTab,
+} from "./Student360Panels";
 
-type DetailTab = "profile" | "parents" | "fees" | "documents" | "attendance";
+type DetailTab =
+  | "profile"
+  | "parents"
+  | "fees"
+  | "documents"
+  | "attendance"
+  | "exams"
+  | "subjects"
+  | "timeline"
+  | "login";
 
 const TABS: Array<{ key: DetailTab; label: string }> = [
   { key: "profile", label: "Profile Details" },
   { key: "parents", label: "Parents & Guardians" },
   { key: "fees", label: "Fees & Payments" },
+  { key: "exams", label: "Exam Details" },
+  { key: "subjects", label: "Subjects" },
   { key: "documents", label: "Documents" },
   { key: "attendance", label: "Attendance History" },
+  { key: "timeline", label: "Timeline" },
+  { key: "login", label: "Login Details" },
 ];
 
 function buildProfileForm(detail: StudentDetail) {
@@ -105,6 +127,7 @@ export function StudentProfilePage() {
   const { accessToken } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const createState = (location.state as CreateLocationState | null) ?? null;
   const [setup, setSetup] = useState<Setup | null>(null);
   const [detail, setDetail] = useState<StudentDetail | null>(null);
@@ -129,6 +152,25 @@ export function StudentProfilePage() {
       notifySuccess("Student added successfully");
     }
   }, [createState?.justCreated]);
+
+  useEffect(() => {
+    const requestedTab = searchParams.get("tab");
+    const validTabs = new Set(TABS.map((item) => item.key));
+    if (requestedTab && validTabs.has(requestedTab as DetailTab)) {
+      setTab(requestedTab as DetailTab);
+    }
+    if (searchParams.get("edit") === "1") {
+      setTab("profile");
+      setEditing(true);
+    }
+    if (searchParams.has("tab") || searchParams.has("edit")) {
+      const next = new URLSearchParams(searchParams);
+      next.delete("tab");
+      next.delete("edit");
+      setSearchParams(next, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     setLoading(true);
@@ -251,8 +293,12 @@ export function StudentProfilePage() {
             />
           )}
           {tab === "fees" && <FeesTab detail={detail} />}
+          {tab === "exams" && <ExamsTab studentId={detail.id} token={accessToken} />}
+          {tab === "subjects" && <SubjectsTab studentId={detail.id} token={accessToken} />}
           {tab === "documents" && <DocumentsTab detail={detail} />}
           {tab === "attendance" && <AttendanceTab studentId={detail.id} token={accessToken} />}
+          {tab === "timeline" && <TimelineTab studentId={detail.id} token={accessToken} />}
+          {tab === "login" && <LoginDetailsTab studentId={detail.id} token={accessToken} />}
         </>
       )}
 
@@ -369,11 +415,37 @@ function ProfileHeaderCard({
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button className="nx-btn-secondary" type="button" onClick={onEdit}>
+            <Link
+              className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 py-2 text-[13px] font-semibold text-white shadow-sm transition hover:bg-indigo-700"
+              to={`/fees?studentId=${detail.id}&action=collect`}
+            >
+              <PaymentsOutlined sx={{ fontSize: 16 }} /> Add Fee
+            </Link>
+            <button
+              className="inline-flex items-center gap-1.5 rounded-xl bg-slate-800 px-3.5 py-2 text-[13px] font-semibold text-white shadow-sm transition hover:bg-slate-900"
+              type="button"
+              onClick={onEdit}
+            >
               <EditOutlined sx={{ fontSize: 16 }} /> {editing ? "Editing…" : "Edit Profile"}
             </button>
-            <button className="nx-btn-secondary" type="button" onClick={() => void toggleStatus()}>
-              {detail.status === "ACTIVE" ? "Disable" : "Enable"}
+            <button
+              className={
+                detail.status === "ACTIVE"
+                  ? "inline-flex items-center gap-1.5 rounded-xl bg-rose-600 px-3.5 py-2 text-[13px] font-semibold text-white shadow-sm transition hover:bg-rose-700"
+                  : "inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-2 text-[13px] font-semibold text-white shadow-sm transition hover:bg-emerald-700"
+              }
+              type="button"
+              onClick={() => void toggleStatus()}
+            >
+              {detail.status === "ACTIVE" ? (
+                <>
+                  <ThumbDownAltOutlined sx={{ fontSize: 16 }} /> Disable
+                </>
+              ) : (
+                <>
+                  <ThumbUpAltOutlined sx={{ fontSize: 16 }} /> Enable
+                </>
+              )}
             </button>
           </div>
         </div>
@@ -594,9 +666,29 @@ function ProfileDetailsTab({
             <dt className="text-[12px] text-slate-500">Admission No.</dt>
             <dd className="text-right font-mono text-[13px] font-semibold text-slate-800">{detail.admissionNumber}</dd>
           </div>
-          <div className="flex justify-between gap-3 border-b border-slate-100 pb-3">
+          <div className="border-b border-slate-100 pb-3">
             <dt className="text-[12px] text-slate-500">Class / Section</dt>
-            <dd className="text-right text-[13px] font-semibold text-slate-800">{classLabel}</dd>
+            <dd className="mt-1.5 space-y-1 text-right text-[13px] font-semibold text-slate-800">
+              {detail.enrollments.length ? (
+                detail.enrollments.map((enrollment) => (
+                  <p key={enrollment.id}>
+                    {enrollment.classSection.academicClass.name} ·{" "}
+                    {enrollment.classSection.section.name}
+                    {enrollment.rollNumber ? ` · Roll ${enrollment.rollNumber}` : ""}
+                    {enrollment.academicSession?.name
+                      ? ` · ${enrollment.academicSession.name}`
+                      : ""}
+                  </p>
+                ))
+              ) : (
+                <p>{classLabel}</p>
+              )}
+            </dd>
+            {detail.enrollments.length > 1 ? (
+              <p className="mt-2 text-right text-[11px] font-medium text-indigo-600">
+                Multi-class student ({detail.enrollments.length} classes)
+              </p>
+            ) : null}
           </div>
           <div className="flex justify-between gap-3 border-b border-slate-100 pb-3">
             <dt className="text-[12px] text-slate-500">Admission Type</dt>
@@ -908,7 +1000,10 @@ function FeesTab({ detail }: { detail: StudentDetail }) {
         <div className="nx-card p-5">
           <p className="text-[13px] font-semibold text-slate-800">Collect payment</p>
           <p className="mt-1 text-[12px] text-slate-500">Open Fees module to record a payment against this student.</p>
-          <Link to="/fees" className="nx-btn-primary mt-4 inline-flex w-full justify-center">
+          <Link
+            to={`/fees?studentId=${detail.id}&action=collect`}
+            className="nx-btn-primary mt-4 inline-flex w-full justify-center"
+          >
             Collect Payment
           </Link>
         </div>

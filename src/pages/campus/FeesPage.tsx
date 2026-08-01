@@ -4,7 +4,7 @@ import {
   DownloadOutlined,
   ReceiptLongOutlined,
 } from "@mui/icons-material";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import { CmsFooter, CmsPage, CmsPageHeader, CmsScrollBody, CmsTab, CmsTabs } from "../../components/cms/CmsLayout";
 import { apiRequest } from "../../lib/api";
@@ -37,6 +37,7 @@ const TABS: Array<[FeesTab, string]> = [
 export function FeesPage() {
   const { accessToken, user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [setup, setSetup] = useState<FeeSetup | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [tab, setTab] = useState<FeesTab>("dues");
@@ -114,6 +115,25 @@ export function FeesPage() {
   useEffect(() => {
     void load();
   }, [accessToken]);
+
+  useEffect(() => {
+    const fromQuery = searchParams.get("studentId")?.trim() ?? "";
+    const action = searchParams.get("action")?.trim() ?? "";
+    if (!fromQuery || !setup) return;
+    void (async () => {
+      if (action === "collect") {
+        await openCollect(fromQuery);
+      } else {
+        setTab("dues");
+        await loadStudent(fromQuery);
+      }
+      const next = new URLSearchParams(searchParams);
+      next.delete("studentId");
+      next.delete("action");
+      setSearchParams(next, { replace: true });
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setup, searchParams]);
 
   useEffect(() => {
     if (tab === "receipts") void loadPayments(receiptSearch);

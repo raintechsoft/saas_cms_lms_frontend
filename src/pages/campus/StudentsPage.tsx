@@ -7,9 +7,11 @@ import {
   CloudUploadOutlined,
   DeleteOutline,
   DownloadOutlined,
+  EditOutlined,
   FilterListOutlined,
   InsertDriveFileOutlined,
   IosShareOutlined,
+  MoreVertOutlined,
   PersonAddAltOutlined,
   ShieldOutlined,
   SupportAgentOutlined,
@@ -34,6 +36,7 @@ import type {
   StudentStatus,
 } from "./students/types";
 import { studentDisplayName } from "./students/types";
+import { MultiClassPanel } from "./students/MultiClassPanel";
 
 const SAMPLE_CSV = [
   "firstName,lastName,admissionDate,classSectionId,rollNumber,mobile,email,gender,dateOfBirth,fatherName,fatherPhone,motherName,photoUrl",
@@ -42,7 +45,7 @@ const SAMPLE_CSV = [
 
 const PAGE_SIZE = 4;
 
-type PageTab = "directory" | "admissions" | "import" | "masters";
+type PageTab = "directory" | "admissions" | "import" | "masters" | "multiclass";
 
 async function apiDelete(path: string, token: string) {
   const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:4000/api/v1";
@@ -130,6 +133,72 @@ function exportAdmissionsCsv(items: OnlineAdmission[]) {
   URL.revokeObjectURL(url);
 }
 
+function DirectoryMoreMenu({
+  studentId,
+  onDelete,
+}: {
+  studentId: string;
+  onDelete: () => void;
+}) {
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        className="grid size-8 place-items-center rounded-lg text-slate-500 transition hover:bg-slate-100"
+        title="More actions"
+        onClick={() => setOpen((current) => !current)}
+      >
+        <MoreVertOutlined sx={{ fontSize: 18 }} />
+      </button>
+      {open ? (
+        <>
+          <button
+            type="button"
+            className="fixed inset-0 z-10 cursor-default"
+            aria-label="Close menu"
+            onClick={() => setOpen(false)}
+          />
+          <div className="absolute right-0 z-20 mt-1 w-52 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
+            <button
+              type="button"
+              className="block w-full px-3 py-2 text-left text-[13px] text-slate-700 hover:bg-slate-50"
+              onClick={() => {
+                setOpen(false);
+                navigate(`/students/${studentId}?tab=login`);
+              }}
+            >
+              Login details / send password
+            </button>
+            <button
+              type="button"
+              className="block w-full px-3 py-2 text-left text-[13px] text-slate-700 hover:bg-slate-50"
+              onClick={() => {
+                setOpen(false);
+                navigate(`/fees?studentId=${studentId}&action=collect`);
+              }}
+            >
+              Collect / add fee
+            </button>
+            <button
+              type="button"
+              className="block w-full px-3 py-2 text-left text-[13px] text-rose-600 hover:bg-rose-50"
+              onClick={() => {
+                setOpen(false);
+                onDelete();
+              }}
+            >
+              Delete student
+            </button>
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 function DirectoryStatusBadge({ status }: { status: StudentStatus }) {
   if (status === "ACTIVE") {
     return (
@@ -174,6 +243,12 @@ function headerForTab(tab: PageTab) {
       description: "Manage categories, houses, and disable reasons.",
     };
   }
+  if (tab === "multiclass") {
+    return {
+      title: "Multi Class Student",
+      description: "Enroll a student in additional class sections (coaching / training centers).",
+    };
+  }
   return {
     title: "Students Directory",
     description: "Manage and view all enrolled student records",
@@ -181,12 +256,15 @@ function headerForTab(tab: PageTab) {
 }
 
 export function StudentsPage() {
-  const { accessToken } = useAuth();
+  const { accessToken, user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const initialTab = (location.state as { tab?: PageTab } | null)?.tab;
   const [tab, setTab] = useState<PageTab>(
-    initialTab === "import" || initialTab === "admissions" || initialTab === "masters"
+    initialTab === "import" ||
+      initialTab === "admissions" ||
+      initialTab === "masters" ||
+      initialTab === "multiclass"
       ? initialTab
       : "directory",
   );
@@ -454,6 +532,7 @@ export function StudentsPage() {
           [
             ["directory", "Directory"],
             ["admissions", "Admissions"],
+            ["multiclass", "Multi Class"],
             ["import", "Import"],
             ["masters", "Masters"],
           ] as const
@@ -600,7 +679,7 @@ export function StudentsPage() {
                           <DirectoryStatusBadge status={student.status} />
                         </td>
                         <td className="px-4 py-3.5">
-                          <div className="flex items-center justify-end gap-1">
+                          <div className="relative flex items-center justify-end gap-1">
                             <button
                               type="button"
                               className="grid size-8 place-items-center rounded-lg text-indigo-600 transition hover:bg-indigo-50"
@@ -611,12 +690,26 @@ export function StudentsPage() {
                             </button>
                             <button
                               type="button"
-                              className="grid size-8 place-items-center rounded-lg text-rose-500 transition hover:bg-rose-50"
-                              title="Delete"
-                              onClick={() => void deleteStudent(student.id)}
+                              className="grid size-8 place-items-center rounded-lg text-indigo-600 transition hover:bg-indigo-50"
+                              title="Edit"
+                              onClick={() => navigate(`/students/${student.id}?edit=1`)}
                             >
-                              <DeleteOutline sx={{ fontSize: 18 }} />
+                              <EditOutlined sx={{ fontSize: 18 }} />
                             </button>
+                            <button
+                              type="button"
+                              className="grid size-8 place-items-center rounded-lg text-emerald-600 transition hover:bg-emerald-50"
+                              title="Add Fee"
+                              onClick={() =>
+                                navigate(`/fees?studentId=${student.id}&action=collect`)
+                              }
+                            >
+                              <AccountBalanceWalletOutlined sx={{ fontSize: 18 }} />
+                            </button>
+                            <DirectoryMoreMenu
+                              studentId={student.id}
+                              onDelete={() => void deleteStudent(student.id)}
+                            />
                           </div>
                         </td>
                       </tr>
@@ -749,6 +842,14 @@ export function StudentsPage() {
           }}
           onError={notifyError}
           onMessage={notifySuccess}
+        />
+      ) : null}
+
+      {tab === "multiclass" && setup ? (
+        <MultiClassPanel
+          setup={setup}
+          token={accessToken}
+          tenantType={user?.tenant?.type}
         />
       ) : null}
 
