@@ -68,6 +68,14 @@ export function DocumentPrintPage() {
       .then(setDocument)
       .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "Unable to load document"));
   }, [id, accessToken, isAuthenticated]);
+  useEffect(() => {
+    if (!document) return;
+    // Opened via the "Print" action in Generation History.
+    if (new URLSearchParams(window.location.search).get("autoprint")) {
+      const timer = window.setTimeout(() => window.print(), 700);
+      return () => window.clearTimeout(timer);
+    }
+  }, [document]);
   const person = document?.student
     ? `${document.student.firstName} ${document.student.lastName ?? ""}`
     : document?.staff

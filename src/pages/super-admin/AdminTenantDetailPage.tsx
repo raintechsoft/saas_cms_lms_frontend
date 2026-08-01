@@ -34,7 +34,7 @@ import { useAuth } from "../../auth/AuthContext";
 import { apiRequest } from "../../lib/api";
 import { notifyError, notifyInfo, notifySuccess } from "../../lib/notify";
 import { saColors } from "../../theme/superAdminTheme";
-import type { TenantDetail, TenantStatus } from "./types";
+import { CMS_MODULE_OPTIONS, LMS_MODULE_OPTIONS, type TenantDetail, type TenantStatus } from "./types";
 
 const TABS = [
   "Overview",
@@ -45,31 +45,7 @@ const TABS = [
   "Security",
 ] as const;
 
-const CMS_MODULES = [
-  "Student Management",
-  "Fees",
-  "Academics",
-  "Attendance",
-  "Examination",
-  "HR",
-  "Homework",
-  "Certificates",
-];
-
-const LMS_MODULES = [
-  "Academic Calendar",
-  "Lesson Planning",
-  "Live Classes",
-  "AI Tutor",
-  "Question Bank",
-  "Test Series",
-  "NCERT Content",
-  "Classroom Management",
-  "Video Gallery",
-  "Preparation & Practice",
-  "Voice AI Agent",
-  "Results & Performance",
-];
+const ALL_MODULE_OPTIONS = [...CMS_MODULE_OPTIONS, ...LMS_MODULE_OPTIONS];
 
 export function AdminTenantDetailPage() {
   const { id } = useParams();
@@ -81,8 +57,8 @@ export function AdminTenantDetailPage() {
   const [tenant, setTenant] = useState<TenantDetail | null>(null);
   const [tab, setTab] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [cms, setCms] = useState<Record<string, boolean>>({});
-  const [lms, setLms] = useState<Record<string, boolean>>({});
+  const [modulesOn, setModulesOn] = useState<Record<string, boolean>>({});
+  const [savingModule, setSavingModule] = useState<string | null>(null);
   const [primaryColor, setPrimaryColor] = useState("#FF6B35");
   const [logoText, setLogoText] = useState("");
   const [customDomain, setCustomDomain] = useState("");
@@ -98,22 +74,37 @@ export function AdminTenantDetailPage() {
         setPrimaryColor(typeof branding.primaryColor === "string" ? branding.primaryColor : "#FF6B35");
         setLogoText(typeof branding.logoText === "string" ? branding.logoText : data.name);
         setCustomDomain(typeof branding.customDomain === "string" ? branding.customDomain : "");
-        const cmsDefault = data.productMode !== "LMS";
-        const lmsDefault = data.productMode !== "CMS";
-        setCms(Object.fromEntries(CMS_MODULES.map((m) => [m, cmsDefault && !["HR", "Certificates", "Examination"].includes(m)])));
-        setLms(
-          Object.fromEntries(
-            LMS_MODULES.map((m) => [
-              m,
-              lmsDefault &&
-                ["Academic Calendar", "Lesson Planning", "Question Bank", "NCERT Content", "Classroom Management", "Preparation & Practice", "Results & Performance"].includes(m),
-            ]),
-          ),
+        const enabled = data.enabledModules ? new Set(data.enabledModules) : null;
+        // Tenants created before module gating have no settings rows: everything is enabled.
+        setModulesOn(
+          Object.fromEntries(ALL_MODULE_OPTIONS.map((m) => [m.key, enabled ? enabled.has(m.key) : true])),
         );
       })
       .catch((cause) => notifyError(cause instanceof Error ? cause.message : "Failed to load tenant"))
       .finally(() => setLoading(false));
   }, [id, accessToken]);
+
+  async function toggleModule(moduleKey: string, checked: boolean) {
+    if (!tenant) return;
+    const next = { ...modulesOn, [moduleKey]: checked };
+    setModulesOn(next);
+    setSavingModule(moduleKey);
+    try {
+      await apiRequest(`/platform/tenants/${tenant.id}`, accessToken, {
+        method: "PUT",
+        body: JSON.stringify({
+          modules: ALL_MODULE_OPTIONS.filter((m) => next[m.key]).map((m) => m.key),
+        }),
+      });
+      const label = ALL_MODULE_OPTIONS.find((m) => m.key === moduleKey)?.label ?? moduleKey;
+      notifySuccess(`${label} ${checked ? "enabled" : "disabled"} for this tenant`);
+    } catch (cause) {
+      setModulesOn((p) => ({ ...p, [moduleKey]: !checked }));
+      notifyError(cause instanceof Error ? cause.message : "Failed to update module");
+    } finally {
+      setSavingModule(null);
+    }
+  }
 
   async function setStatus(status: TenantStatus) {
     if (!tenant) return;
@@ -429,21 +420,19 @@ export function AdminTenantDetailPage() {
               <CardContent>
                 <Typography fontWeight={700}>CMS Modules</Typography>
                 <Typography variant="caption" color="text.secondary" display="block" mb={1}>
-                  Core management
+                  Changes apply to the tenant sidebar and APIs immediately (users see it after their next login or refresh)
                 </Typography>
-                {CMS_MODULES.map((mod) => (
+                {CMS_MODULE_OPTIONS.map((mod) => (
                   <FormControlLabel
-                    key={mod}
+                    key={mod.key}
                     control={
                       <Switch
-                        checked={!!cms[mod]}
-                        onChange={(e) => {
-                          setCms((p) => ({ ...p, [mod]: e.target.checked }));
-                          notifyInfo("Module preference saved locally — wire to entitlements next");
-                        }}
+                        checked={!!modulesOn[mod.key]}
+                        disabled={savingModule !== null}
+                        onChange={(e) => void toggleModule(mod.key, e.target.checked)}
                       />
                     }
-                    label={<Typography variant="body2">{mod}</Typography>}
+                    label={<Typography variant="body2">{mod.label}</Typography>}
                     labelPlacement="start"
                     sx={{ display: "flex", justifyContent: "space-between", ml: 0, width: "100%" }}
                   />
@@ -458,19 +447,17 @@ export function AdminTenantDetailPage() {
                 <Typography variant="caption" color="text.secondary" display="block" mb={1}>
                   Learning experience
                 </Typography>
-                {LMS_MODULES.map((mod) => (
+                {LMS_MODULE_OPTIONS.map((mod) => (
                   <FormControlLabel
-                    key={mod}
+                    key={mod.key}
                     control={
                       <Switch
-                        checked={!!lms[mod]}
-                        onChange={(e) => {
-                          setLms((p) => ({ ...p, [mod]: e.target.checked }));
-                          notifyInfo("Module preference saved locally — wire to entitlements next");
-                        }}
+                        checked={!!modulesOn[mod.key]}
+                        disabled={savingModule !== null}
+                        onChange={(e) => void toggleModule(mod.key, e.target.checked)}
                       />
                     }
-                    label={<Typography variant="body2">{mod}</Typography>}
+                    label={<Typography variant="body2">{mod.label}</Typography>}
                     labelPlacement="start"
                     sx={{ display: "flex", justifyContent: "space-between", ml: 0, width: "100%" }}
                   />

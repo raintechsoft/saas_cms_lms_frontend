@@ -29,7 +29,9 @@ import { apiRequest } from "../../lib/api";
 import { notifyError, notifySuccess } from "../../lib/notify";
 import { saColors } from "../../theme/superAdminTheme";
 import {
+  CMS_MODULE_OPTIONS,
   DISTRIBUTION_MODELS,
+  LMS_MODULE_OPTIONS,
   PRODUCT_MODES,
   type DistributionModel,
   type ProductMode,
@@ -53,26 +55,8 @@ const CUSTOMER_TYPES: Array<{
   { type: "RESELLER", label: "Reseller", description: "Channel partners", icon: <StorefrontOutlined /> },
 ];
 
-const CMS_MODULES = [
-  "Student Management",
-  "Academics",
-  "Examination",
-  "Homework",
-  "Fees",
-  "Attendance",
-  "HR",
-  "Certificates",
-];
-
-const LMS_MODULES = [
-  "Academic Calendar",
-  "Live Classes",
-  "Question Bank",
-  "NCERT Content",
-  "Lesson Planning",
-  "AI Tutor",
-  "Test Series",
-];
+const CMS_MODULES = CMS_MODULE_OPTIONS;
+const LMS_MODULES = LMS_MODULE_OPTIONS;
 
 const emptyForm = {
   name: "",
@@ -100,10 +84,10 @@ export function AdminTenantFormPage() {
   const [form, setForm] = useState(emptyForm);
   const [resellers, setResellers] = useState<ResellerRow[]>([]);
   const [cmsOn, setCmsOn] = useState<Record<string, boolean>>(
-    Object.fromEntries(CMS_MODULES.map((m) => [m, !["HR", "Certificates"].includes(m)])),
+    Object.fromEntries(CMS_MODULES.map((m) => [m.key, true])),
   );
   const [lmsOn, setLmsOn] = useState<Record<string, boolean>>(
-    Object.fromEntries(LMS_MODULES.map((m) => [m, ["Academic Calendar", "NCERT Content"].includes(m)])),
+    Object.fromEntries(LMS_MODULES.map((m) => [m.key, true])),
   );
   const [submitting, setSubmitting] = useState(false);
 
@@ -130,6 +114,11 @@ export function AdminTenantFormPage() {
           logoText: typeof branding.logoText === "string" ? branding.logoText : "",
           customDomain: typeof branding.customDomain === "string" ? branding.customDomain : "",
         });
+        if (tenant.enabledModules) {
+          const enabled = new Set(tenant.enabledModules);
+          setCmsOn(Object.fromEntries(CMS_MODULES.map((m) => [m.key, enabled.has(m.key)])));
+          setLmsOn(Object.fromEntries(LMS_MODULES.map((m) => [m.key, enabled.has(m.key)])));
+        }
       })
       .catch((cause) => notifyError(cause instanceof Error ? cause.message : "Failed to load tenant"));
   }, [id, accessToken]);
@@ -183,6 +172,10 @@ export function AdminTenantFormPage() {
     }
     setSubmitting(true);
     try {
+      const enabledModules = [
+        ...CMS_MODULES.filter((m) => cmsOn[m.key]),
+        ...LMS_MODULES.filter((m) => lmsOn[m.key]),
+      ].map((m) => m.key);
       const payload = {
         name: form.name,
         slug: form.slug,
@@ -190,6 +183,7 @@ export function AdminTenantFormPage() {
         productMode: form.productMode,
         distributionModel: form.distributionModel,
         resellerId: form.resellerId || null,
+        modules: enabledModules,
         branding: {
           primaryColor: form.primaryColor,
           logoText: form.logoText || form.name,
@@ -366,15 +360,15 @@ export function AdminTenantFormPage() {
                   </Typography>
                   {CMS_MODULES.map((mod) => (
                     <FormControlLabel
-                      key={mod}
+                      key={mod.key}
                       control={
                         <Switch
-                          checked={!!cmsOn[mod]}
-                          onChange={(e) => setCmsOn((p) => ({ ...p, [mod]: e.target.checked }))}
+                          checked={!!cmsOn[mod.key]}
+                          onChange={(e) => setCmsOn((p) => ({ ...p, [mod.key]: e.target.checked }))}
                           disabled={form.type === "INDIVIDUAL"}
                         />
                       }
-                      label={<Typography variant="body2">{mod}</Typography>}
+                      label={<Typography variant="body2">{mod.label}</Typography>}
                       sx={{ display: "flex", justifyContent: "space-between", ml: 0, width: "100%" }}
                       labelPlacement="start"
                     />
@@ -391,14 +385,14 @@ export function AdminTenantFormPage() {
                   </Typography>
                   {LMS_MODULES.map((mod) => (
                     <FormControlLabel
-                      key={mod}
+                      key={mod.key}
                       control={
                         <Switch
-                          checked={!!lmsOn[mod]}
-                          onChange={(e) => setLmsOn((p) => ({ ...p, [mod]: e.target.checked }))}
+                          checked={!!lmsOn[mod.key]}
+                          onChange={(e) => setLmsOn((p) => ({ ...p, [mod.key]: e.target.checked }))}
                         />
                       }
-                      label={<Typography variant="body2">{mod}</Typography>}
+                      label={<Typography variant="body2">{mod.label}</Typography>}
                       sx={{ display: "flex", justifyContent: "space-between", ml: 0, width: "100%" }}
                       labelPlacement="start"
                     />

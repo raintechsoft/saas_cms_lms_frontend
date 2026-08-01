@@ -47,7 +47,28 @@ export interface TenantRow {
   updatedAt?: string;
 }
 
+/** Keys must match the campus sidebar moduleKey values and backend requireModule keys. */
+export const CMS_MODULE_OPTIONS: Array<{ key: string; label: string }> = [
+  { key: "students", label: "Student Management" },
+  { key: "academics", label: "Academics" },
+  { key: "attendance", label: "Attendance" },
+  { key: "notices", label: "Notices" },
+  { key: "examinations", label: "Examination" },
+  { key: "homework", label: "Homework Management" },
+  { key: "fees", label: "Fees" },
+  { key: "hr", label: "HR & Payroll" },
+  { key: "documents", label: "Certificates & ID" },
+  { key: "erp", label: "ERP Control Center" },
+  { key: "reports", label: "Reports" },
+];
+
+export const LMS_MODULE_OPTIONS: Array<{ key: string; label: string }> = [
+  { key: "timetable", label: "Timetable" },
+];
+
 export interface TenantDetail extends TenantRow {
+  /** Module keys currently enabled for the tenant (missing = legacy all-enabled). */
+  enabledModules?: string[];
   settingsSummary: {
     autoAdmissionNumber: boolean;
     attendanceType: string;

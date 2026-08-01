@@ -141,11 +141,26 @@ function HomeworkRow({
         )}
       </div>
       <p className="mt-2 text-sm">{item.description}</p>
-      {item.attachmentUrl && (
-        <a className="mt-2 inline-block text-sm font-semibold text-indigo-700" href={item.attachmentUrl} target="_blank" rel="noreferrer">
-          Attachment
-        </a>
-      )}
+      {item.attachmentUrl &&
+        (item.attachmentUrl.startsWith("data:") ? (
+          // Browsers block navigating to data: URLs, so uploaded files download instead.
+          <a
+            className="mt-2 inline-block text-sm font-semibold text-indigo-700"
+            href={item.attachmentUrl}
+            download={`${item.title || "homework"}-attachment`}
+          >
+            Download attachment
+          </a>
+        ) : (
+          <a
+            className="mt-2 inline-block text-sm font-semibold text-indigo-700"
+            href={item.attachmentUrl}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Attachment
+          </a>
+        ))}
       {item.submission?.review && (
         <p className="mt-2 text-sm text-indigo-700">Teacher note: {item.submission.review}</p>
       )}
