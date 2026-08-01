@@ -87,6 +87,7 @@ function useBreadcrumb() {
       if (mode === "LMS") return ["Dashboard", "LMS", "Overview"];
       return ["Dashboard", "Overview"];
     }
+    if (path === "/cms") return ["Dashboard", "CMS", "Overview"];
 
     const match = [...CAMPUS_NAV]
       .filter((item) => item.to !== "/dashboard" && (path === item.to || path.startsWith(`${item.to}/`)))
@@ -194,13 +195,18 @@ function NavGroup({
   items,
   active,
   navIcons: icons,
+  to,
 }: {
   label: string;
   items: Array<{ to: string; label: string }>;
   active: boolean;
   navIcons: Record<string, NavIcon>;
+  /** Optional dashboard route opened when the group header is clicked. */
+  to?: string;
 }) {
   const [open, setOpen] = useState(active);
+  const navigate = useNavigate();
+  const location = useLocation();
   useEffect(() => {
     if (active) setOpen(true);
   }, [active]);
@@ -208,11 +214,20 @@ function NavGroup({
   const GroupIcon = icons[items[0].to] ?? GridViewRounded;
   const groupTone = sectionTone[label] ?? "bg-slate-100 text-slate-600";
 
+  const handleHeaderClick = () => {
+    if (to && location.pathname !== to) {
+      setOpen(true);
+      navigate(to);
+      return;
+    }
+    setOpen((current) => !current);
+  };
+
   return (
     <div>
       <button
         type="button"
-        onClick={() => setOpen((current) => !current)}
+        onClick={handleHeaderClick}
         className={`flex w-full items-center gap-2.5 rounded-xl px-2 py-2 text-[13px] font-semibold transition ${
           active ? "bg-white/80 text-indigo-800 shadow-sm" : "text-slate-600 hover:bg-white/60 hover:text-slate-800"
         }`}
@@ -477,7 +492,8 @@ export function AppShell() {
   const cmsLinks = links.filter((item) => item.section === "cms");
   const lmsLinks = links.filter((item) => item.section === "lms");
   const managementLinks = links.filter((item) => item.section === "management");
-  const isCmsActive = cmsLinks.some((item) => location.pathname.startsWith(item.to));
+  const isCmsActive =
+    location.pathname === "/cms" || cmsLinks.some((item) => location.pathname.startsWith(item.to));
   const isLmsActive = lmsLinks.some((item) => location.pathname.startsWith(item.to));
 
   const panelTitle = staffPanelTitle(user.roles);
@@ -529,7 +545,7 @@ export function AppShell() {
             })}
           </div>
 
-          {cmsLinks.length > 0 && <NavGroup label="CMS Modules" items={cmsLinks} active={isCmsActive} navIcons={navIcons} />}
+          {cmsLinks.length > 0 && <NavGroup label="CMS Modules" items={cmsLinks} active={isCmsActive} navIcons={navIcons} to="/cms" />}
           {lmsLinks.length > 0 && <NavGroup label="LMS Modules" items={lmsLinks} active={isLmsActive} navIcons={navIcons} />}
 
           {managementLinks.length > 0 && (

@@ -3,17 +3,17 @@ import {
   AccountBalanceWalletOutlined,
   ArrowDownwardRounded,
   ArrowUpwardRounded,
-  AssessmentOutlined,
   CalendarMonthOutlined,
-  CheckCircleOutline,
-  DescriptionOutlined,
+  ErrorOutlineRounded,
   FileDownloadOutlined,
   GroupsOutlined,
+  InsightsOutlined,
+  LocalFireDepartmentOutlined,
   MoreHorizOutlined,
   PersonAddAltOutlined,
   SearchOutlined,
-  SettingsOutlined,
   TrendingUpRounded,
+  VerifiedOutlined,
   WarningAmberOutlined,
 } from "@mui/icons-material";
 import { Link } from "react-router-dom";
@@ -28,6 +28,12 @@ const INVOICES_PER_PAGE = 5;
 
 const formatMoney = (value: number) =>
   new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(value);
+
+const formatCompactMoney = (value: number) => {
+  if (Math.abs(value) >= 100000) return `₹${(value / 100000).toFixed(1)}L`;
+  if (Math.abs(value) >= 1000) return `₹${(value / 1000).toFixed(1)}k`;
+  return formatMoney(value);
+};
 
 const formatDate = (value: string) =>
   new Date(value).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
@@ -89,19 +95,19 @@ function studentName(person: { firstName: string; lastName?: string | null }) {
 function paymentGrade(payment: FeePayment) {
   const cs = payment.student.enrollments?.[0]?.classSection;
   if (!cs?.academicClass?.name) return "—";
-  return `${cs.academicClass.name}${cs.section?.name ? `-${cs.section.name}` : ""}`;
+  return `${cs.academicClass.name}${cs.section?.name ? ` ${cs.section.name}` : ""}`;
 }
 
 function paymentStatus(raw: string) {
   const status = raw?.toUpperCase() ?? "";
   if (status === "COLLECTED" || status.includes("PAID") || status === "SUCCESS") {
-    return { label: "PAID", className: "nx-pill-success" };
+    return { label: "Paid", className: "nx-pill-success" };
   }
   if (status === "REVERTED" || status.includes("CANCEL")) {
-    return { label: "REVERTED", className: "nx-pill-neutral" };
+    return { label: "Reverted", className: "nx-pill-neutral" };
   }
-  if (status.includes("OVERDUE")) return { label: "OVERDUE", className: "nx-pill-danger" };
-  return { label: status || "PENDING", className: "nx-pill-warning" };
+  if (status.includes("OVERDUE")) return { label: "Overdue", className: "nx-pill-danger" };
+  return { label: "Pending", className: "nx-pill-warning" };
 }
 
 function formatTrendPct(value: number) {
@@ -132,7 +138,7 @@ function KpiCard({
   tint,
   trend,
   trendTone = "up",
-  hint,
+  trendSuffix,
 }: {
   icon: QuickIcon;
   label: string;
@@ -140,7 +146,7 @@ function KpiCard({
   tint: string;
   trend?: string;
   trendTone?: "up" | "down";
-  hint?: string;
+  trendSuffix?: string;
 }) {
   const TrendIcon = trendTone === "up" ? ArrowUpwardRounded : ArrowDownwardRounded;
   return (
@@ -153,17 +159,17 @@ function KpiCard({
           <span className={`ov-trend ${trendTone === "up" ? "ov-trend-up" : "ov-trend-down"}`}>
             <TrendIcon sx={{ fontSize: 12 }} />
             {trend}
+            {trendSuffix ? <span className="font-medium">{trendSuffix}</span> : null}
           </span>
         ) : null}
       </div>
-      <p className="ov-kpi-value">{value}</p>
       <p className="ov-kpi-label">{label}</p>
-      {hint ? <p className="ov-kpi-hint">{hint}</p> : null}
+      <p className="ov-kpi-value !mt-0.5">{value}</p>
     </article>
   );
 }
 
-export function DashboardPage() {
+export function CmsDashboardPage() {
   const { accessToken, user } = useAuth();
   const [dashboard, setDashboard] = useState<DashboardResult | null>(null);
   const [feeSummary, setFeeSummary] = useState<FeeSummary | null>(null);
@@ -203,7 +209,7 @@ export function DashboardPage() {
               const alerts = (report.records ?? []).filter((item) =>
                 ["ABSENT", "LATE"].includes(item.status),
               );
-              setAttendanceAlerts(alerts.slice(0, 5));
+              setAttendanceAlerts(alerts.slice(0, 3));
             })
             .catch(() => setAttendanceAlerts([])),
         );
@@ -229,11 +235,10 @@ export function DashboardPage() {
   const present = stats?.attendanceToday.present ?? 0;
   const absent = stats?.attendanceToday.absent ?? 0;
   const totalAttendance = stats?.attendanceToday.total ?? 0;
-  const presentPct = totalAttendance > 0 ? Math.round((present / totalAttendance) * 1000) / 10 : 0;
-  const absentPct = totalAttendance > 0 ? Math.round((absent / totalAttendance) * 1000) / 10 : 0;
+  const presentPct = totalAttendance > 0 ? Math.round((present / totalAttendance) * 100) : 0;
+  const absentPct = totalAttendance > 0 ? Math.round((absent / totalAttendance) * 100) : 0;
 
   const institution = user?.tenant?.name ?? "Institution";
-  const sessionName = dashboard?.currentSession?.name;
 
   const collected = feeSummary?.totals.collected ?? 0;
   const outstanding = feeSummary?.totals.due ?? 0;
@@ -244,17 +249,10 @@ export function DashboardPage() {
   const overdueDues = (feeSummary?.dues ?? []).filter(
     (item) => item.totals.balance > 0 && new Date(item.feeMaster.dueDate).getTime() < now,
   );
+  const overdueImpact = overdueDues.reduce((sum, item) => sum + item.totals.balance, 0);
   const delinquentCount = overdueDues.length;
 
-  const sessionDaysRemaining = useMemo(() => {
-    if (!dashboard?.currentSession?.endDate) return null;
-    const end = new Date(dashboard.currentSession.endDate).getTime();
-    return Math.max(0, Math.ceil((end - Date.now()) / (1000 * 60 * 60 * 24)));
-  }, [dashboard?.currentSession?.endDate]);
-
   const newEnrollments = pendingAdmissions.length + Math.max(0, Math.round((stats?.students ?? 0) * 0.04));
-  const criticalApprovals = overdueDues.length;
-  const regularApprovals = pendingAdmissions.length;
 
   const filteredPayments = useMemo(() => {
     const q = invoiceQuery.trim().toLowerCase();
@@ -288,8 +286,7 @@ export function DashboardPage() {
 
   if (!user) return null;
 
-  const attendanceStatusLabel =
-    totalAttendance === 0 ? "Not started" : presentPct >= 90 ? `In Progress — ${presentPct}%` : `${presentPct}% marked`;
+  const adminName = user.firstName ? `${user.firstName} ${user.lastName ?? ""}`.trim() : `${institution} Admin`;
 
   const exportInvoicesCsv = () => {
     if (!filteredPayments.length) {
@@ -298,7 +295,7 @@ export function DashboardPage() {
     }
     downloadCsv(
       "recent-invoices.csv",
-      ["ID", "Student Name", "Grade", "Amount", "Paid On", "Status"],
+      ["ID", "Student", "Grade", "Amount", "Paid On", "Status"],
       filteredPayments.map((payment) => [
         payment.receiptNumber || payment.id.slice(0, 8).toUpperCase(),
         studentName(payment.student),
@@ -315,51 +312,40 @@ export function DashboardPage() {
       <CmsScrollBody>
       <div className="ov-stack">
 
-        <section className="ov-hero">
-          <div className="ov-hero-glow" />
-          <div className="ov-hero-inner">
-            <span className="ov-hero-badge">Admin Dashboard</span>
-            <h1 className="ov-hero-title">Daily Operational Flow for {institution} Admin</h1>
-
-            <div className="ov-status-row">
-              <div className="ov-status ov-status-ok">
-                <span>Today&apos;s Attendance:</span>
-                <strong>{attendanceStatusLabel}</strong>
-              </div>
-              <div className="ov-status ov-status-warn">
-                <span>Fee Collection Cycle:</span>
-                <strong>
-                  {sessionDaysRemaining != null
-                    ? `${sessionDaysRemaining} days remaining — ${collectionPct}% Target Met`
-                    : `${collectionPct}% Target Met`}
-                </strong>
-              </div>
-              <div className="ov-status ov-status-danger">
-                <span>Pending Approvals:</span>
-                <strong>
-                  {criticalApprovals} critical, {regularApprovals} regular
-                </strong>
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-wrap items-center gap-6">
+            <div className="min-w-0 flex-1">
+              <span className="inline-flex items-center rounded-full bg-indigo-50 px-3 py-1 text-[12px] font-semibold text-indigo-600">
+                Admin Dashboard
+              </span>
+              <h1 className="mt-3 text-[24px] font-bold leading-8 tracking-tight text-slate-900">
+                Welcome Back, {adminName}
+              </h1>
+              <p className="mt-2 max-w-xl text-[14px] leading-5 text-slate-500">
+                Institution management summary for the current academic session
+                {dashboard?.currentSession?.name ? ` (${dashboard.currentSession.name})` : ""}. You have{" "}
+                <span className="font-semibold text-slate-700">{delinquentCount}</span> pending fee approval
+                {delinquentCount === 1 ? "" : "s"} and{" "}
+                <span className="font-semibold text-slate-700">{attendanceAlerts.length}</span> urgent attendance
+                alert{attendanceAlerts.length === 1 ? "" : "s"}.
+              </p>
+              <div className="mt-5 flex flex-wrap items-center gap-3">
+                <Link to="/reports" className="nx-btn-primary">
+                  Generate Monthly Report
+                </Link>
+                <Link
+                  to="/settings"
+                  className="inline-flex items-center justify-center rounded-md border border-slate-800 bg-transparent px-4 py-2 text-[14px] font-medium text-slate-900 transition hover:bg-slate-50"
+                >
+                  View Institution Settings
+                </Link>
               </div>
             </div>
-
-            <div className="ov-hero-actions">
-              <HeroBtn to="/reports" icon={<AssessmentOutlined sx={{ fontSize: 15 }} />}>
-                Generate monthly report
-              </HeroBtn>
-              <HeroBtn to="/settings" icon={<SettingsOutlined sx={{ fontSize: 15 }} />}>
-                View ERP settings
-              </HeroBtn>
-              <HeroBtn
-                to="/students"
-                state={{ tab: "admissions" }}
-                icon={<PersonAddAltOutlined sx={{ fontSize: 15 }} />}
-              >
-                Process New Enrollments ({pendingAdmissions.length})
-              </HeroBtn>
-              <HeroBtn to="/fees" icon={<WarningAmberOutlined sx={{ fontSize: 15 }} />}>
-                Resolve Delinquent Accounts
-              </HeroBtn>
-            </div>
+            <img
+              src="/cms-dashboard-hero.webp"
+              alt=""
+              className="hidden h-[170px] w-[320px] shrink-0 rounded-lg object-cover lg:block"
+            />
           </div>
         </section>
 
@@ -371,25 +357,23 @@ export function DashboardPage() {
             tint="#6366f1"
             trend={formatTrendPct(studentsTrend)}
             trendTone={studentsTrend >= 0 ? "up" : "down"}
-            hint={`${Math.abs(studentsTrend)}% YoY`}
+            trendSuffix=" vs LY"
           />
           <KpiCard
             icon={AccountBalanceWalletOutlined}
-            label="Total Fees"
+            label="Monthly Fees"
             value={feeSummary ? formatMoney(collected) : "—"}
             tint="#10b981"
             trend={formatTrendPct(collectionTrend)}
             trendTone={collectionTrend >= 0 ? "up" : "down"}
-            hint={assigned > 0 ? `${collectionPct}% of Projected` : "Current cycle"}
           />
           <KpiCard
             icon={CalendarMonthOutlined}
-            label="Avg Attendance"
+            label="Avg. Attendance"
             value={totalAttendance > 0 ? `${presentPct}%` : "—"}
             tint="#f59e0b"
             trend={formatTrendPct(attendanceTrend)}
             trendTone={attendanceTrend >= 0 ? "up" : "down"}
-            hint="Avg attendance"
           />
           <KpiCard
             icon={TrendingUpRounded}
@@ -398,33 +382,37 @@ export function DashboardPage() {
             tint="#3b82f6"
             trend={formatTrendPct(enrollmentTrend)}
             trendTone={enrollmentTrend >= 0 ? "up" : "down"}
-            hint="Ahead of target"
+            trendSuffix=" this month"
           />
         </div>
 
         <div className="ov-widgets">
           <section className="ov-widget">
             <div className="ov-widget-head">
-              <div>
-                <h2 className="ov-widget-title">Due Fee Alerts</h2>
-                <p className="ov-widget-sub">Collection progress for current cycle</p>
-              </div>
+              <h2 className="text-[12px] font-bold uppercase tracking-wide text-slate-700">Due Fee Alerts</h2>
+              <span className="grid size-7 place-items-center rounded-lg bg-rose-50 text-rose-500">
+                <LocalFireDepartmentOutlined sx={{ fontSize: 16 }} />
+              </span>
             </div>
             <div className="ov-widget-body">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Collected</p>
-                  <p className="ov-money mt-1.5 !text-emerald-600">{feeSummary ? formatMoney(collected) : "—"}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Target</p>
-                  <p className="ov-money mt-1.5">{feeSummary ? formatMoney(collectionTarget) : "—"}</p>
-                </div>
-              </div>
+              <Link
+                to="/fees"
+                className="block rounded-lg border border-rose-100 bg-rose-50/70 px-3.5 py-3 transition hover:border-rose-200"
+              >
+                <p className="flex items-center gap-1.5 text-[13px] font-bold text-rose-600">
+                  <ErrorOutlineRounded sx={{ fontSize: 15 }} />
+                  Overdue Invoices
+                </p>
+                <p className="mt-1 text-[12px] leading-relaxed text-slate-600">
+                  {delinquentCount > 0
+                    ? `${delinquentCount} student${delinquentCount === 1 ? "" : "s"} overdue > 30 days. Impact: ${formatCompactMoney(overdueImpact)}.`
+                    : "No overdue invoices right now."}
+                </p>
+              </Link>
 
               <div className="mt-5">
                 <div className="mb-1.5 flex items-center justify-between text-[12px]">
-                  <span className="font-medium text-slate-500">Progress</span>
+                  <span className="font-medium text-slate-500">Collection Progress</span>
                   <span className="font-bold text-slate-800">{collectionPct}%</span>
                 </div>
                 <div className="ov-progress">
@@ -432,29 +420,32 @@ export function DashboardPage() {
                 </div>
               </div>
 
-              <p className="mt-3 text-[12px] leading-relaxed text-slate-500">
-                <span className="font-bold text-slate-700">{collectionPct}% of targets met</span>
-                {delinquentCount > 0
-                  ? `, ${delinquentCount} invoice${delinquentCount === 1 ? "" : "s"} remain overdue.`
-                  : ". No overdue invoices right now."}
-              </p>
-
-              <div className="mt-auto pt-5">
-                <Link to="/fees" className="nx-btn-primary w-full justify-center">
-                  Manage Delinquent Accounts ({delinquentCount})
-                </Link>
+              <div className="mt-auto grid grid-cols-2 gap-4 pt-5">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Collected</p>
+                  <p className="mt-1 text-[18px] font-bold text-slate-900">
+                    {feeSummary ? formatCompactMoney(collected) : "—"}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Outstanding</p>
+                  <p className="mt-1 text-[18px] font-bold text-rose-500">
+                    {feeSummary ? formatCompactMoney(outstanding) : "—"}
+                  </p>
+                </div>
               </div>
             </div>
           </section>
 
           <section className="ov-widget">
             <div className="ov-widget-head">
-              <div>
-                <h2 className="ov-widget-title">Attendance Summary</h2>
-                <p className="ov-widget-sub">Live check-in states</p>
-              </div>
-              <Link to="/attendance" className="text-[12px] font-semibold text-indigo-600 hover:underline">
-                Today
+              <h2 className="text-[12px] font-bold uppercase tracking-wide text-slate-700">Attendance Summary</h2>
+              <Link
+                to="/attendance"
+                className="grid size-7 place-items-center rounded-lg bg-emerald-50 text-emerald-500"
+                title="Open attendance"
+              >
+                <InsightsOutlined sx={{ fontSize: 16 }} />
               </Link>
             </div>
 
@@ -462,15 +453,8 @@ export function DashboardPage() {
               {attendanceAlerts.length > 0 ? (
                 attendanceAlerts.map((record) => {
                   const name = studentName(record.studentEnrollment.student);
-                  const grade = `${record.studentEnrollment.classSection.academicClass.name}-${record.studentEnrollment.classSection.section.name}`;
-                  const status = record.status;
-                  const statusClass =
-                    status === "ABSENT" ? "text-rose-600" : status === "LATE" ? "text-amber-600" : "text-emerald-600";
-                  const statusLabel =
-                    status === "ABSENT" ? "Absent" : status === "LATE" ? "Late" : status;
-                  const time = record.markedAt
-                    ? new Date(record.markedAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })
-                    : "—";
+                  const grade = `Grade ${record.studentEnrollment.classSection.academicClass.name}-${record.studentEnrollment.classSection.section.name}`;
+                  const isAbsent = record.status === "ABSENT";
                   return (
                     <div key={record.id} className="ov-checkin">
                       <InitialsAvatar name={name} size={34} />
@@ -478,10 +462,13 @@ export function DashboardPage() {
                         <p className="truncate text-[13px] font-semibold text-slate-800">{name}</p>
                         <p className="truncate text-[11px] text-slate-400">{grade}</p>
                       </div>
-                      <div className="shrink-0 text-right">
-                        <p className={`text-[12px] font-bold ${statusClass}`}>{statusLabel}</p>
-                        <p className="text-[10px] text-slate-400">{time}</p>
-                      </div>
+                      <span
+                        className={`shrink-0 rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white ${
+                          isAbsent ? "bg-rose-800" : "bg-sky-600"
+                        }`}
+                      >
+                        {isAbsent ? "Absent" : "Late"}
+                      </span>
                     </div>
                   );
                 })
@@ -496,30 +483,31 @@ export function DashboardPage() {
                 </div>
               )}
 
-              <div className="mt-auto flex items-center justify-between rounded-xl bg-slate-50 px-3.5 py-2.5 text-[12px] font-bold">
-                <span className="text-emerald-600">{presentPct || 0}% PRESENT</span>
-                <span className="text-rose-500">{absentPct || 0}% ABSENT</span>
+              <div className="mt-auto grid grid-cols-2 divide-x divide-slate-100 border-t border-slate-100 pt-3 text-center">
+                <div>
+                  <p className="text-[16px] font-bold text-slate-900">{presentPct}%</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Present</p>
+                </div>
+                <div>
+                  <p className="text-[16px] font-bold text-slate-900">{absentPct}%</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Absent</p>
+                </div>
               </div>
             </div>
           </section>
 
           <section className="ov-widget">
             <div className="ov-widget-head">
-              <div>
-                <h2 className="ov-widget-title">Enrollment Growth</h2>
-                <p className="ov-widget-sub">New students vs Target (H1)</p>
-              </div>
-              <div className="ov-stat-pill">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Monthly</p>
-                <p className="text-[15px] font-bold leading-tight text-slate-900">{monthlyGrowth}</p>
-                <p className="text-[11px] font-semibold text-emerald-600">+{Math.max(0, growthPct)}%</p>
-              </div>
+              <h2 className="text-[12px] font-bold uppercase tracking-wide text-slate-700">Growth Analytics</h2>
+              <span className="grid size-7 place-items-center rounded-lg bg-indigo-50 text-indigo-500">
+                <TrendingUpRounded sx={{ fontSize: 16 }} />
+              </span>
             </div>
             <div className="ov-widget-body justify-end">
               <BarChart
                 categories={["Jan", "Feb", "Mar", "Apr", "May", "Jun"]}
                 series={[{ label: "Enrollments", color: "#6366f1", values: growthValues }]}
-                height={168}
+                height={190}
               />
             </div>
           </section>
@@ -555,7 +543,7 @@ export function DashboardPage() {
                 />
                 <input
                   className="nx-input w-52 !rounded-lg !bg-slate-50 !py-1.5 !pl-8 !pr-3"
-                  placeholder="Search"
+                  placeholder="Search invoices..."
                   value={invoiceQuery}
                   onChange={(event) => {
                     setInvoiceQuery(event.target.value);
@@ -569,7 +557,7 @@ export function DashboardPage() {
                 onClick={exportInvoicesCsv}
               >
                 <FileDownloadOutlined sx={{ fontSize: 15 }} />
-                Export Data
+                Export
               </button>
             </div>
           </div>
@@ -581,10 +569,9 @@ export function DashboardPage() {
                   <thead>
                     <tr>
                       <th>ID</th>
-                      <th>Student Name</th>
+                      <th>Student</th>
                       <th>Grade</th>
                       <th>Amount</th>
-                      <th>Paid On</th>
                       <th>Status</th>
                       <th className="text-right">Actions</th>
                     </tr>
@@ -599,13 +586,12 @@ export function DashboardPage() {
                               to={`/print/fees/${payment.id}`}
                               className="font-mono text-[12px] font-semibold text-indigo-600 hover:underline"
                             >
-                              #{payment.receiptNumber || payment.id.slice(0, 8).toUpperCase()}
+                              {payment.receiptNumber || payment.id.slice(0, 8).toUpperCase()}
                             </Link>
                           </td>
                           <td className="font-medium text-slate-800">{studentName(payment.student)}</td>
                           <td className="text-slate-500">{paymentGrade(payment)}</td>
                           <td className="font-semibold text-slate-800">{formatMoney(Number(payment.amount))}</td>
-                          <td className="text-slate-500">{formatDate(payment.paymentDate)}</td>
                           <td>
                             <span className={`nx-pill ${status.className}`}>{status.label}</span>
                           </td>
@@ -670,9 +656,13 @@ export function DashboardPage() {
                 time="Just now"
               />
               <LogRow
-                icon={<CheckCircleOutline sx={{ fontSize: 16 }} className="text-emerald-500" />}
+                icon={<VerifiedOutlined sx={{ fontSize: 16 }} className="text-emerald-500" />}
                 title="Session active"
-                detail={sessionName ? `Current session: ${sessionName}` : "No current academic session set"}
+                detail={
+                  dashboard?.currentSession?.name
+                    ? `Current session: ${dashboard.currentSession.name}`
+                    : "No current academic session set"
+                }
                 time="Today"
               />
               <LogRow
@@ -682,7 +672,7 @@ export function DashboardPage() {
                 time="Live"
               />
               <LogRow
-                icon={<DescriptionOutlined sx={{ fontSize: 16 }} className="text-violet-500" />}
+                icon={<AccountBalanceWalletOutlined sx={{ fontSize: 16 }} className="text-violet-500" />}
                 title="Fee cycle progress"
                 detail={`${collectionPct}% collected · ${overdueDues.length} overdue items`}
                 time="Live"
@@ -729,47 +719,25 @@ export function DashboardPage() {
         </section>
 
         <footer className="ov-footer">
-          <div className="flex flex-wrap items-center gap-2.5">
-            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 font-semibold text-emerald-600">
-              <CheckCircleOutline sx={{ fontSize: 12 }} /> GDPR Compliant
-            </span>
-            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-600">
-              ISO 27001 Certified
-            </span>
+          <div className="flex flex-wrap items-center gap-4">
             <span>
-              © {new Date().getFullYear()} {institution}. All rights reserved.
+              © {new Date().getFullYear()} {institution.toUpperCase()}
             </span>
+            <span className="text-slate-400">Compliance</span>
+            <span className="text-slate-400">Privacy</span>
+            <span className="text-slate-400">Support</span>
           </div>
           <div className="flex items-center gap-3">
-            <span>Last sync: just now</span>
             <span className="inline-flex items-center gap-1.5 font-semibold text-emerald-600">
-              <span className="size-1.5 animate-pulse rounded-full bg-emerald-500" />
-              System: Stable
+              <VerifiedOutlined sx={{ fontSize: 13 }} />
+              GDPR Certified
             </span>
+            <span className="text-slate-400">v2.4.1</span>
           </div>
         </footer>
       </div>
       </CmsScrollBody>
     </CmsPage>
-  );
-}
-
-function HeroBtn({
-  to,
-  state,
-  icon,
-  children,
-}: {
-  to: string;
-  state?: Record<string, string>;
-  icon: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <Link to={to} state={state} className="ov-hero-btn">
-      {icon}
-      {children}
-    </Link>
   );
 }
 
