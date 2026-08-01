@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { DashboardPage } from "./pages/campus/DashboardPage";
 import { CmsDashboardPage } from "./pages/campus/CmsDashboardPage";
+import { LmsDashboardPage } from "./pages/campus/LmsDashboardPage";
 import { LoginPage } from "./pages/auth/LoginPage";
 import { ForgotPasswordPage } from "./pages/auth/ForgotPasswordPage";
 import { ResetPasswordPage } from "./pages/auth/ResetPasswordPage";
@@ -138,6 +139,7 @@ export function App() {
       <Route element={<AppShell />}>
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/cms" element={<RequireProductBucket bucket="CMS"><CmsDashboardPage /></RequireProductBucket>} />
+        <Route path="/lms" element={<RequireProductBucket bucket="LMS"><LmsDashboardPage /></RequireProductBucket>} />
         <Route path="/profile" element={<StaffProfilePage />} />
         <Route path="/students" element={<StudentsPage />} />
         <Route path="/students/new" element={<AddStudentPage />} />

@@ -88,6 +88,7 @@ function useBreadcrumb() {
       return ["Dashboard", "Overview"];
     }
     if (path === "/cms") return ["Dashboard", "CMS", "Overview"];
+    if (path === "/lms") return ["Dashboard", "LMS", "Overview"];
 
     const match = [...CAMPUS_NAV]
       .filter((item) => item.to !== "/dashboard" && (path === item.to || path.startsWith(`${item.to}/`)))
@@ -494,7 +495,8 @@ export function AppShell() {
   const managementLinks = links.filter((item) => item.section === "management");
   const isCmsActive =
     location.pathname === "/cms" || cmsLinks.some((item) => location.pathname.startsWith(item.to));
-  const isLmsActive = lmsLinks.some((item) => location.pathname.startsWith(item.to));
+  const isLmsActive =
+    location.pathname === "/lms" || lmsLinks.some((item) => location.pathname.startsWith(item.to));
 
   const panelTitle = staffPanelTitle(user.roles);
   const schoolName = branding.logoText || user.tenant?.name || "SaaS CMS LMS";
@@ -546,7 +548,7 @@ export function AppShell() {
           </div>
 
           {cmsLinks.length > 0 && <NavGroup label="CMS Modules" items={cmsLinks} active={isCmsActive} navIcons={navIcons} to="/cms" />}
-          {lmsLinks.length > 0 && <NavGroup label="LMS Modules" items={lmsLinks} active={isLmsActive} navIcons={navIcons} />}
+          {lmsLinks.length > 0 && <NavGroup label="LMS Modules" items={lmsLinks} active={isLmsActive} navIcons={navIcons} to="/lms" />}
 
           {managementLinks.length > 0 && (
             <div className="space-y-0.5">
