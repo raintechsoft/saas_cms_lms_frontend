@@ -26,7 +26,7 @@ export function SearchPanel({
   async function runSearch(value: string) {
     const q = value.trim();
     if (!q) {
-      onError("Enter a payment ID / transaction ID to search");
+      onError("Enter a Payment ID to search");
       return;
     }
     setSearching(true);
@@ -96,13 +96,13 @@ export function SearchPanel({
           <div className="grid size-12 place-items-center rounded-full bg-indigo-50 text-[#6366f1]">
             <SearchOutlined sx={{ fontSize: 24 }} />
           </div>
-          <h3 className="mt-4 text-lg font-bold text-slate-900">Verify Transaction</h3>
+          <h3 className="mt-4 text-lg font-bold text-slate-900">Search Fees Payment</h3>
           <p className="mt-1 text-sm text-slate-500">
-            Enter the Payment ID found on the student&apos;s physical or digital slip.
+            Enter the Payment ID and click Search to view payment details.
           </p>
 
           <label className="nx-label mt-6" htmlFor="payment-id">
-            Payment ID / Transaction ID
+            Payment ID
           </label>
           <div className="relative">
             <ConfirmationNumberOutlined
@@ -119,7 +119,7 @@ export function SearchPanel({
           </div>
 
           <button className="nx-btn-primary mt-5 w-full !py-3" type="submit" disabled={searching}>
-            {searching ? "Searching…" : "Search Transaction"}
+            {searching ? "Searching…" : "Search"}
           </button>
 
           <p className="mt-4 flex items-center gap-1.5 text-[12px] text-slate-400">

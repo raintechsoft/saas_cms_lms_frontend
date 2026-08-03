@@ -95,11 +95,6 @@ export function ClassTimetablePanel({
   }
 
   useEffect(() => {
-    void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [classSectionId, sessionId, token]);
-
-  useEffect(() => {
     setSubjectGroupId(subjectGroups[0]?.id ?? "");
   }, [classSectionId, subjectGroups]);
 
@@ -243,6 +238,7 @@ export function ClassTimetablePanel({
               );
               setClassId(nextClassId);
               setClassSectionId(firstSection?.id ?? "");
+              setEntries([]);
               cancelEdit();
             }}
           >
@@ -263,6 +259,7 @@ export function ClassTimetablePanel({
             disabled={!classId}
             onChange={(event) => {
               setClassSectionId(event.target.value);
+              setEntries([]);
               cancelEdit();
             }}
           >
@@ -553,7 +550,11 @@ export function ClassTimetablePanel({
               {!dayEntries.length && !addingNew ? (
                 <tr>
                   <td colSpan={7} className="px-5 py-10 text-center text-slate-500">
-                    {loading ? "Loading…" : `No periods on ${WEEKDAY_LABELS[weekday]} yet.`}
+                    {loading
+                      ? "Loading…"
+                      : entries.length
+                        ? `No periods on ${WEEKDAY_LABELS[weekday]} yet.`
+                        : "Select filters and click Search to load the timetable."}
                   </td>
                 </tr>
               ) : null}

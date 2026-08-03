@@ -17,12 +17,36 @@ import { notifySuccess } from "../../../lib/notify";
 import type { AcademicSetup, BulkUpdateType, ClassSection, StudentListItem } from "./types";
 import { studentDisplayName } from "./utils";
 
-const MODES: Array<{ key: BulkUpdateType; label: string; description: string }> = [
+const STUDENT_DETAIL_FIELDS = [
+  { key: "religion", label: "Religion" },
+  { key: "caste", label: "Caste" },
+  { key: "mobile", label: "Mobile" },
+  { key: "email", label: "Email" },
+  { key: "bloodGroup", label: "Blood Group" },
+  { key: "nationality", label: "Nationality" },
+  { key: "currentAddress", label: "Current Address" },
+  { key: "permanentAddress", label: "Permanent Address" },
+  { key: "fatherName", label: "Father Name" },
+  { key: "fatherPhone", label: "Father Phone" },
+  { key: "fatherOccupation", label: "Father Occupation" },
+  { key: "motherName", label: "Mother Name" },
+  { key: "motherPhone", label: "Mother Phone" },
+  { key: "motherOccupation", label: "Mother Occupation" },
+  { key: "guardianName", label: "Guardian Name" },
+  { key: "guardianPhone", label: "Guardian Phone" },
+  { key: "guardianRelation", label: "Guardian Relation" },
+  { key: "transportRoute", label: "Transport Route" },
+  { key: "hostelRoom", label: "Hostel Room" },
+  { key: "additionalNotes", label: "Additional Notes" },
+] as const;
+
+const ALL_MODES: Array<{ key: BulkUpdateType; label: string; description: string }> = [
   { key: "SECTION_MOVE", label: "Update Class / Section", description: "Move or update students to different class or section." },
   { key: "SUBJECT_ASSIGN", label: "Update Subject", description: "Add, remove or update subjects for students." },
   { key: "CONCESSION", label: "Update Fees Concession", description: "Apply or update concession for multiple students." },
   { key: "SESSION_CLASS", label: "Update Session", description: "Update academic session for students." },
   { key: "STATUS", label: "Update Status", description: "Update active/inactive status for students." },
+  { key: "STUDENT_DETAILS", label: "Update Student Details", description: "Bulk-update profile fields for selected students." },
 ];
 
 interface Row {
@@ -44,6 +68,7 @@ function modeIcon(mode: BulkUpdateType) {
   if (mode === "SUBJECT_ASSIGN") return <MenuBookOutlined sx={{ fontSize: 20 }} />;
   if (mode === "CONCESSION") return <CurrencyRupeeOutlined sx={{ fontSize: 20 }} />;
   if (mode === "SESSION_CLASS") return <CalendarMonthOutlined sx={{ fontSize: 20 }} />;
+  if (mode === "STUDENT_DETAILS") return <AccountCircleOutlined sx={{ fontSize: 20 }} />;
   return <AccountCircleOutlined sx={{ fontSize: 20 }} />;
 }
 
@@ -51,16 +76,30 @@ export function BulkUpdatePanel({
   setup,
   token,
   canManage,
+  focus = "all",
   onSaved,
   onError,
 }: {
   setup: AcademicSetup;
   token: string;
   canManage: boolean;
+  focus?: "details" | "section" | "all";
   onSaved: () => Promise<void>;
   onError: (message: string) => void;
 }) {
-  const [mode, setMode] = useState<BulkUpdateType>("SECTION_MOVE");
+  const initialMode: BulkUpdateType =
+    focus === "details" ? "STUDENT_DETAILS" : focus === "section" ? "SECTION_MOVE" : "SECTION_MOVE";
+  const [mode, setMode] = useState<BulkUpdateType>(initialMode);
+  const modes = useMemo(() => {
+    if (focus === "details") return ALL_MODES.filter((item) => item.key === "STUDENT_DETAILS");
+    if (focus === "section") return ALL_MODES.filter((item) => item.key === "SECTION_MOVE");
+    return ALL_MODES;
+  }, [focus]);
+
+  useEffect(() => {
+    if (focus === "details") setMode("STUDENT_DETAILS");
+    else if (focus === "section") setMode("SECTION_MOVE");
+  }, [focus]);
   const [sourceClassId, setSourceClassId] = useState("");
   const [sourceClassSectionId, setSourceClassSectionId] = useState("");
   const [rows, setRows] = useState<Row[]>([]);
@@ -85,7 +124,11 @@ export function BulkUpdatePanel({
   const [feeDiscountId, setFeeDiscountId] = useState("");
   const [concessionSessionId, setConcessionSessionId] = useState(setup.currentSession?.id ?? "");
 
+  const [detailField, setDetailField] = useState<(typeof STUDENT_DETAIL_FIELDS)[number]["key"]>("mobile");
+  const [detailValue, setDetailValue] = useState("");
+
   const needsStudentSelection = mode !== "SUBJECT_ASSIGN";
+  const showModePicker = focus === "all";
 
   useEffect(() => {
     setRows([]);
@@ -212,6 +255,10 @@ export function BulkUpdatePanel({
         const discount = discounts.find((d) => d.id === feeDiscountId);
         return `${discount ? `Apply "${discount.name}"` : "Clear fee discount"} for ${selectedRows.length} student(s).`;
       }
+      case "STUDENT_DETAILS": {
+        const field = STUDENT_DETAIL_FIELDS.find((item) => item.key === detailField);
+        return `Set ${field?.label ?? detailField} for ${selectedRows.length} student(s).`;
+      }
       default:
         return "";
     }
@@ -232,6 +279,7 @@ export function BulkUpdatePanel({
     subjectMode,
     discounts,
     feeDiscountId,
+    detailField,
   ]);
 
   async function apply() {
@@ -283,6 +331,12 @@ export function BulkUpdatePanel({
           feeDiscountId: feeDiscountId || null,
           academicSessionId: concessionSessionId || setup.currentSession?.id || "",
         };
+      } else if (mode === "STUDENT_DETAILS") {
+        payload.studentDetailsUpdate = {
+          studentIds: selectedRows.map((r) => r.studentId),
+          field: detailField,
+          value: detailValue.trim() || null,
+        };
       }
 
       await apiRequest("/academics/bulk-update", token, {
@@ -301,10 +355,11 @@ export function BulkUpdatePanel({
 
   return (
     <section className="mt-5 space-y-4">
+      {showModePicker ? (
       <div className="nx-card p-3">
         <h3 className="text-[13px] font-bold text-slate-900">1. Select Update Type</h3>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-          {MODES.map((item) => (
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {modes.map((item) => (
             <button
               key={item.key}
               type="button"
@@ -330,6 +385,7 @@ export function BulkUpdatePanel({
           ))}
         </div>
       </div>
+      ) : null}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="nx-card p-3">
@@ -558,6 +614,36 @@ export function BulkUpdatePanel({
                 </label>
               </>
             ) : null}
+
+            {mode === "STUDENT_DETAILS" ? (
+              <>
+                <label>
+                  <span className="nx-label !normal-case !tracking-normal">Field</span>
+                  <select
+                    className="nx-input bg-white"
+                    value={detailField}
+                    onChange={(event) =>
+                      setDetailField(event.target.value as (typeof STUDENT_DETAIL_FIELDS)[number]["key"])
+                    }
+                  >
+                    {STUDENT_DETAIL_FIELDS.map((field) => (
+                      <option key={field.key} value={field.key}>
+                        {field.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="sm:col-span-2">
+                  <span className="nx-label !normal-case !tracking-normal">New Value</span>
+                  <input
+                    className="nx-input bg-white"
+                    value={detailValue}
+                    onChange={(event) => setDetailValue(event.target.value)}
+                    placeholder="Enter value to apply"
+                  />
+                </label>
+              </>
+            ) : null}
           </div>
 
           <div className="mt-4 flex items-center gap-2 rounded border border-blue-100 bg-blue-50/60 px-3 py-2 text-[10px] text-blue-700">
@@ -635,7 +721,7 @@ export function BulkUpdatePanel({
         <aside className="nx-card self-start p-3">
           <h3 className="text-[13px] font-bold text-slate-900">Update Summary</h3>
           <dl className="mt-3 divide-y divide-slate-100 rounded border border-slate-200 px-2 text-[10px]">
-            <div className="flex justify-between gap-3 py-2"><dt>Update Type</dt><dd className="font-semibold">{MODES.find((item) => item.key === mode)?.label}</dd></div>
+            <div className="flex justify-between gap-3 py-2"><dt>Update Type</dt><dd className="font-semibold">{modes.find((item) => item.key === mode)?.label ?? ALL_MODES.find((item) => item.key === mode)?.label}</dd></div>
             <div className="flex justify-between gap-3 py-2"><dt>From</dt><dd className="font-semibold">{sourceClassSection ? `${sourceClassSection.academicClass.name} - ${sourceClassSection.section.name}` : "—"}</dd></div>
             <div className="flex justify-between gap-3 py-2"><dt>Total Students</dt><dd className="font-semibold">{selectedRows.length}</dd></div>
           </dl>

@@ -67,11 +67,22 @@ export function parentContactOf(student: Student) {
 
 export function headerForTab(tab: FeesTab) {
   switch (tab) {
+    case "collect":
+      return {
+        title: "Collect Fees",
+        description:
+          "Search students by class and section, then collect fees with receipt print and revert.",
+      };
+    case "dues":
+      return {
+        title: "Search Due Fees",
+        description:
+          "Search students who have not paid a particular fee type by category, type, class and section.",
+      };
     case "search":
       return {
-        title: "Payment Search",
-        description:
-          "Retrieve student payment records and digital receipts using unique Transaction IDs.",
+        title: "Search Fees Payment",
+        description: "Search any fee payment details using Payment ID.",
       };
     case "carry":
       return {
@@ -113,8 +124,8 @@ export function headerForTab(tab: FeesTab) {
       };
     default:
       return {
-        title: "Due Fees List",
-        description: "Monitor and manage outstanding student fee records across all departments.",
+        title: "Fees Management",
+        description: "Manage student billing and fee collection.",
       };
   }
 }

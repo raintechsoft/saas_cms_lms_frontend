@@ -30,6 +30,9 @@ export interface SubjectItem extends Named {
 export interface ClassItem extends Named {
   code?: string | null;
   sortOrder?: number;
+  inTime?: string | null;
+  halfDayTime?: string | null;
+  outTime?: string | null;
 }
 
 export interface SectionItem extends Named {}
@@ -162,6 +165,7 @@ export interface Scholar {
   scholarshipType: ScholarshipType;
   scholarshipName: string;
   amount: string | number;
+  finalPercent?: string | number | null;
   validFrom: string;
   validTo: string;
   status: ScholarStatus;
@@ -199,7 +203,13 @@ export interface ScholarListResult {
   };
 }
 
-export type BulkUpdateType = "SECTION_MOVE" | "STATUS" | "SESSION_CLASS" | "SUBJECT_ASSIGN" | "CONCESSION";
+export type BulkUpdateType =
+  | "SECTION_MOVE"
+  | "STATUS"
+  | "SESSION_CLASS"
+  | "SUBJECT_ASSIGN"
+  | "CONCESSION"
+  | "STUDENT_DETAILS";
 
 export interface ReportCatalogItem {
   key: string;
@@ -231,13 +241,17 @@ export interface StudentListItem {
 }
 
 export type AcademicsTab =
+  | "sections"
   | "classes"
+  | "incharge"
+  | "elective-categories"
   | "subjects"
   | "subject-groups"
+  | "assign-electives"
   | "class-timetable"
-  | "electives"
   | "teacher-timetable"
   | "promote"
   | "scholars"
-  | "bulk-update"
+  | "student-details"
+  | "section-update"
   | "reports";

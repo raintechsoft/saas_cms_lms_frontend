@@ -28,6 +28,7 @@ interface FormState {
   scholarshipType: ScholarshipType;
   scholarshipName: string;
   amount: string;
+  finalPercent: string;
   validFrom: string;
   validTo: string;
   status: ScholarStatus;
@@ -52,6 +53,7 @@ function emptyForm(sessionId: string): FormState {
     scholarshipType: "MERIT",
     scholarshipName: "",
     amount: "",
+    finalPercent: "",
     validFrom: today,
     validTo: today,
     status: "ACTIVE",
@@ -155,6 +157,7 @@ export function SchoolScholarsPanel({
       scholarshipType: item.scholarshipType,
       scholarshipName: item.scholarshipName,
       amount: String(Number(item.amount)),
+      finalPercent: item.finalPercent == null || item.finalPercent === "" ? "" : String(Number(item.finalPercent)),
       validFrom: item.validFrom.slice(0, 10),
       validTo: item.validTo.slice(0, 10),
       status: item.status,
@@ -184,6 +187,7 @@ export function SchoolScholarsPanel({
         scholarshipType: form.scholarshipType,
         scholarshipName: form.scholarshipName.trim(),
         amount: Number(form.amount) || 0,
+        finalPercent: form.finalPercent.trim() === "" ? null : Number(form.finalPercent),
         validFrom: form.validFrom,
         validTo: form.validTo,
         status: form.status,
@@ -251,13 +255,14 @@ export function SchoolScholarsPanel({
       }
       downloadCsv(
         "school-scholars.csv",
-        ["student", "admissionNumber", "type", "scholarshipName", "amount", "status", "validFrom", "validTo"],
+        ["student", "admissionNumber", "type", "scholarshipName", "amount", "finalPercent", "status", "validFrom", "validTo"],
         allItems.map((item) => [
           studentDisplayName(item.student),
           item.student.admissionNumber,
           item.scholarshipType,
           item.scholarshipName,
           String(Number(item.amount)),
+          item.finalPercent == null || item.finalPercent === "" ? "" : String(Number(item.finalPercent)),
           item.status,
           item.validFrom.slice(0, 10),
           item.validTo.slice(0, 10),
@@ -444,6 +449,7 @@ export function SchoolScholarsPanel({
                 <th>Scholarship Type</th>
                 <th>Scholarship Name</th>
                 <th>Amount (₹)</th>
+                <th>Final %</th>
                 <th>Valid From</th>
                 <th>Valid To</th>
                 <th>Status</th>
@@ -474,6 +480,11 @@ export function SchoolScholarsPanel({
                   <td>{item.scholarshipName}</td>
                   <td className="font-semibold text-slate-900">
                     {new Intl.NumberFormat("en-IN").format(Number(item.amount))}
+                  </td>
+                  <td className="font-medium text-slate-700">
+                    {item.finalPercent == null || item.finalPercent === ""
+                      ? "—"
+                      : `${Number(item.finalPercent)}%`}
                   </td>
                   <td className="whitespace-nowrap text-slate-600">{formatDate(item.validFrom)}</td>
                   <td className="whitespace-nowrap text-slate-600">{formatDate(item.validTo)}</td>
@@ -510,7 +521,7 @@ export function SchoolScholarsPanel({
               })}
               {!loading && !(result?.items ?? []).length ? (
                 <tr>
-                  <td colSpan={canManage ? 12 : 11} className="px-5 py-12 text-center text-slate-500">
+                  <td colSpan={canManage ? 13 : 12} className="px-5 py-12 text-center text-slate-500">
                     No scholar records found.
                   </td>
                 </tr>
@@ -644,6 +655,19 @@ export function SchoolScholarsPanel({
                   placeholder="Merit Scholarship 2026"
                   value={form.scholarshipName}
                   onChange={(e) => setForm({ ...form, scholarshipName: e.target.value })}
+                />
+              </label>
+              <label className="block">
+                <span className="nx-label">Final %</span>
+                <input
+                  className="nx-input"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  placeholder="Optional"
+                  value={form.finalPercent}
+                  onChange={(e) => setForm({ ...form, finalPercent: e.target.value })}
                 />
               </label>
               <div className="grid gap-3 sm:grid-cols-2">

@@ -9,6 +9,7 @@ import {
 } from "react";
 import {
   AddOutlined,
+  AssessmentOutlined,
   AssignmentTurnedInOutlined,
   AttachFileOutlined,
   CloseOutlined,
@@ -16,8 +17,10 @@ import {
   DescriptionOutlined,
   EditOutlined,
   EventBusyOutlined,
+  FactCheckOutlined,
   FileDownloadOutlined,
   InfoOutlined,
+  MenuBookOutlined,
   MoreVertOutlined,
   SearchOutlined,
   TrendingUpOutlined,
@@ -29,9 +32,8 @@ import {
   CmsPage,
   CmsPageHeader,
   CmsScrollBody,
-  CmsTab,
-  CmsTabs,
 } from "../../components/cms/CmsLayout";
+import { CmsIconTabs, type CmsIconTabItem } from "../../components/cms/CmsIconTabs";
 import { apiRequest } from "../../lib/api";
 import { notifyError, notifySuccess } from "../../lib/notify";
 
@@ -216,15 +218,15 @@ export function HomeworkPage() {
     setTab("evaluate");
   }
 
-  const TABS = [
-    ["list", "All Homework"],
+  const TABS: Array<CmsIconTabItem<"list" | "evaluate" | "reports">> = [
+    { key: "list", label: "All Homework", icon: MenuBookOutlined, tone: "indigo" },
     ...(canEvaluate
       ? ([
-          ["evaluate", "Evaluate"],
-          ["reports", "Reports"],
+          { key: "evaluate", label: "Evaluate", icon: FactCheckOutlined, tone: "emerald" },
+          { key: "reports", label: "Reports", icon: AssessmentOutlined, tone: "purple" },
         ] as const)
       : []),
-  ] as Array<[typeof tab, string]>;
+  ];
 
   return (
     <CmsPage>
@@ -247,13 +249,13 @@ export function HomeworkPage() {
         }
       />
 
-      <CmsTabs>
-        {TABS.map(([key, label]) => (
-          <CmsTab key={key} active={tab === key} onClick={() => setTab(key)}>
-            {label}
-          </CmsTab>
-        ))}
-      </CmsTabs>
+      <CmsIconTabs
+        ariaLabel="Homework sections"
+        value={tab}
+        onChange={setTab}
+        columnsClass="grid-cols-2 sm:grid-cols-3"
+        items={TABS}
+      />
 
       <CmsScrollBody>
         {!setup ? (

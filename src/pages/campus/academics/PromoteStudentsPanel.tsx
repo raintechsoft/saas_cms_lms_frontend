@@ -6,7 +6,7 @@ import type { AcademicSetup, ClassSection, PromoteBoard } from "./types";
 import { studentDisplayName } from "./utils";
 
 type PromoteResult = "PASS" | "FAIL";
-type PromoteAction = "CONTINUE" | "LEAVE";
+type PromoteAction = "CONTINUE" | "LEAVE" | "SKIP";
 
 interface Row {
   enrollmentId: string;
@@ -159,6 +159,11 @@ export function PromoteStudentsPanel({
     try {
       const groups = new Map<string, Row[]>();
       for (const row of selected) {
+        if (row.action === "SKIP" || row.action === "LEAVE") {
+          const key = row.action;
+          groups.set(key, [...(groups.get(key) ?? []), row]);
+          continue;
+        }
         const passClass =
           row.result === "FAIL"
             ? sourceClassSection?.academicClass.id || ""
@@ -173,8 +178,16 @@ export function PromoteStudentsPanel({
 
       let promoted = 0;
       let alumni = 0;
+      const fallbackClassId = targetClassSections[0]?.academicClass.id || sourceClassSection?.academicClass.id || "";
+      const fallbackSectionId = targetClassSections[0]?.section.id || sourceClassSection?.section.id || "";
       for (const [key, items] of groups) {
-        const [classId, sectionId] = key.split("|");
+        const isSpecial = key === "SKIP" || key === "LEAVE";
+        const [classId, sectionId] = isSpecial ? [fallbackClassId, fallbackSectionId] : key.split("|");
+        if (!classId || !sectionId) {
+          onError(`Choose a valid target class/section in ${promoteSessionName} before promoting.`);
+          setSubmitting(false);
+          return;
+        }
         const result = await apiRequest<{ promoted: number; alumni: number; total: number }>(
           "/academics/promote",
           token,
@@ -382,11 +395,16 @@ export function PromoteStudentsPanel({
                       >
                         <option value="CONTINUE">Continue</option>
                         <option value="LEAVE">Leave</option>
+                        <option value="SKIP">Don't move</option>
                       </select>
                     </td>
                     {row.action === "LEAVE" ? (
                       <td colSpan={3} className="text-center text-[11px] font-medium text-slate-700">
                         Will move to Alumni next session
+                      </td>
+                    ) : row.action === "SKIP" ? (
+                      <td colSpan={3} className="text-center text-[11px] font-medium text-slate-700">
+                        Will not be moved
                       </td>
                     ) : (
                       <>

@@ -38,7 +38,7 @@ export function ListPagination({
           className="nx-btn-secondary !px-3 !py-1.5 text-[12px]"
           disabled={page <= 1}
           onClick={() => onPageChange(Math.max(1, page - 1))}
-        >
+        >       
           Previous
         </button>
         {start > 1 ? (

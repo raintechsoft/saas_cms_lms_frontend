@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   AddOutlined,
+  ArrowDownwardOutlined,
+  ArrowUpwardOutlined,
   DeleteOutline,
   DescriptionOutlined,
   EditOutlined,
@@ -11,33 +13,63 @@ import { ListPagination, paginateItems } from "../../../components/ListPaginatio
 import { confirmDelete } from "../../../lib/confirm";
 import { apiRequest } from "../../../lib/api";
 import { notifySuccess } from "../../../lib/notify";
-import type { FeeGroup, FeeMaster, FeeSetup, ReceiptBook } from "./types";
+import type {
+  FeeGroup,
+  FeeMaster,
+  FeeMasterAssignPreview,
+  FeeSetup,
+  ReceiptBook,
+} from "./types";
 import { formatMoney, today } from "./utils";
 
 const GROUP_PAGE_SIZE = 6;
 const MASTER_PAGE_SIZE = 6;
 
-type FineUi = "NONE" | "FIXED" | "PER_DAY" | "DATE_RANGE";
+type FineUi = "NONE" | "FIXED";
+type FinePenaltyKind = "RANGE" | "EVERY_DAY";
 
-function fineLabel(fineType?: string, fineUiHint?: FineUi) {
-  if (fineUiHint === "PER_DAY" || fineType === "PER_DAY") return "Per-day";
-  if (fineUiHint === "DATE_RANGE" || fineType === "DATE_RANGE") return "Date range";
+interface FinePenaltyRow {
+  key: string;
+  kind: FinePenaltyKind;
+  startDate: string;
+  endDate: string;
+  amount: string;
+}
+
+function newPenaltyRow(kind: FinePenaltyKind = "RANGE"): FinePenaltyRow {
+  return {
+    key: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    kind,
+    startDate: today,
+    endDate: today,
+    amount: "",
+  };
+}
+
+function fineLabel(fineType?: string, ranges?: FeeMaster["fineRanges"]) {
+  if (fineType === "DATE_RANGE") {
+    const hasPerDay = ranges?.some((r) => r.perDay);
+    const hasRange = ranges?.some((r) => !r.perDay);
+    if (hasPerDay && hasRange) return "Mixed fine";
+    if (hasPerDay) return "Every day";
+    return "Date range";
+  }
+  if (fineType === "PER_DAY") return "Per-day";
   if (fineType === "PERCENTAGE") return "Percentage";
   if (fineType === "FIXED") return "Fixed";
   return "None";
 }
 
 function finePill(fineType?: string) {
-  if (fineType === "FIXED") return "nx-pill nx-pill-indigo";
+  if (fineType === "FIXED" || fineType === "DATE_RANGE") return "nx-pill nx-pill-indigo";
   if (fineType === "PERCENTAGE" || fineType === "PER_DAY") return "nx-pill nx-pill-warning";
-  if (fineType === "DATE_RANGE") return "nx-pill nx-pill-indigo";
   return "nx-pill nx-pill-neutral";
 }
 
 function subTabClass(active: boolean) {
   return active
     ? "border-b-2 border-[#6366f1] pb-3 text-[#6366f1]"
-    : "pb-3 text-slate-500 hover:text-slate-700";
+    : "border-b-2 border-transparent pb-3 text-slate-500 hover:text-slate-700";
 }
 
 export function SetupPanel({
@@ -77,12 +109,14 @@ export function SetupPanel({
     dueDate: today,
     amount: "",
     fineUi: "NONE" as FineUi,
-    fineValue: "",
-    rangeStart: today,
-    rangeEnd: today,
   });
+  const [finePenalties, setFinePenalties] = useState<FinePenaltyRow[]>([]);
   const [editingMasterId, setEditingMasterId] = useState<string | null>(null);
   const [masterPage, setMasterPage] = useState(1);
+  const [assignPreview, setAssignPreview] = useState<FeeMasterAssignPreview | null>(null);
+  const [assignMasterIds, setAssignMasterIds] = useState<string[]>([]);
+  const [assignSelected, setAssignSelected] = useState<string[]>([]);
+  const [assignLoading, setAssignLoading] = useState(false);
 
   const groupPageRows = useMemo(
     () => paginateItems(setup.groups, groupPage, GROUP_PAGE_SIZE),
@@ -163,10 +197,14 @@ export function SetupPanel({
     }
   }
 
-  async function removeFeeType(item: { id: string; name: string }) {
+  async function removeFeeType(item: { id: string; name: string; canDelete?: boolean }) {
+    if (item.canDelete === false) {
+      onError("This fee type is in use and cannot be deleted");
+      return;
+    }
     const ok = await confirmDelete({
       title: "Delete fee type?",
-      text: `"${item.name}" will be deleted if unused.`,
+      text: `"${item.name}" will be permanently deleted.`,
       confirmText: "Delete",
     });
     if (!ok) return;
@@ -202,52 +240,77 @@ export function SetupPanel({
       }
       resetGroupForm();
       setGroupPage(1);
-      notifySuccess(editingGroupId ? "Fee group updated" : "Fee group saved");
+      notifySuccess(editingGroupId ? "Fees class group updated" : "Fees class group saved");
       await onSaved();
     } catch (cause) {
-      onError(cause instanceof Error ? cause.message : "Unable to save fee group");
+      onError(cause instanceof Error ? cause.message : "Unable to save fees class group");
     } finally {
       setSaving(false);
     }
   }
 
   async function removeGroup(group: FeeGroup) {
+    if (group.canDelete === false) {
+      onError(
+        group.collectedPaymentCount
+          ? "Cannot delete this fees class group — student fees have already been collected"
+          : "Cannot delete this fees class group while fee master entries still use it",
+      );
+      return;
+    }
     const ok = await confirmDelete({
-      title: "Delete fee group?",
-      text: `"${group.name}" will be deleted if unused.`,
+      title: "Delete fees class group?",
+      text: `"${group.name}" will be permanently deleted.`,
       confirmText: "Delete",
     });
     if (!ok) return;
     try {
       await apiRequest(`/fees/groups/${group.id}`, token, { method: "DELETE" });
       if (editingGroupId === group.id) resetGroupForm();
-      notifySuccess("Fee group deleted");
+      notifySuccess("Fees class group deleted");
       await onSaved();
     } catch (cause) {
-      onError(cause instanceof Error ? cause.message : "Unable to delete fee group");
+      onError(cause instanceof Error ? cause.message : "Unable to delete fees class group");
     }
   }
 
   async function assignGroup(group: FeeGroup) {
     const masters = setup.masters.filter((m) => m.feeGroup.id === group.id);
     if (!masters.length) {
-      onError("Create fee master entries for this group before assigning");
+      onError("Create fee master entries for this group (Fees Master tab) before assigning");
       return;
     }
-    setSaving(true);
+    // Open student picker using the first master as the student scope.
+    setAssignLoading(true);
+    setAssignPreview(null);
+    setAssignMasterIds(masters.map((m) => m.id));
     try {
-      for (const item of masters) {
-        await apiRequest(`/fees/masters/${item.id}/assign`, token, {
-          method: "POST",
-          body: JSON.stringify({}),
-        });
-      }
-      notifySuccess("Fee group assigned");
-      await onSaved();
+      const data = await apiRequest<FeeMasterAssignPreview>(
+        `/fees/masters/${masters[0].id}/assign-candidates`,
+        token,
+      );
+      setAssignPreview({
+        ...data,
+        master: {
+          ...data.master,
+          // Show group-level context in the modal header.
+          feeType: {
+            ...data.master.feeType,
+            name:
+              masters.length > 1
+                ? `${masters.length} fee types in ${group.name}`
+                : data.master.feeType.name,
+          },
+        },
+      });
+      setAssignSelected(
+        data.students.filter((s) => s.canSelect && s.assigned).map((s) => s.enrollmentId),
+      );
     } catch (cause) {
-      onError(cause instanceof Error ? cause.message : "Unable to assign fee group");
+      setAssignMasterIds([]);
+      onError(cause instanceof Error ? cause.message : "Unable to load students for assign");
     } finally {
-      setSaving(false);
+      setAssignLoading(false);
     }
   }
 
@@ -260,32 +323,56 @@ export function SetupPanel({
       dueDate: today,
       amount: "",
       fineUi: "NONE",
-      fineValue: "",
-      rangeStart: today,
-      rangeEnd: today,
     });
+    setFinePenalties([]);
   }
 
   function startEditMaster(item: FeeMaster) {
     setEditingMasterId(item.id);
+    const hasRanges = Boolean(item.fineRanges?.length);
+    const applyFine =
+      item.fineType === "DATE_RANGE" ||
+      item.fineType === "FIXED" ||
+      item.fineType === "PER_DAY" ||
+      item.fineType === "PERCENTAGE";
     setMaster({
       feeGroupId: item.feeGroup.id,
       feeTypeId: item.feeType.id,
       classSectionId: item.classSection?.id ?? "",
       dueDate: item.dueDate.slice(0, 10),
       amount: String(Number(item.amount)),
-      fineUi:
-        item.fineType === "PER_DAY"
-          ? "PER_DAY"
-          : item.fineType === "DATE_RANGE"
-            ? "DATE_RANGE"
-            : item.fineType === "FIXED" || item.fineType === "PERCENTAGE"
-              ? "FIXED"
-              : "NONE",
-      fineValue: String(Number(item.fineValue ?? 0) || ""),
-      rangeStart: item.fineRanges?.[0]?.startDate.slice(0, 10) ?? today,
-      rangeEnd: item.fineRanges?.[0]?.endDate?.slice(0, 10) ?? today,
+      fineUi: applyFine ? "FIXED" : "NONE",
     });
+    if (hasRanges) {
+      setFinePenalties(
+        (item.fineRanges ?? []).map((range) => ({
+          key: range.id,
+          kind: range.perDay ? "EVERY_DAY" : "RANGE",
+          startDate: range.startDate.slice(0, 10),
+          endDate: (range.endDate ?? range.startDate).slice(0, 10),
+          amount: String(Number(range.amount)),
+        })),
+      );
+    } else if (item.fineType === "PER_DAY") {
+      setFinePenalties([
+        {
+          ...newPenaltyRow("EVERY_DAY"),
+          amount: String(Number(item.fineValue ?? 0) || ""),
+          endDate: today,
+        },
+      ]);
+    } else if (item.fineType === "FIXED" || item.fineType === "PERCENTAGE") {
+      setFinePenalties([
+        {
+          ...newPenaltyRow("RANGE"),
+          startDate: item.dueDate.slice(0, 10),
+          endDate: item.dueDate.slice(0, 10),
+          amount: String(Number(item.fineValue ?? 0) || ""),
+        },
+      ]);
+    } else {
+      setFinePenalties([]);
+    }
     setSubTab("masters");
   }
 
@@ -296,19 +383,36 @@ export function SetupPanel({
       return;
     }
     if (!master.feeGroupId || !master.feeTypeId) {
-      onError("Select fee group and fee type");
+      onError("Select fees class group and fee type");
       return;
+    }
+    if (master.fineUi === "FIXED") {
+      if (!finePenalties.length) {
+        onError("Add at least one fine range or every-day penalty");
+        return;
+      }
+      for (const row of finePenalties) {
+        if (!row.amount || Number(row.amount) < 0) {
+          onError("Enter a valid fine amount for each penalty row");
+          return;
+        }
+        if (!row.startDate || (row.kind === "RANGE" && !row.endDate) || (row.kind === "EVERY_DAY" && !row.endDate)) {
+          onError("Complete dates for each fine penalty row");
+          return;
+        }
+      }
     }
     setSaving(true);
     try {
-      const fineType =
-        master.fineUi === "NONE"
-          ? "NONE"
-          : master.fineUi === "PER_DAY"
-            ? "PER_DAY"
-            : master.fineUi === "DATE_RANGE"
-              ? "DATE_RANGE"
-              : "FIXED";
+      const fineRanges =
+        master.fineUi === "FIXED"
+          ? finePenalties.map((row) => ({
+              startDate: row.startDate,
+              endDate: row.endDate || null,
+              amount: Number(row.amount),
+              perDay: row.kind === "EVERY_DAY",
+            }))
+          : [];
       const payload = {
         academicSessionId: setup.currentSession.id,
         classSectionId: master.classSectionId || null,
@@ -316,20 +420,10 @@ export function SetupPanel({
         feeTypeId: master.feeTypeId,
         amount: Number(master.amount),
         dueDate: master.dueDate,
-        fineType,
-        fineValue: fineType === "NONE" ? 0 : Number(master.fineValue || 0),
+        fineType: master.fineUi === "FIXED" ? "DATE_RANGE" : "NONE",
+        fineValue: 0,
         graceDays: 0,
-        fineRanges:
-          master.fineUi === "DATE_RANGE"
-            ? [
-                {
-                  startDate: master.rangeStart,
-                  endDate: master.rangeEnd || null,
-                  amount: Number(master.fineValue || 0),
-                  perDay: false,
-                },
-              ]
-            : [],
+        fineRanges,
         isCustom: false,
       };
       if (editingMasterId) {
@@ -368,6 +462,91 @@ export function SetupPanel({
       await onSaved();
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : "Unable to delete fee master");
+    }
+  }
+
+  async function moveMaster(item: FeeMaster, direction: -1 | 1) {
+    const index = setup.masters.findIndex((row) => row.id === item.id);
+    const swapWith = index + direction;
+    if (index < 0 || swapWith < 0 || swapWith >= setup.masters.length) return;
+    const orderedIds = setup.masters.map((row) => row.id);
+    [orderedIds[index], orderedIds[swapWith]] = [orderedIds[swapWith], orderedIds[index]];
+    setSaving(true);
+    try {
+      await apiRequest("/fees/masters/reorder", token, {
+        method: "PUT",
+        body: JSON.stringify({ orderedIds }),
+      });
+      notifySuccess("Fee master order updated");
+      await onSaved();
+    } catch (cause) {
+      onError(cause instanceof Error ? cause.message : "Unable to reorder fee masters");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function openAssignMaster(item: FeeMaster) {
+    setAssignLoading(true);
+    setAssignPreview(null);
+    setAssignMasterIds([item.id]);
+    try {
+      const data = await apiRequest<FeeMasterAssignPreview>(
+        `/fees/masters/${item.id}/assign-candidates`,
+        token,
+      );
+      setAssignPreview(data);
+      setAssignSelected(
+        data.students.filter((s) => s.canSelect && s.assigned).map((s) => s.enrollmentId),
+      );
+    } catch (cause) {
+      setAssignMasterIds([]);
+      onError(cause instanceof Error ? cause.message : "Unable to load students for assign");
+    } finally {
+      setAssignLoading(false);
+    }
+  }
+
+  function toggleAssignStudent(enrollmentId: string, canSelect: boolean) {
+    if (!canSelect) return;
+    setAssignSelected((current) =>
+      current.includes(enrollmentId)
+        ? current.filter((id) => id !== enrollmentId)
+        : [...current, enrollmentId],
+    );
+  }
+
+  async function saveAssignMaster() {
+    if (!assignPreview) return;
+    const masterIds = assignMasterIds.length
+      ? assignMasterIds
+      : [assignPreview.master.id];
+    setSaving(true);
+    try {
+      let lastEligible = 0;
+      for (const masterId of masterIds) {
+        const result = await apiRequest<{ assigned: number; eligible: number }>(
+          `/fees/masters/${masterId}/assign`,
+          token,
+          {
+            method: "POST",
+            body: JSON.stringify({ enrollmentIds: assignSelected }),
+          },
+        );
+        lastEligible = result.eligible;
+      }
+      notifySuccess(
+        masterIds.length > 1
+          ? `Assigned ${masterIds.length} fee types to ${lastEligible} student(s)`
+          : `Assigned to ${lastEligible} student(s)`,
+      );
+      setAssignPreview(null);
+      setAssignMasterIds([]);
+      await onSaved();
+    } catch (cause) {
+      onError(cause instanceof Error ? cause.message : "Unable to assign fees");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -443,65 +622,125 @@ export function SetupPanel({
 
   return (
     <section className="mt-5 space-y-4">
-      <div className="flex flex-wrap items-center gap-6 border-b border-slate-200 text-[14px] font-semibold">
-        <button type="button" className={subTabClass(subTab === "types")} onClick={() => setSubTab("types")}>
-          Fees Type
-        </button>
-        <button type="button" className={subTabClass(subTab === "groups")} onClick={() => setSubTab("groups")}>
-          Fees Group
-        </button>
-        <button type="button" className={subTabClass(subTab === "masters")} onClick={() => setSubTab("masters")}>
-          Fees Master
-        </button>
-        <button type="button" className={subTabClass(subTab === "books")} onClick={() => setSubTab("books")}>
-          Receipt Books
-        </button>
+      <div className="flex flex-wrap items-center gap-1 border-b border-slate-200">
+        {(
+          [
+            ["types", "Fees Type"],
+            ["groups", "Fees Class Group"],
+            ["masters", "Fees Master"],
+            ["books", "Receipt Books"],
+          ] as const
+        ).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            className={`px-3.5 text-[13.5px] font-semibold transition-colors ${subTabClass(subTab === key)}`}
+            onClick={() => setSubTab(key)}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
       {subTab === "types" ? (
-        <div className="grid gap-5 xl:grid-cols-[0.75fr_1.25fr]">
-          <form className="nx-card p-5" onSubmit={(e) => void addFeeType(e)}>
-            <h3 className="text-[18px] font-bold text-slate-900">Add fee type</h3>
-            <label className="nx-label mt-5">Fee Name</label>
+        <div className="grid gap-5 xl:grid-cols-[340px_minmax(0,1fr)]">
+          <form className="nx-card h-fit p-5" onSubmit={(e) => void addFeeType(e)}>
+            <h3 className="text-[17px] font-bold text-slate-900">Add fee type</h3>
+            <p className="mt-1 text-[12.5px] leading-5 text-slate-500">
+              Fee types are building blocks used in class groups and masters (e.g. Tuition, Transport).
+            </p>
+            <label className="nx-label mt-5">Fee name</label>
             <input
               className="nx-input"
-              placeholder="Enter fee name"
+              placeholder="e.g. Tuition Fee"
               required
               value={typeName}
               onChange={(e) => setTypeName(e.target.value)}
             />
-            <label className="nx-label mt-4">Fee Code</label>
+            <label className="nx-label mt-4">Fee code</label>
             <input
               className="nx-input"
-              placeholder="Enter fee code"
+              placeholder="Optional short code"
               value={typeCode}
               onChange={(e) => setTypeCode(e.target.value)}
             />
-            <button className="nx-btn-primary mt-5" type="submit" disabled={saving}>
+            <button className="nx-btn-primary mt-5 w-full !py-2.5" type="submit" disabled={saving}>
               <AddOutlined sx={{ fontSize: 16 }} />
               {saving ? "Saving..." : "Add fee type"}
             </button>
           </form>
-          <div className="nx-card p-5">
-            <h3 className="text-[18px] font-bold text-slate-900">Existing fee types</h3>
-            <div className="mt-5 flex flex-wrap gap-3">
-              {setup.types.map((item) => (
-                <span
-                  key={item.id}
-                  className="inline-flex items-center gap-2 rounded-md bg-indigo-50 px-3 py-2 text-[14px] font-semibold text-indigo-700"
-                >
-                  {item.name}
-                  <button
-                    type="button"
-                    className="rounded p-0.5 text-indigo-400 hover:bg-indigo-100 hover:text-rose-600"
-                    title={`Delete ${item.name}`}
-                    onClick={() => void removeFeeType(item)}
-                  >
-                    <DeleteOutline sx={{ fontSize: 16 }} />
-                  </button>
-                </span>
-              ))}
-              {!setup.types.length ? <p className="text-sm text-slate-500">No fee types.</p> : null}
+
+          <div className="nx-card overflow-hidden">
+            <div className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-100 px-5 py-4">
+              <div>
+                <h3 className="text-[17px] font-bold text-slate-900">Fee types</h3>
+                <p className="mt-1 text-[12.5px] text-slate-500">
+                  Types linked to groups or masters cannot be deleted.
+                </p>
+              </div>
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+                {setup.types.length} total
+              </span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="nx-table min-w-[560px]">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Code</th>
+                    <th>Status</th>
+                    <th className="text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {setup.types.map((item) => {
+                    const inUse = item.canDelete === false;
+                    return (
+                      <tr key={item.id}>
+                        <td className="font-semibold text-slate-900">{item.name}</td>
+                        <td className="font-mono text-[13px] text-slate-500">{item.code || "—"}</td>
+                        <td>
+                          {inUse ? (
+                            <span className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-semibold text-amber-700">
+                              In use
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700">
+                              Available
+                            </span>
+                          )}
+                        </td>
+                        <td>
+                          <div className="flex justify-end">
+                            {inUse ? (
+                              <span className="px-2 py-1 text-[11px] font-medium text-slate-400">—</span>
+                            ) : (
+                              <button
+                                type="button"
+                                className="rounded-md p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                                title={`Delete ${item.name}`}
+                                onClick={() => void removeFeeType(item)}
+                              >
+                                <DeleteOutline sx={{ fontSize: 18 }} />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {!setup.types.length ? (
+                    <tr>
+                      <td colSpan={4} className="px-5 py-14 text-center">
+                        <p className="font-medium text-slate-700">No fee types yet</p>
+                        <p className="mt-1 text-[13px] text-slate-500">
+                          Add your first fee type using the form on the left.
+                        </p>
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
@@ -511,20 +750,21 @@ export function SetupPanel({
         <div className="grid gap-5 xl:grid-cols-[0.85fr_1.15fr]">
           <form className="nx-card h-fit p-5" onSubmit={(e) => void saveGroup(e)}>
             <h3 className="text-[18px] font-bold text-slate-900">
-              {editingGroupId ? "Edit fee group" : "Add fee group"}
+              {editingGroupId ? "Edit fees class group" : "Add fees class group"}
             </h3>
 
-            <label className="nx-label mt-5">Group Name</label>
+            <label className="nx-label mt-5">Class Group Name</label>
             <input
               className="nx-input"
-              placeholder="Enter group name"
+              placeholder="e.g. Class 10-New"
               required
               value={groupName}
               onChange={(e) => setGroupName(e.target.value)}
             />
             <p className="mt-1.5 text-[12px] leading-5 text-slate-500">
-              Match your Academics class name, e.g. &apos;Class 6&apos;. Add &apos;-New&apos; or &apos;-Old&apos; if
-              structure differs.
+              Use the same class name as Academics (e.g. Class 1). Add -New or -Old when fee
+              structure differs (Class 1-New / Class 1-Old). Use -New when there is only one
+              structure per class.
             </p>
 
             <label className="nx-label mt-4">Select Fee Types</label>
@@ -550,7 +790,7 @@ export function SetupPanel({
 
             <button className="nx-btn-primary mt-5 w-full !py-2.5" type="submit" disabled={saving}>
               <AddOutlined sx={{ fontSize: 16 }} />
-              {saving ? "Saving..." : editingGroupId ? "Save fee group" : "Add fee group"}
+              {saving ? "Saving..." : editingGroupId ? "Save class group" : "Add class group"}
             </button>
             {editingGroupId ? (
               <button type="button" className="nx-btn-secondary mt-2 w-full" onClick={resetGroupForm}>
@@ -561,13 +801,16 @@ export function SetupPanel({
 
           <div className="nx-card overflow-hidden">
             <div className="border-b border-slate-100 px-5 py-4">
-              <h3 className="text-[18px] font-bold text-slate-900">Existing fee groups</h3>
+              <h3 className="text-[18px] font-bold text-slate-900">Existing fees class groups</h3>
+              <p className="mt-1 text-[12px] text-slate-500">
+                Delete is hidden after fees are collected for that group (or while masters use it).
+              </p>
             </div>
             <div className="overflow-x-auto">
               <table className="nx-table min-w-[720px]">
                 <thead>
                   <tr>
-                    <th>Group Name</th>
+                    <th>Class Group</th>
                     <th>Fee Types Included</th>
                     <th>Assigned To</th>
                     <th className="text-right">Actions</th>
@@ -576,7 +819,14 @@ export function SetupPanel({
                 <tbody>
                   {groupPageRows.map((group) => (
                     <tr key={group.id}>
-                      <td className="font-semibold text-slate-900">{group.name}</td>
+                      <td className="font-semibold text-slate-900">
+                        {group.name}
+                        {(group.collectedPaymentCount ?? 0) > 0 ? (
+                          <span className="ml-2 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-700">
+                            Collected
+                          </span>
+                        ) : null}
+                      </td>
                       <td>
                         <div className="flex flex-wrap gap-1.5">
                           {group.items.map((item) => (
@@ -607,13 +857,27 @@ export function SetupPanel({
                           >
                             <EditOutlined sx={{ fontSize: 18 }} />
                           </button>
-                          <button
-                            type="button"
-                            className="rounded-md p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
-                            onClick={() => void removeGroup(group)}
-                          >
-                            <DeleteOutline sx={{ fontSize: 18 }} />
-                          </button>
+                          {group.canDelete !== false ? (
+                            <button
+                              type="button"
+                              className="rounded-md p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                              onClick={() => void removeGroup(group)}
+                              title="Delete fees class group"
+                            >
+                              <DeleteOutline sx={{ fontSize: 18 }} />
+                            </button>
+                          ) : (
+                            <span
+                              className="rounded-md px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-400"
+                              title={
+                                (group.collectedPaymentCount ?? 0) > 0
+                                  ? "Delete locked — fees already collected"
+                                  : "Delete locked — used by fee masters"
+                              }
+                            >
+                              Locked
+                            </span>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -621,7 +885,7 @@ export function SetupPanel({
                   {!setup.groups.length ? (
                     <tr>
                       <td colSpan={4} className="px-5 py-12 text-center text-slate-500">
-                        No fee groups yet.
+                        No fees class groups yet.
                       </td>
                     </tr>
                   ) : null}
@@ -633,7 +897,7 @@ export function SetupPanel({
               pageSize={GROUP_PAGE_SIZE}
               total={setup.groups.length}
               onPageChange={setGroupPage}
-              label="groups"
+              label="class groups"
             />
           </div>
         </div>
@@ -650,14 +914,14 @@ export function SetupPanel({
                 Define due dates and amounts for specific fee types within groups.
               </p>
 
-              <label className="nx-label mt-5">Fees Group</label>
+              <label className="nx-label mt-5">Fees Class Group</label>
               <select
                 className="nx-input"
                 value={master.feeGroupId}
                 onChange={(e) => setMaster({ ...master, feeGroupId: e.target.value, feeTypeId: "" })}
                 required
               >
-                <option value="">Select Group</option>
+                <option value="">Select class group</option>
                 {setup.groups.map((group) => (
                   <option key={group.id} value={group.id}>
                     {group.name}
@@ -721,8 +985,6 @@ export function SetupPanel({
                   [
                     ["NONE", "None"],
                     ["FIXED", "Fixed amount"],
-                    ["PER_DAY", "Per-day"],
-                    ["DATE_RANGE", "Date range"],
                   ] as Array<[FineUi, string]>
                 ).map(([value, label]) => (
                   <label
@@ -738,65 +1000,139 @@ export function SetupPanel({
                       name="fineUi"
                       className="accent-[#6366f1]"
                       checked={master.fineUi === value}
-                      onChange={() => setMaster({ ...master, fineUi: value })}
+                      onChange={() => {
+                        setMaster({ ...master, fineUi: value });
+                        if (value === "FIXED" && !finePenalties.length) {
+                          setFinePenalties([newPenaltyRow("RANGE")]);
+                        }
+                        if (value === "NONE") setFinePenalties([]);
+                      }}
                     />
                     {label}
                   </label>
                 ))}
               </div>
 
-              {master.fineUi === "DATE_RANGE" ? (
+              {master.fineUi === "FIXED" ? (
                 <div className="mt-3 space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div>
-                      <label className="nx-label">Start Date</label>
-                      <input
-                        className="nx-input"
-                        type="date"
-                        value={master.rangeStart}
-                        onChange={(e) => setMaster({ ...master, rangeStart: e.target.value })}
-                      />
+                  <p className="text-[12px] leading-5 text-slate-500">
+                    Add Range (same fine between dates) and/or Every day (fine increases daily until a date).
+                  </p>
+                  {finePenalties.map((row, index) => (
+                    <div
+                      key={row.key}
+                      className="space-y-3 rounded-lg border border-slate-200 bg-white p-3"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex gap-2">
+                          {(
+                            [
+                              ["RANGE", "Range"],
+                              ["EVERY_DAY", "Every day"],
+                            ] as Array<[FinePenaltyKind, string]>
+                          ).map(([kind, label]) => (
+                            <label
+                              key={kind}
+                              className={`cursor-pointer rounded-md border px-2.5 py-1 text-[12px] font-semibold ${
+                                row.kind === kind
+                                  ? "border-indigo-300 bg-indigo-50 text-indigo-700"
+                                  : "border-slate-200 text-slate-500"
+                              }`}
+                            >
+                              <input
+                                type="radio"
+                                className="sr-only"
+                                checked={row.kind === kind}
+                                onChange={() =>
+                                  setFinePenalties((rows) =>
+                                    rows.map((item, i) =>
+                                      i === index ? { ...item, kind } : item,
+                                    ),
+                                  )
+                                }
+                              />
+                              {label}
+                            </label>
+                          ))}
+                        </div>
+                        {finePenalties.length > 1 ? (
+                          <button
+                            type="button"
+                            className="rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+                            onClick={() =>
+                              setFinePenalties((rows) => rows.filter((_, i) => i !== index))
+                            }
+                          >
+                            <DeleteOutline sx={{ fontSize: 16 }} />
+                          </button>
+                        ) : null}
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div>
+                          <label className="nx-label">
+                            {row.kind === "EVERY_DAY" ? "From date" : "Start date"}
+                          </label>
+                          <input
+                            className="nx-input"
+                            type="date"
+                            value={row.startDate}
+                            onChange={(e) =>
+                              setFinePenalties((rows) =>
+                                rows.map((item, i) =>
+                                  i === index ? { ...item, startDate: e.target.value } : item,
+                                ),
+                              )
+                            }
+                          />
+                        </div>
+                        <div>
+                          <label className="nx-label">
+                            {row.kind === "EVERY_DAY" ? "Till date" : "End date"}
+                          </label>
+                          <input
+                            className="nx-input"
+                            type="date"
+                            value={row.endDate}
+                            onChange={(e) =>
+                              setFinePenalties((rows) =>
+                                rows.map((item, i) =>
+                                  i === index ? { ...item, endDate: e.target.value } : item,
+                                ),
+                              )
+                            }
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="nx-label">
+                          {row.kind === "EVERY_DAY" ? "Fine per day (₹)" : "Fine (₹)"}
+                        </label>
+                        <input
+                          className="nx-input"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="0.00"
+                          value={row.amount}
+                          onChange={(e) =>
+                            setFinePenalties((rows) =>
+                              rows.map((item, i) =>
+                                i === index ? { ...item, amount: e.target.value } : item,
+                              ),
+                            )
+                          }
+                        />
+                      </div>
                     </div>
-                    <div>
-                      <label className="nx-label">End Date</label>
-                      <input
-                        className="nx-input"
-                        type="date"
-                        value={master.rangeEnd}
-                        onChange={(e) => setMaster({ ...master, rangeEnd: e.target.value })}
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="nx-label">Fine (₹)</label>
-                    <input
-                      className="nx-input"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      placeholder="50.00"
-                      value={master.fineValue}
-                      onChange={(e) => setMaster({ ...master, fineValue: e.target.value })}
-                    />
-                  </div>
-                  <button type="button" className="text-[13px] font-semibold text-indigo-600">
-                    + Add range
+                  ))}
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 text-[13px] font-semibold text-indigo-600 hover:text-indigo-700"
+                    onClick={() => setFinePenalties((rows) => [...rows, newPenaltyRow("RANGE")])}
+                  >
+                    <AddOutlined sx={{ fontSize: 16 }} />
+                    Add range / every day
                   </button>
-                </div>
-              ) : null}
-
-              {master.fineUi === "FIXED" || master.fineUi === "PER_DAY" ? (
-                <div className="mt-3">
-                  <label className="nx-label">Fine (₹)</label>
-                  <input
-                    className="nx-input"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    placeholder="0.00"
-                    value={master.fineValue}
-                    onChange={(e) => setMaster({ ...master, fineValue: e.target.value })}
-                  />
                 </div>
               ) : null}
 
@@ -813,12 +1149,16 @@ export function SetupPanel({
             <div className="nx-card overflow-hidden">
               <div className="border-b border-slate-100 px-5 py-4">
                 <h3 className="text-[18px] font-bold text-slate-900">Fee Master Entries</h3>
+                <p className="mt-1 text-[12.5px] text-slate-500">
+                  Use arrows to change collection order. Assign/View to select students.
+                </p>
               </div>
               <div className="overflow-x-auto">
-                <table className="nx-table min-w-[820px]">
+                <table className="nx-table min-w-[920px]">
                   <thead>
                     <tr>
-                      <th>Fees Group</th>
+                      <th className="w-16">Order</th>
+                      <th>Fees Class Group</th>
                       <th>Fee Type</th>
                       <th>Fee Code</th>
                       <th>Due Date</th>
@@ -828,39 +1168,74 @@ export function SetupPanel({
                     </tr>
                   </thead>
                   <tbody>
-                    {masterPageRows.map((item) => (
-                      <tr key={item.id}>
-                        <td className="font-medium text-slate-800">{item.feeGroup.name}</td>
-                        <td className="text-slate-700">{item.feeType.name}</td>
-                        <td className="text-slate-500">{item.feeType.code || "—"}</td>
-                        <td className="text-slate-600">{item.dueDate.slice(0, 10)}</td>
-                        <td className="font-semibold text-slate-900">{formatMoney(item.amount)}</td>
-                        <td>
-                          <span className={finePill(item.fineType)}>{fineLabel(item.fineType)}</span>
-                        </td>
-                        <td>
-                          <div className="flex justify-end gap-1">
-                            <button
-                              type="button"
-                              className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-indigo-600"
-                              onClick={() => startEditMaster(item)}
-                            >
-                              <EditOutlined sx={{ fontSize: 18 }} />
-                            </button>
-                            <button
-                              type="button"
-                              className="rounded-md p-1.5 text-[#6366f1] hover:bg-indigo-50"
-                              onClick={() => void removeMaster(item)}
-                            >
-                              <DeleteOutline sx={{ fontSize: 18 }} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                    {masterPageRows.map((item, pageIndex) => {
+                      const absoluteIndex = (masterPage - 1) * MASTER_PAGE_SIZE + pageIndex;
+                      return (
+                        <tr key={item.id}>
+                          <td>
+                            <div className="flex flex-col gap-0.5">
+                              <button
+                                type="button"
+                                className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-indigo-600 disabled:opacity-30"
+                                disabled={saving || absoluteIndex === 0}
+                                title="Move up"
+                                onClick={() => void moveMaster(item, -1)}
+                              >
+                                <ArrowUpwardOutlined sx={{ fontSize: 16 }} />
+                              </button>
+                              <button
+                                type="button"
+                                className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-indigo-600 disabled:opacity-30"
+                                disabled={saving || absoluteIndex >= setup.masters.length - 1}
+                                title="Move down"
+                                onClick={() => void moveMaster(item, 1)}
+                              >
+                                <ArrowDownwardOutlined sx={{ fontSize: 16 }} />
+                              </button>
+                            </div>
+                          </td>
+                          <td className="font-medium text-slate-800">{item.feeGroup.name}</td>
+                          <td className="text-slate-700">{item.feeType.name}</td>
+                          <td className="text-slate-500">{item.feeType.code || "—"}</td>
+                          <td className="text-slate-600">{item.dueDate.slice(0, 10)}</td>
+                          <td className="font-semibold text-slate-900">{formatMoney(item.amount)}</td>
+                          <td>
+                            <span className={finePill(item.fineType)}>
+                              {fineLabel(item.fineType, item.fineRanges)}
+                            </span>
+                          </td>
+                          <td>
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                type="button"
+                                className="text-[11px] font-bold uppercase tracking-wide text-indigo-600 hover:underline"
+                                disabled={assignLoading || saving}
+                                onClick={() => void openAssignMaster(item)}
+                              >
+                                Assign / View
+                              </button>
+                              <button
+                                type="button"
+                                className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-indigo-600"
+                                onClick={() => startEditMaster(item)}
+                              >
+                                <EditOutlined sx={{ fontSize: 18 }} />
+                              </button>
+                              <button
+                                type="button"
+                                className="rounded-md p-1.5 text-[#6366f1] hover:bg-indigo-50"
+                                onClick={() => void removeMaster(item)}
+                              >
+                                <DeleteOutline sx={{ fontSize: 18 }} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                     {!setup.masters.length ? (
                       <tr>
-                        <td colSpan={7} className="px-5 py-12 text-center text-slate-500">
+                        <td colSpan={8} className="px-5 py-12 text-center text-slate-500">
                           No fee master entries yet.
                         </td>
                       </tr>
@@ -906,6 +1281,140 @@ export function SetupPanel({
                 <p className="mt-0.5 text-xl font-bold text-slate-900">{assignedClassCount} Sections</p>
               </div>
             </article>
+          </div>
+        </div>
+      ) : null}
+
+      {assignPreview || assignLoading ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+          onClick={() => {
+            if (!saving) {
+              setAssignPreview(null);
+              setAssignMasterIds([]);
+            }
+          }}
+        >
+          <div
+            className="max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="border-b border-slate-100 px-5 py-4">
+              <h3 className="text-[18px] font-bold text-slate-900">Assign / View students</h3>
+              {assignPreview ? (
+                <p className="mt-1 text-[13px] text-slate-500">
+                  {assignPreview.master.feeGroup.name} · {assignPreview.master.feeType.name} ·{" "}
+                  {formatMoney(assignPreview.master.amount)}
+                </p>
+              ) : null}
+              <p className="mt-2 text-[12px] leading-5 text-slate-500">
+                No checkbox means fees are already collected or the student is disabled. Revert the
+                payment first if you need to change that student&apos;s fee group.
+              </p>
+            </div>
+            <div className="max-h-[55vh] overflow-y-auto px-5 py-3">
+              {assignLoading && !assignPreview ? (
+                <p className="py-10 text-center text-sm text-slate-500">Loading students…</p>
+              ) : null}
+              {assignPreview ? (
+                <table className="nx-table w-full">
+                  <thead>
+                    <tr>
+                      <th className="w-12"></th>
+                      <th>Student</th>
+                      <th>Admission #</th>
+                      <th>Class</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {assignPreview.students.map((row) => {
+                      const name = `${row.student.firstName} ${row.student.lastName ?? ""}`.trim();
+                      const checked = assignSelected.includes(row.enrollmentId);
+                      return (
+                        <tr key={row.enrollmentId} className={!row.canSelect ? "bg-slate-50" : undefined}>
+                          <td>
+                            {row.canSelect ? (
+                              <input
+                                type="checkbox"
+                                className="size-4 accent-[#6366f1]"
+                                checked={checked}
+                                onChange={() => toggleAssignStudent(row.enrollmentId, true)}
+                              />
+                            ) : (
+                              <span className="inline-block w-4" title={row.lockReason ?? undefined} />
+                            )}
+                          </td>
+                          <td className="font-medium text-slate-900">{name}</td>
+                          <td className="text-slate-500">{row.student.admissionNumber}</td>
+                          <td className="text-slate-600">
+                            {row.classSection
+                              ? `${row.classSection.academicClass.name} - ${row.classSection.section.name}`
+                              : "—"}
+                          </td>
+                          <td>
+                            {row.collected ? (
+                              <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+                                Collected
+                              </span>
+                            ) : row.disabled ? (
+                              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-500">
+                                Disabled
+                              </span>
+                            ) : row.assigned ? (
+                              <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-semibold text-indigo-700">
+                                Assigned
+                              </span>
+                            ) : (
+                              <span className="text-[12px] text-slate-400">Not assigned</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {!assignPreview.students.length ? (
+                      <tr>
+                        <td colSpan={5} className="py-10 text-center text-slate-500">
+                          No students found for this fee master scope.
+                        </td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              ) : null}
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-5 py-4">
+              {assignPreview ? (
+                <p className="text-[12px] text-slate-500">
+                  {assignPreview.summary.selectable} selectable · {assignSelected.length} selected ·{" "}
+                  {assignPreview.summary.collected} collected · {assignPreview.summary.disabled}{" "}
+                  disabled
+                </p>
+              ) : (
+                <span />
+              )}
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className="nx-btn-secondary"
+                  disabled={saving}
+                  onClick={() => {
+                    setAssignPreview(null);
+                    setAssignMasterIds([]);
+                  }}
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  className="nx-btn-primary"
+                  disabled={saving || !assignPreview}
+                  onClick={() => void saveAssignMaster()}
+                >
+                  {saving ? "Saving…" : "Save assignments"}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       ) : null}

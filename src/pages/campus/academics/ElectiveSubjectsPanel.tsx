@@ -23,15 +23,20 @@ export function ElectiveSubjectsPanel({
   setup,
   token,
   canManage,
+  focus = "all",
   onSaved,
   onError,
 }: {
   setup: AcademicSetup;
   token: string;
   canManage: boolean;
+  focus?: "categories" | "assign" | "all";
   onSaved: () => Promise<void>;
   onError: (message: string) => void;
 }) {
+  const showCategories = focus === "categories" || focus === "all";
+  const showAssign = focus === "assign" || focus === "all";
+
   const [categoryForm, setCategoryForm] = useState({ name: "", description: "", classId: "", maxSelect: 1 });
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
   const [saving, setSaving] = useState("");
@@ -203,6 +208,7 @@ export function ElectiveSubjectsPanel({
 
   return (
     <section className="mt-5 space-y-5">
+      {showCategories ? (
       <div className="nx-card overflow-hidden">
         <div className="border-b border-slate-100 px-4 py-3">
           <h3 className="text-[15px] font-bold text-slate-900">Elective Categories</h3>
@@ -236,6 +242,15 @@ export function ElectiveSubjectsPanel({
                 />
               </label>
               <label className="mt-4 block">
+                <span className="nx-label !normal-case !tracking-normal">Description</span>
+                <input
+                  className="nx-input bg-white"
+                  value={categoryForm.description}
+                  onChange={(event) => setCategoryForm({ ...categoryForm, description: event.target.value })}
+                  placeholder="Optional description"
+                />
+              </label>
+              <label className="mt-4 block">
                 <span className="nx-label !normal-case !tracking-normal">Class</span>
                 <select
                   className="nx-input bg-white"
@@ -250,6 +265,19 @@ export function ElectiveSubjectsPanel({
                   ))}
                 </select>
               </label>
+              <label className="mt-4 block">
+                <span className="nx-label !normal-case !tracking-normal">Max Select</span>
+                <input
+                  className="nx-input bg-white"
+                  type="number"
+                  min={1}
+                  required
+                  value={categoryForm.maxSelect}
+                  onChange={(event) =>
+                    setCategoryForm({ ...categoryForm, maxSelect: Math.max(1, Number(event.target.value) || 1) })
+                  }
+                />
+              </label>
               <button className="nx-btn-primary mt-4 w-full" type="submit" disabled={saving === "category"}>
                 <AddOutlined sx={{ fontSize: 15 }} />
                 {saving === "category" ? "Saving…" : editingCategoryId ? "Save Category" : "Add Category"}
@@ -258,11 +286,12 @@ export function ElectiveSubjectsPanel({
           ) : null}
 
           <div className="overflow-x-auto rounded border border-slate-200">
-            <table className="nx-table !min-w-[580px]">
+            <table className="nx-table !min-w-[640px]">
               <thead className="bg-slate-50/80">
                 <tr>
                   <th>Category Name</th>
                   <th>Class</th>
+                  <th>Max Select</th>
                   <th>Subjects Assigned</th>
                   {canManage ? <th>Actions</th> : null}
                 </tr>
@@ -272,6 +301,7 @@ export function ElectiveSubjectsPanel({
                   <tr key={item.id}>
                     <td className="font-semibold text-slate-800">{item.name}</td>
                     <td className="text-slate-700">{item.academicClass?.name ?? "All classes"}</td>
+                    <td className="font-medium text-slate-700">{item.maxSelect}</td>
                     <td className="font-medium text-slate-700">{item._count.subjects}</td>
                     {canManage ? (
                       <td>
@@ -300,7 +330,7 @@ export function ElectiveSubjectsPanel({
                 ))}
                 {!setup.electiveCategories.length ? (
                   <tr>
-                    <td colSpan={canManage ? 4 : 3} className="py-8 text-center text-sm text-slate-500">
+                    <td colSpan={canManage ? 5 : 4} className="py-8 text-center text-sm text-slate-500">
                       No elective categories yet.
                     </td>
                   </tr>
@@ -310,7 +340,9 @@ export function ElectiveSubjectsPanel({
           </div>
         </div>
       </div>
+      ) : null}
 
+      {showAssign ? (
       <div className="nx-card p-4">
         <h3 className="text-[15px] font-bold text-slate-900">Assign Elective Subjects</h3>
         <div className="mt-4 flex flex-wrap items-end gap-4">
@@ -499,6 +531,7 @@ export function ElectiveSubjectsPanel({
           </div>
         ) : null}
       </div>
+      ) : null}
     </section>
   );
 }

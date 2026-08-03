@@ -45,50 +45,70 @@ export function downloadCsv(filename: string, headers: string[], rows: string[][
 
 export function headerForTab(tab: AcademicsTab) {
   switch (tab) {
+    case "sections":
+      return {
+        title: "Sections",
+        description: "Create and manage academic sections used across classes.",
+      };
     case "classes":
       return {
-        title: "Academics",
-        description: "Manage classes, sections, subjects, and academic operations.",
+        title: "Class",
+        description: "Add classes, link sections, and set RFID attendance times.",
+      };
+    case "incharge":
+      return {
+        title: "Assign Class Incharge",
+        description: "Assign a class teacher to each class-section.",
+      };
+    case "elective-categories":
+      return {
+        title: "Elective Subject Category",
+        description: "Define elective categories and how many subjects students may select.",
       };
     case "subjects":
       return {
-        title: "Academics",
-        description: "Manage classes, sections, subjects, and academic operations.",
+        title: "Subjects",
+        description: "Manage core and elective subjects for the academic structure.",
       };
     case "subject-groups":
       return {
-        title: "Academics",
-        description: "Manage classes, sections, subjects, and academic operations.",
+        title: "Subject Group",
+        description: "Group class subjects for timetable and elective assignment.",
+      };
+    case "assign-electives":
+      return {
+        title: "Assign Elective Subjects",
+        description: "Assign elective subject choices to students by class section.",
       };
     case "class-timetable":
       return {
-        title: "Academics",
-        description: "Manage classes, sections, subjects, and academic operations.",
-      };
-    case "electives":
-      return {
-        title: "Academics",
-        description: "Manage classes, sections, subjects, and academic operations.",
+        title: "Class Timetable",
+        description: "Build and manage the weekly timetable for each class section.",
       };
     case "teacher-timetable":
       return {
-        title: "Academics",
-        description: "Manage classes, sections, subjects, and academic operations.",
+        title: "Teachers Timetable",
+        description: "View teacher schedules across weekdays and periods.",
       };
     case "promote":
       return {
-        title: "Academics",
-        description: "Manage classes, sections, subjects, and academic operations.",
+        title: "Promote Students",
+        description: "Promote or leave students for the next academic session.",
       };
     case "scholars":
       return {
-        title: "Academics",
-        description: "Manage classes, sections, subjects, and academic operations.",
+        title: "School Scholars",
+        description: "Track scholarship awards, amounts, and final percentages.",
       };
-    case "bulk-update":
+    case "student-details":
       return {
-        title: "Academics",
-        description: "Manage classes, sections, subjects, and academic operations.",
+        title: "Update Student Details",
+        description: "Bulk-update student profile fields for a class section.",
+      };
+    case "section-update":
+      return {
+        title: "Std Section Update",
+        description: "Move students between sections within the same class.",
       };
     case "reports":
       return {

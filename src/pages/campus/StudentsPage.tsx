@@ -6,24 +6,34 @@ import {
   CloseOutlined,
   CloudUploadOutlined,
   DeleteOutline,
+  DescriptionOutlined,
+  Diversity3Outlined,
   DownloadOutlined,
   EditOutlined,
   FilterListOutlined,
+  FolderSharedOutlined,
+  HowToRegOutlined,
   InsertDriveFileOutlined,
   IosShareOutlined,
   MoreVertOutlined,
   PersonAddAltOutlined,
+  PhoneAndroidOutlined,
+  PhotoCameraOutlined,
+  SettingsOutlined,
   ShieldOutlined,
   SupportAgentOutlined,
+  UploadFileOutlined,
   UploadOutlined,
   VisibilityOutlined,
   AccountBalanceWalletOutlined,
   VerifiedUserOutlined,
 } from "@mui/icons-material";
 import { useAuth } from "../../auth/AuthContext";
-import { CmsFooter, CmsPage, CmsPageHeader, CmsScrollBody, CmsTab, CmsTabs } from "../../components/cms/CmsLayout";
+import { CmsFooter, CmsPage, CmsPageHeader, CmsScrollBody } from "../../components/cms/CmsLayout";
+import { CmsIconTabs, type CmsIconTabItem } from "../../components/cms/CmsIconTabs";
 import { InitialsAvatar } from "../../components/InitialsAvatar";
 import { apiRequest } from "../../lib/api";
+import { confirmDelete } from "../../lib/confirm";
 import { notifyError, notifySuccess } from "../../lib/notify";
 import type {
   ImportResult,
@@ -37,6 +47,10 @@ import type {
 } from "./students/types";
 import { studentDisplayName } from "./students/types";
 import { MultiClassPanel } from "./students/MultiClassPanel";
+import { WrongEntriesDeletePanel } from "./students/WrongEntriesDeletePanel";
+import { StudentImageUploadPanel } from "./students/StudentImageUploadPanel";
+import { AppDownloadStatusPanel } from "./students/AppDownloadStatusPanel";
+import { StudentsDocumentsPanel } from "./students/StudentsDocumentsPanel";
 
 const SAMPLE_CSV = [
   "firstName,lastName,admissionDate,classSectionId,rollNumber,mobile,email,gender,dateOfBirth,fatherName,fatherPhone,motherName,photoUrl",
@@ -45,7 +59,16 @@ const SAMPLE_CSV = [
 
 const PAGE_SIZE = 4;
 
-type PageTab = "directory" | "admissions" | "import" | "masters" | "multiclass";
+type PageTab =
+  | "directory"
+  | "admissions"
+  | "import"
+  | "masters"
+  | "multiclass"
+  | "wrongentries"
+  | "photos"
+  | "appdownload"
+  | "documents";
 
 async function apiDelete(path: string, token: string) {
   const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:4000/api/v1";
@@ -249,6 +272,32 @@ function headerForTab(tab: PageTab) {
       description: "Enroll a student in additional class sections (coaching / training centers).",
     };
   }
+  if (tab === "wrongentries") {
+    return {
+      title: "Wrong Entries Delete",
+      description: "Permanently delete mistaken student admissions. Deleted records cannot be rolled back.",
+    };
+  }
+  if (tab === "photos") {
+    return {
+      title: "Student Image Upload",
+      description: "Bulk upload student photos by admission number (class-wise).",
+    };
+  }
+  if (tab === "appdownload") {
+    return {
+      title: "App Download Status",
+      description:
+        "See which students have logged into the portal (web/app), remind inactive students, and download reports.",
+    };
+  }
+  if (tab === "documents") {
+    return {
+      title: "Students Documents",
+      description:
+        "Browse documents by folder and class/section. Upload, open, or delete with a reason.",
+    };
+  }
   return {
     title: "Students Directory",
     description: "Manage and view all enrolled student records",
@@ -264,7 +313,11 @@ export function StudentsPage() {
     initialTab === "import" ||
       initialTab === "admissions" ||
       initialTab === "masters" ||
-      initialTab === "multiclass"
+      initialTab === "multiclass" ||
+      initialTab === "wrongentries" ||
+      initialTab === "photos" ||
+      initialTab === "appdownload" ||
+      initialTab === "documents"
       ? initialTab
       : "directory",
   );
@@ -405,7 +458,12 @@ export function StudentsPage() {
   }
 
   async function deleteStudent(id: string) {
-    if (!window.confirm("Delete this student?")) return;
+    const confirmed = await confirmDelete({
+      title: "Delete student?",
+      text: "This student will be permanently removed and cannot be rolled back.",
+      confirmText: "Yes, delete",
+    });
+    if (!confirmed) return;
     try {
       await apiRequest("/students/delete", accessToken, {
         method: "POST",
@@ -420,7 +478,12 @@ export function StudentsPage() {
 
   async function deleteSelectedStudents() {
     if (!selectedIds.length) return;
-    if (!window.confirm(`Delete ${selectedIds.length} selected student(s)?`)) return;
+    const confirmed = await confirmDelete({
+      title: "Delete selected students?",
+      text: `Permanently delete ${selectedIds.length} student(s)? This cannot be rolled back.`,
+      confirmText: "Yes, delete",
+    });
+    if (!confirmed) return;
     try {
       await apiRequest("/students/delete", accessToken, {
         method: "POST",
@@ -470,6 +533,50 @@ export function StudentsPage() {
   const pendingAdmissions = useMemo(
     () => admissions.filter((item) => item.status === "PENDING").length,
     [admissions],
+  );
+
+  const tabItems = useMemo(
+    (): Array<CmsIconTabItem<PageTab>> => [
+      { key: "directory", label: "Directory", icon: FolderSharedOutlined, tone: "indigo" },
+      {
+        key: "admissions",
+        label: "Admissions",
+        icon: HowToRegOutlined,
+        tone: "emerald",
+        badge:
+          pendingAdmissions > 0 ? (
+            <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">
+              {pendingAdmissions}
+            </span>
+          ) : undefined,
+      },
+      { key: "multiclass", label: "Multi Class", icon: Diversity3Outlined, tone: "cyan" },
+      {
+        key: "wrongentries",
+        label: "Wrong Entries",
+        shortLabel: "Wrong Entries",
+        icon: DeleteOutline,
+        tone: "rose",
+      },
+      { key: "photos", label: "Image Upload", icon: PhotoCameraOutlined, tone: "amber" },
+      {
+        key: "appdownload",
+        label: "App Download Status",
+        shortLabel: "App Download",
+        icon: PhoneAndroidOutlined,
+        tone: "sky",
+      },
+      {
+        key: "documents",
+        label: "Students Documents",
+        shortLabel: "Documents",
+        icon: DescriptionOutlined,
+        tone: "blue",
+      },
+      { key: "import", label: "Import", icon: UploadFileOutlined, tone: "violet" },
+      { key: "masters", label: "Masters", icon: SettingsOutlined, tone: "slate" },
+    ],
+    [pendingAdmissions],
   );
 
   const totalPages = Math.max(1, Math.ceil(students.total / PAGE_SIZE));
@@ -527,26 +634,13 @@ export function StudentsPage() {
         }
       />
 
-      <CmsTabs>
-        {(
-          [
-            ["directory", "Directory"],
-            ["admissions", "Admissions"],
-            ["multiclass", "Multi Class"],
-            ["import", "Import"],
-            ["masters", "Masters"],
-          ] as const
-        ).map(([key, label]) => (
-          <CmsTab key={key} active={tab === key} onClick={() => setTab(key)}>
-            {label}
-            {key === "admissions" && pendingAdmissions > 0 ? (
-              <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">
-                {pendingAdmissions}
-              </span>
-            ) : null}
-          </CmsTab>
-        ))}
-      </CmsTabs>
+      <CmsIconTabs
+        ariaLabel="Students sections"
+        value={tab}
+        onChange={setTab}
+        columnsClass="grid-cols-2 sm:grid-cols-3 md:grid-cols-3 xl:grid-cols-5"
+        items={tabItems}
+      />
 
       <CmsScrollBody>
       {tab === "directory" ? (
@@ -851,6 +945,28 @@ export function StudentsPage() {
           token={accessToken}
           tenantType={user?.tenant?.type}
         />
+      ) : null}
+
+      {tab === "wrongentries" && setup ? (
+        <WrongEntriesDeletePanel
+          setup={setup}
+          token={accessToken}
+          onDeleted={async () => {
+            await refreshDirectory();
+          }}
+        />
+      ) : null}
+
+      {tab === "photos" && setup ? (
+        <StudentImageUploadPanel setup={setup} token={accessToken} />
+      ) : null}
+
+      {tab === "appdownload" && setup ? (
+        <AppDownloadStatusPanel setup={setup} token={accessToken} />
+      ) : null}
+
+      {tab === "documents" && setup ? (
+        <StudentsDocumentsPanel setup={setup} token={accessToken} />
       ) : null}
 
       {tab === "masters" && setup ? (

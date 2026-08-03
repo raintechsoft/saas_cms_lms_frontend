@@ -16,8 +16,8 @@ import {
   WorkspacePremiumOutlined,
 } from "@mui/icons-material";
 import { apiRequest } from "../../../lib/api";
-import type { AcademicReportResult, AcademicSetup, ClassSection, ReportCatalogItem } from "./types";
-import { downloadCsv } from "./utils";
+import type { AcademicReportResult, AcademicSetup, ClassSection, ReportCatalogItem, Weekday } from "./types";
+import { WEEKDAYS, WEEKDAY_LABELS, downloadCsv } from "./utils";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:4000/api/v1";
 
@@ -27,6 +27,8 @@ const REPORT_META: Record<string, { category: string; icon: React.ReactNode; cat
   marks: { category: "Examination", icon: <MenuBookOutlined />, categoryClass: "bg-blue-50 text-blue-700" },
   toppers: { category: "Performance", icon: <EmojiEventsOutlined />, categoryClass: "bg-amber-50 text-amber-700" },
   timetable: { category: "Timetable", icon: <AssessmentOutlined />, categoryClass: "bg-violet-50 text-violet-700" },
+  class_wise_subjects: { category: "Subjects", icon: <MenuBookOutlined />, categoryClass: "bg-indigo-50 text-indigo-700" },
+  free_periods: { category: "Timetable", icon: <CalendarMonthOutlined />, categoryClass: "bg-emerald-50 text-emerald-700" },
   fees: { category: "Finance", icon: <AccountBalanceWalletOutlined />, categoryClass: "bg-teal-50 text-teal-700" },
   scholars: { category: "Scholarship", icon: <WorkspacePremiumOutlined />, categoryClass: "bg-rose-50 text-rose-700" },
   promotions: { category: "Academics", icon: <QueryStatsOutlined />, categoryClass: "bg-blue-50 text-blue-700" },
@@ -40,6 +42,8 @@ const REPORT_LABELS: Record<string, string> = {
   marks: "Subject Wise Marks Report",
   toppers: "Topper Report",
   timetable: "Timetable Report",
+  class_wise_subjects: "Class wise Subject Report",
+  free_periods: "Free Class Period Report",
   fees: "Due Fees Report",
   scholars: "Scholarship Report",
   promotions: "Active Enrollments Report",
@@ -70,6 +74,9 @@ export function AcademicReportsPanel({
   const [examId, setExamId] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const [weekday, setWeekday] = useState<Weekday>("MONDAY");
+  const [startTime, setStartTime] = useState("08:00");
+  const [endTime, setEndTime] = useState("08:45");
   const [result, setResult] = useState<AcademicReportResult | null>(null);
   const [running, setRunning] = useState(false);
   const [generatedAt, setGeneratedAt] = useState<Record<string, string>>({});
@@ -123,6 +130,7 @@ export function AcademicReportsPanel({
 
   const needsExam = reportKey === "marks" || reportKey === "toppers";
   const needsDateRange = reportKey === "attendance";
+  const needsFreePeriodFilters = reportKey === "free_periods";
   const classSections = useMemo(
     () => sessionClassSections.filter((item) => !classId || item.academicClass.id === classId),
     [sessionClassSections, classId],
@@ -152,6 +160,11 @@ export function AcademicReportsPanel({
     if ((key === "marks" || key === "toppers") && examId) params.set("examId", examId);
     if (key === "attendance" && from) params.set("from", from);
     if (key === "attendance" && to) params.set("to", to);
+    if (key === "free_periods") {
+      params.set("weekday", weekday);
+      if (startTime) params.set("startTime", startTime);
+      if (endTime) params.set("endTime", endTime);
+    }
     return params;
   }
 
@@ -309,7 +322,7 @@ export function AcademicReportsPanel({
           </button>
         </div>
 
-        {needsExam || needsDateRange ? (
+        {needsExam || needsDateRange || needsFreePeriodFilters ? (
           <div className="mt-3 grid gap-3 border-t border-slate-100 pt-3 sm:grid-cols-3">
             {needsExam ? (
               <label>
@@ -333,6 +346,42 @@ export function AcademicReportsPanel({
                 <label>
                   <span className="nx-label">To</span>
                   <input className="nx-input" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+                </label>
+              </>
+            ) : null}
+            {needsFreePeriodFilters ? (
+              <>
+                <label>
+                  <span className="nx-label">Weekday</span>
+                  <select
+                    className="nx-input"
+                    value={weekday}
+                    onChange={(e) => setWeekday(e.target.value as Weekday)}
+                  >
+                    {WEEKDAYS.map((day) => (
+                      <option key={day} value={day}>
+                        {WEEKDAY_LABELS[day]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span className="nx-label">Start Time</span>
+                  <input
+                    className="nx-input"
+                    type="time"
+                    value={startTime}
+                    onChange={(e) => setStartTime(e.target.value)}
+                  />
+                </label>
+                <label>
+                  <span className="nx-label">End Time</span>
+                  <input
+                    className="nx-input"
+                    type="time"
+                    value={endTime}
+                    onChange={(e) => setEndTime(e.target.value)}
+                  />
                 </label>
               </>
             ) : null}

@@ -1,14 +1,25 @@
 import { useEffect, useMemo, useState } from "react";
-import { AddOutlined, UploadOutlined } from "@mui/icons-material";
+import {
+  AddOutlined,
+  ArticleOutlined,
+  AssessmentOutlined,
+  BadgeOutlined,
+  CalendarMonthOutlined,
+  CategoryOutlined,
+  EditNoteOutlined,
+  EmojiEventsOutlined,
+  GradingOutlined,
+  TuneOutlined,
+  UploadOutlined,
+} from "@mui/icons-material";
 import { useAuth } from "../../auth/AuthContext";
 import {
   CmsFooter,
   CmsPage,
   CmsPageHeader,
   CmsScrollBody,
-  CmsTab,
-  CmsTabs,
 } from "../../components/cms/CmsLayout";
+import { CmsIconTabs, type CmsIconTabItem } from "../../components/cms/CmsIconTabs";
 import { apiRequest } from "../../lib/api";
 import { notifyError } from "../../lib/notify";
 import { AspectsMarkFieldsPanel } from "./exams/AspectsMarkFieldsPanel";
@@ -22,16 +33,22 @@ import { MarksheetPanel } from "./exams/MarksheetPanel";
 import { SchedulePanel } from "./exams/SchedulePanel";
 import type { ExamsTab, Setup } from "./exams/types";
 
-const TABS: Array<[ExamsTab, string]> = [
-  ["groups", "Exam Groups"],
-  ["schedule", "Exam Schedule"],
-  ["marks", "Marks Entry"],
-  ["grades", "Marks Grade"],
-  ["results", "Exam Result"],
-  ["admit-card", "Admit Card"],
-  ["marksheet", "Marksheet"],
-  ["aspects", "Aspects & Mark Fields"],
-  ["reports", "Reports"],
+const TABS: Array<CmsIconTabItem<ExamsTab>> = [
+  { key: "groups", label: "Exam Groups", icon: CategoryOutlined, tone: "indigo" },
+  { key: "schedule", label: "Exam Schedule", icon: CalendarMonthOutlined, tone: "amber" },
+  { key: "marks", label: "Marks Entry", icon: EditNoteOutlined, tone: "blue" },
+  { key: "grades", label: "Marks Grade", icon: GradingOutlined, tone: "violet" },
+  { key: "results", label: "Exam Result", icon: EmojiEventsOutlined, tone: "emerald" },
+  { key: "admit-card", label: "Admit Card", icon: BadgeOutlined, tone: "sky" },
+  { key: "marksheet", label: "Marksheet", icon: ArticleOutlined, tone: "cyan" },
+  {
+    key: "aspects",
+    label: "Aspects & Mark Fields",
+    shortLabel: "Aspects",
+    icon: TuneOutlined,
+    tone: "fuchsia",
+  },
+  { key: "reports", label: "Reports", icon: AssessmentOutlined, tone: "purple" },
 ];
 
 export function ExamsPage() {
@@ -126,13 +143,13 @@ export function ExamsPage() {
         actions={headerActions}
       />
 
-      <CmsTabs>
-        {TABS.map(([key, label]) => (
-          <CmsTab key={key} active={tab === key} onClick={() => setTab(key)}>
-            {label}
-          </CmsTab>
-        ))}
-      </CmsTabs>
+      <CmsIconTabs
+        ariaLabel="Examination sections"
+        value={tab}
+        onChange={setTab}
+        columnsClass="grid-cols-2 sm:grid-cols-3 md:grid-cols-3 xl:grid-cols-5"
+        items={TABS}
+      />
 
       <CmsScrollBody>
         {!setup ? (

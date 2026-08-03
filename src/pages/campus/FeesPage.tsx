@@ -1,12 +1,22 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  AccountBalanceWalletOutlined,
   AddOutlined,
+  DescriptionOutlined,
   DownloadOutlined,
+  NotificationsActiveOutlined,
+  PaymentsOutlined,
+  PercentOutlined,
   ReceiptLongOutlined,
+  SearchOutlined,
+  SettingsOutlined,
+  SwapHorizOutlined,
+  TuneOutlined,
 } from "@mui/icons-material";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
-import { CmsFooter, CmsPage, CmsPageHeader, CmsScrollBody, CmsTab, CmsTabs } from "../../components/cms/CmsLayout";
+import { CmsFooter, CmsPage, CmsPageHeader, CmsScrollBody } from "../../components/cms/CmsLayout";
+import { CmsIconTabs, type CmsIconTabItem } from "../../components/cms/CmsIconTabs";
 import { apiRequest } from "../../lib/api";
 import { notifyError, notifySuccess } from "../../lib/notify";
 import { CarryPanel } from "./fees/CarryPanel";
@@ -22,16 +32,17 @@ import { SetupPanel } from "./fees/SetupPanel";
 import type { FeeSetup, FeesTab, Payment, Session, Student, StudentFees } from "./fees/types";
 import { downloadCsv, headerForTab, studentDisplayName } from "./fees/utils";
 
-const TABS: Array<[FeesTab, string]> = [
-  ["dues", "Due Fees"],
-  ["search", "Payment Search"],
-  ["carry", "Carry Forward"],
-  ["reminders", "Auto Reminders"],
-  ["receipts", "Receipts"],
-  ["custom", "Custom Fees"],
-  ["invoices", "Fee Invoices"],
-  ["discounts", "Discounts"],
-  ["structure", "Structure Setup"],
+const TABS: Array<CmsIconTabItem<FeesTab>> = [
+  { key: "collect", label: "Collect Fees", icon: PaymentsOutlined, tone: "emerald" },
+  { key: "dues", label: "Search Due Fees", icon: AccountBalanceWalletOutlined, tone: "rose" },
+  { key: "search", label: "Search Payment", icon: SearchOutlined, tone: "sky" },
+  { key: "carry", label: "Carry Forward", icon: SwapHorizOutlined, tone: "amber" },
+  { key: "reminders", label: "Auto Reminders", icon: NotificationsActiveOutlined, tone: "orange" },
+  { key: "receipts", label: "Receipts", icon: ReceiptLongOutlined, tone: "indigo" },
+  { key: "custom", label: "Custom Fees", icon: TuneOutlined, tone: "violet" },
+  { key: "invoices", label: "Fee Invoices", icon: DescriptionOutlined, tone: "blue" },
+  { key: "discounts", label: "Discounts", icon: PercentOutlined, tone: "fuchsia" },
+  { key: "structure", label: "Structure Setup", icon: SettingsOutlined, tone: "slate" },
 ];
 
 export function FeesPage() {
@@ -40,7 +51,7 @@ export function FeesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [setup, setSetup] = useState<FeeSetup | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
-  const [tab, setTab] = useState<FeesTab>("dues");
+  const [tab, setTab] = useState<FeesTab>("collect");
   const [studentId, setStudentId] = useState("");
   const [studentFees, setStudentFees] = useState<StudentFees | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -124,7 +135,7 @@ export function FeesPage() {
       if (action === "collect") {
         await openCollect(fromQuery);
       } else {
-        setTab("dues");
+        setTab("collect");
         await loadStudent(fromQuery);
       }
       const next = new URLSearchParams(searchParams);
@@ -142,14 +153,13 @@ export function FeesPage() {
   useEffect(() => {
     if (tab !== "receipts") {
       setShowCollect(false);
-      setPreselectAssignmentIds([]);
     }
   }, [tab]);
 
   async function openCollect(forStudentId: string, assignmentIds: string[] = []) {
     setPreselectAssignmentIds(assignmentIds);
-    setTab("receipts");
-    setShowCollect(true);
+    setTab("collect");
+    setShowCollect(false);
     await loadStudent(forStudentId);
   }
 
@@ -347,15 +357,36 @@ export function FeesPage() {
         actions={headerActions}
       />
 
-      <CmsTabs>
-        {TABS.map(([key, label]) => (
-          <CmsTab key={key} active={tab === key} onClick={() => setTab(key)}>
-            {label}
-          </CmsTab>
-        ))}
-      </CmsTabs>
+      <CmsIconTabs
+        ariaLabel="Fees sections"
+        value={tab}
+        onChange={setTab}
+        columnsClass="grid-cols-2 sm:grid-cols-3 md:grid-cols-5 xl:grid-cols-5"
+        items={TABS}
+      />
 
       <CmsScrollBody>
+      {tab === "collect" && setup ? (
+        <CollectPanel
+          setup={setup}
+          students={students}
+          studentId={studentId}
+          studentFees={studentFees}
+          defaultReceiptBookId={defaultReceiptBookId}
+          preselectAssignmentIds={preselectAssignmentIds}
+          token={accessToken}
+          onStudentChange={loadStudent}
+          onSaved={async (payment) => {
+            if (studentId) await loadStudent(studentId);
+            await load();
+            setPreselectAssignmentIds([]);
+            notifySuccess("Opening fee receipt…");
+            navigate(`/print/fees/${payment.id}`);
+          }}
+          onError={notifyError}
+        />
+      ) : null}
+
       {tab === "dues" && setup ? (
         <DuesPanel
           setup={setup}
@@ -363,7 +394,9 @@ export function FeesPage() {
           token={accessToken}
           onError={notifyError}
           onExportReady={onExportReady}
-          onCollect={(id) => void openCollect(id)}
+          onCollect={(id, assignmentId) =>
+            void openCollect(id, assignmentId ? [assignmentId] : [])
+          }
         />
       ) : null}
 
@@ -409,6 +442,7 @@ export function FeesPage() {
               defaultReceiptBookId={defaultReceiptBookId}
               preselectAssignmentIds={preselectAssignmentIds}
               token={accessToken}
+              embedded
               onStudentChange={loadStudent}
               onSaved={async (payment) => {
                 if (studentId) await loadStudent(studentId);

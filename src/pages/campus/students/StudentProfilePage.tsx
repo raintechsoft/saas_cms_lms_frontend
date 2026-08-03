@@ -4,17 +4,26 @@ import {
   ArrowBackOutlined,
   CalendarMonthOutlined,
   CloudUploadOutlined,
+  DescriptionOutlined,
   EditOutlined,
+  EmojiEventsOutlined,
+  FamilyRestroomOutlined,
   FolderOutlined,
   InsertDriveFileOutlined,
+  LoginOutlined,
+  MenuBookOutlined,
   PaymentsOutlined,
+  PersonOutlined,
   SearchOutlined,
   ThumbDownAltOutlined,
   ThumbUpAltOutlined,
+  TimelineOutlined,
+  TodayOutlined,
   ViewListOutlined,
 } from "@mui/icons-material";
 import { useAuth } from "../../../auth/AuthContext";
-import { CmsFooter, CmsPage, CmsScrollBody, CmsTabs, CmsTab } from "../../../components/cms/CmsLayout";
+import { CmsFooter, CmsPage, CmsScrollBody } from "../../../components/cms/CmsLayout";
+import { CmsIconTabs, type CmsIconTabItem } from "../../../components/cms/CmsIconTabs";
 import { InitialsAvatar } from "../../../components/InitialsAvatar";
 import { apiRequest } from "../../../lib/api";
 import { notifyError, notifySuccess } from "../../../lib/notify";
@@ -46,16 +55,28 @@ type DetailTab =
   | "timeline"
   | "login";
 
-const TABS: Array<{ key: DetailTab; label: string }> = [
-  { key: "profile", label: "Profile Details" },
-  { key: "parents", label: "Parents & Guardians" },
-  { key: "fees", label: "Fees & Payments" },
-  { key: "exams", label: "Exam Details" },
-  { key: "subjects", label: "Subjects" },
-  { key: "documents", label: "Documents" },
-  { key: "attendance", label: "Attendance History" },
-  { key: "timeline", label: "Timeline" },
-  { key: "login", label: "Login Details" },
+const TABS: Array<CmsIconTabItem<DetailTab>> = [
+  { key: "profile", label: "Profile Details", shortLabel: "Profile", icon: PersonOutlined, tone: "indigo" },
+  {
+    key: "parents",
+    label: "Parents & Guardians",
+    shortLabel: "Parents",
+    icon: FamilyRestroomOutlined,
+    tone: "rose",
+  },
+  { key: "fees", label: "Fees & Payments", shortLabel: "Fees", icon: PaymentsOutlined, tone: "emerald" },
+  { key: "exams", label: "Exam Details", shortLabel: "Exams", icon: EmojiEventsOutlined, tone: "amber" },
+  { key: "subjects", label: "Subjects", icon: MenuBookOutlined, tone: "blue" },
+  { key: "documents", label: "Documents", icon: DescriptionOutlined, tone: "cyan" },
+  {
+    key: "attendance",
+    label: "Attendance History",
+    shortLabel: "Attendance",
+    icon: TodayOutlined,
+    tone: "teal",
+  },
+  { key: "timeline", label: "Timeline", icon: TimelineOutlined, tone: "violet" },
+  { key: "login", label: "Login Details", shortLabel: "Login", icon: LoginOutlined, tone: "slate" },
 ];
 
 function buildProfileForm(detail: StudentDetail) {
@@ -255,20 +276,16 @@ export function StudentProfilePage() {
             onMessage={notifySuccess}
           />
 
-          <CmsTabs>
-            {TABS.map((item) => (
-              <CmsTab
-                key={item.key}
-                active={tab === item.key}
-                onClick={() => {
-                  setTab(item.key);
-                  if (item.key !== "profile") setEditing(false);
-                }}
-              >
-                {item.label}
-              </CmsTab>
-            ))}
-          </CmsTabs>
+          <CmsIconTabs
+            ariaLabel="Student profile sections"
+            value={tab}
+            onChange={(key) => {
+              setTab(key);
+              if (key !== "profile") setEditing(false);
+            }}
+            columnsClass="grid-cols-2 sm:grid-cols-3 md:grid-cols-3 xl:grid-cols-5"
+            items={TABS}
+          />
 
           {tab === "profile" && (
             <ProfileDetailsTab
@@ -295,7 +312,9 @@ export function StudentProfilePage() {
           {tab === "fees" && <FeesTab detail={detail} />}
           {tab === "exams" && <ExamsTab studentId={detail.id} token={accessToken} />}
           {tab === "subjects" && <SubjectsTab studentId={detail.id} token={accessToken} />}
-          {tab === "documents" && <DocumentsTab detail={detail} />}
+          {tab === "documents" && (
+            <DocumentsTab detail={detail} token={accessToken} onUpdated={load} />
+          )}
           {tab === "attendance" && <AttendanceTab studentId={detail.id} token={accessToken} />}
           {tab === "timeline" && <TimelineTab studentId={detail.id} token={accessToken} />}
           {tab === "login" && <LoginDetailsTab studentId={detail.id} token={accessToken} />}
@@ -1026,9 +1045,33 @@ function formatBytes(bytes: number | null) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function DocumentsTab({ detail }: { detail: StudentDetail }) {
+function DocumentsTab({
+  detail,
+  token,
+  onUpdated,
+}: {
+  detail: StudentDetail;
+  token: string;
+  onUpdated: () => void;
+}) {
   const [query, setQuery] = useState("");
-  const folders = useMemo(() => {
+  const [folders, setFolders] = useState<Array<{ id: string; name: string }>>([]);
+  const [folderId, setFolderId] = useState("");
+  const [docName, setDocName] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
+  const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:4000/api/v1";
+
+  useEffect(() => {
+    apiRequest<Array<{ id: string; name: string }>>("/students/document-folders", token)
+      .then((data) => {
+        setFolders((data ?? []).map((f) => ({ id: f.id, name: f.name })));
+        if (data?.[0]) setFolderId(data[0].id);
+      })
+      .catch(() => setFolders([]));
+  }, [token]);
+
+  const folderGroups = useMemo(() => {
     const map = new Map<string, { name: string; files: StudentDocument[] }>();
     for (const doc of detail.documents) {
       const key = doc.folder.id;
@@ -1044,6 +1087,75 @@ function DocumentsTab({ detail }: { detail: StudentDetail }) {
   );
   const totalBytes = detail.documents.reduce((sum, doc) => sum + (doc.sizeBytes ?? 0), 0);
 
+  async function upload(event: FormEvent) {
+    event.preventDefault();
+    if (!folderId || !file) {
+      notifyError("Select a folder and file");
+      return;
+    }
+    setBusy(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      form.append("studentId", detail.id);
+      form.append("folderId", folderId);
+      if (docName.trim()) form.append("name", docName.trim());
+      const response = await fetch(`${API_URL}/students/documents`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: form,
+      });
+      if (!response.ok) {
+        const text = await response.text();
+        let message = `Upload failed (${response.status})`;
+        try {
+          message =
+            (JSON.parse(text) as { error?: { message?: string } }).error?.message ?? message;
+        } catch {
+          /* ignore */
+        }
+        throw new Error(message);
+      }
+      notifySuccess("Document uploaded");
+      setFile(null);
+      setDocName("");
+      onUpdated();
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Upload failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeDoc(doc: StudentDocument) {
+    const Swal = (await import("sweetalert2")).default;
+    const result = await Swal.fire({
+      title: "Delete document?",
+      text: `Delete "${doc.name}"?`,
+      input: "text",
+      inputLabel: "Delete reason",
+      inputValidator: (value) =>
+        !value || value.trim().length < 3 ? "Reason must be at least 3 characters" : undefined,
+      showCancelButton: true,
+      confirmButtonText: "Delete",
+      confirmButtonColor: "#dc2626",
+    });
+    if (!result.isConfirmed || !result.value) return;
+    setBusy(true);
+    try {
+      await apiRequest(`/students/documents/${doc.id}/delete`, token, {
+        method: "POST",
+        body: JSON.stringify({ reason: String(result.value).trim() }),
+      });
+      notifySuccess("Document deleted");
+      onUpdated();
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Delete failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="mt-5 grid gap-5 lg:grid-cols-[320px_1fr]">
       <div className="space-y-4">
@@ -1051,25 +1163,48 @@ function DocumentsTab({ detail }: { detail: StudentDetail }) {
           <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">Storage Overview</p>
           <p className="mt-2 text-[22px] font-bold text-slate-900">{detail.documents.length} Files</p>
           <p className="mt-1 text-[12.5px] text-slate-500">{formatBytes(totalBytes)} used</p>
-          <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
-            <div
-              className="h-full rounded-full bg-indigo-500"
-              style={{ width: `${Math.min(100, (totalBytes / (100 * 1024 * 1024)) * 100 || 4)}%` }}
-            />
-          </div>
         </div>
 
-        <div className="rounded-2xl border-2 border-dashed border-indigo-200 bg-violet-50/60 p-5 text-center">
-          <CloudUploadOutlined sx={{ fontSize: 28 }} className="text-indigo-500" />
-          <p className="mt-2 text-[13px] font-semibold text-slate-800">Quick Upload</p>
-          <p className="mt-1 text-[12px] text-slate-500">Drop files here or manage uploads in ERP Documents.</p>
-          <Link to="/erp-settings" className="nx-btn-secondary mt-3 inline-flex">
-            Open document manager
-          </Link>
-        </div>
+        <form className="nx-card space-y-3 p-5" onSubmit={upload}>
+          <p className="text-[13px] font-semibold text-slate-800">Upload document</p>
+          <select
+            className="nx-input"
+            required
+            value={folderId}
+            onChange={(e) => setFolderId(e.target.value)}
+          >
+            <option value="">Folder</option>
+            {folders.map((folder) => (
+              <option key={folder.id} value={folder.id}>
+                {folder.name}
+              </option>
+            ))}
+          </select>
+          <input
+            className="nx-input"
+            placeholder="Document name (optional)"
+            value={docName}
+            onChange={(e) => setDocName(e.target.value)}
+          />
+          <input
+            className="nx-input"
+            type="file"
+            accept=".pdf,.jpg,.jpeg,.png,.webp,.gif,.doc,.docx,.xls,.xlsx"
+            required
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+          />
+          <button className="nx-btn-primary w-full" disabled={busy || !folders.length}>
+            <CloudUploadOutlined sx={{ fontSize: 16 }} /> Upload
+          </button>
+          {!folders.length ? (
+            <p className="text-[12px] text-amber-700">
+              Create folders in ERP Settings → Documents first.
+            </p>
+          ) : null}
+        </form>
 
         <div className="nx-card divide-y divide-slate-100 overflow-hidden">
-          {folders.map((folder) => (
+          {folderGroups.map((folder) => (
             <div className="flex items-center gap-3 px-4 py-3" key={folder.name}>
               <div className="grid size-9 place-items-center rounded-lg bg-indigo-50 text-indigo-600">
                 <FolderOutlined sx={{ fontSize: 18 }} />
@@ -1080,7 +1215,7 @@ function DocumentsTab({ detail }: { detail: StudentDetail }) {
               </div>
             </div>
           ))}
-          {!folders.length && (
+          {!folderGroups.length && (
             <p className="px-4 py-8 text-center text-[13px] text-slate-400">No folders yet.</p>
           )}
         </div>
@@ -1100,27 +1235,36 @@ function DocumentsTab({ detail }: { detail: StudentDetail }) {
               onChange={(e) => setQuery(e.target.value)}
             />
           </div>
-          <span className="text-[12px] text-slate-500">Sort by: Newest First</span>
+          <Link to="/students" state={{ tab: "documents" }} className="nx-btn-secondary text-xs">
+            Open Students Documents
+          </Link>
         </div>
         <div className="divide-y divide-slate-100">
           {filtered.map((doc) => (
-            <a
-              key={doc.id}
-              href={doc.fileUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center gap-3 px-5 py-3.5 transition hover:bg-indigo-50/40"
-            >
-              <div className="grid size-10 place-items-center rounded-xl bg-slate-50 text-indigo-500">
-                <InsertDriveFileOutlined sx={{ fontSize: 20 }} />
+            <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5" key={doc.id}>
+              <div className="flex min-w-0 items-center gap-3">
+                <InsertDriveFileOutlined className="text-slate-400" sx={{ fontSize: 20 }} />
+                <div className="min-w-0">
+                  <p className="truncate text-[13px] font-semibold text-slate-800">{doc.name}</p>
+                  <p className="text-[11px] text-slate-500">
+                    {doc.folder.name} · Added {formatLongDate(doc.createdAt)} · {formatBytes(doc.sizeBytes)}
+                  </p>
+                </div>
               </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[13px] font-semibold text-slate-800">{doc.name}</p>
-                <p className="text-[12px] text-slate-500">
-                  {doc.folder.name} · Added {formatLongDate(doc.createdAt)} · {formatBytes(doc.sizeBytes)}
-                </p>
+              <div className="flex gap-2">
+                <a className="nx-btn-secondary !px-2 !py-1 text-xs" href={doc.fileUrl} target="_blank" rel="noreferrer">
+                  Open
+                </a>
+                <button
+                  type="button"
+                  className="nx-btn-secondary !px-2 !py-1 text-xs text-rose-700"
+                  disabled={busy}
+                  onClick={() => void removeDoc(doc)}
+                >
+                  Delete
+                </button>
               </div>
-            </a>
+            </div>
           ))}
           {!filtered.length && (
             <p className="px-5 py-12 text-center text-sm text-slate-500">No documents uploaded.</p>

@@ -1,14 +1,22 @@
 import { useEffect, useState } from "react";
-import { AddOutlined } from "@mui/icons-material";
+import {
+  AddOutlined,
+  AssessmentOutlined,
+  EventBusyOutlined,
+  GroupsOutlined,
+  PaymentsOutlined,
+  SettingsOutlined,
+  StarOutline,
+  TodayOutlined,
+} from "@mui/icons-material";
 import { useAuth } from "../../auth/AuthContext";
 import {
   CmsFooter,
   CmsPage,
   CmsPageHeader,
   CmsScrollBody,
-  CmsTab,
-  CmsTabs,
 } from "../../components/cms/CmsLayout";
+import { CmsIconTabs, type CmsIconTabItem } from "../../components/cms/CmsIconTabs";
 import { apiRequest } from "../../lib/api";
 import { notifyError } from "../../lib/notify";
 import { AddStaffPanel } from "./hr/AddStaffPanel";
@@ -21,14 +29,14 @@ import { StaffListPanel } from "./hr/StaffListPanel";
 import { TeacherRatingsPanel } from "./hr/TeacherRatingsPanel";
 import type { HrSetup, HrTab } from "./hr/types";
 
-const TABS: Array<[HrTab, string]> = [
-  ["staff", "Staff List"],
-  ["setup", "Setup"],
-  ["attendance", "Staff Attendance"],
-  ["leave", "Leave Management"],
-  ["payroll", "Payroll"],
-  ["ratings", "Teacher Ratings"],
-  ["reports", "Reports"],
+const TABS: Array<CmsIconTabItem<HrTab>> = [
+  { key: "staff", label: "Staff List", icon: GroupsOutlined, tone: "indigo" },
+  { key: "setup", label: "Setup", icon: SettingsOutlined, tone: "slate" },
+  { key: "attendance", label: "Staff Attendance", icon: TodayOutlined, tone: "amber" },
+  { key: "leave", label: "Leave Management", icon: EventBusyOutlined, tone: "rose" },
+  { key: "payroll", label: "Payroll", icon: PaymentsOutlined, tone: "emerald" },
+  { key: "ratings", label: "Teacher Ratings", icon: StarOutline, tone: "amber" },
+  { key: "reports", label: "Reports", icon: AssessmentOutlined, tone: "purple" },
 ];
 
 const currentMonth = new Date().toISOString().slice(0, 7);
@@ -100,13 +108,13 @@ export function HrPage() {
         actions={headerActions}
       />
 
-      <CmsTabs>
-        {TABS.map(([key, label]) => (
-          <CmsTab key={key} active={tab === key} onClick={() => setTab(key)}>
-            {label}
-          </CmsTab>
-        ))}
-      </CmsTabs>
+      <CmsIconTabs
+        ariaLabel="HR sections"
+        value={tab}
+        onChange={setTab}
+        columnsClass="grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-7"
+        items={TABS}
+      />
 
       <CmsScrollBody>
         {!setup ? (

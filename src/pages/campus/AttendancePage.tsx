@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
   AccessTimeOutlined,
   AddOutlined,
+  AssessmentOutlined,
+  AttachFileOutlined,
   BadgeOutlined,
   CalendarMonthOutlined,
   CheckCircleOutline,
@@ -12,25 +14,43 @@ import {
   CloudUploadOutlined,
   DonutLargeOutlined,
   EventBusyOutlined,
+  FactCheckOutlined,
   FileDownloadOutlined,
   FormatListBulletedOutlined,
   GroupsOutlined,
   InfoOutlined,
   PersonOffOutlined,
   PersonOutlined,
+  QrCodeScannerOutlined,
   SaveOutlined,
   SearchOutlined,
   SendOutlined,
+  StarsOutlined,
   VisibilityOutlined,
 } from "@mui/icons-material";
 import { useAuth } from "../../auth/AuthContext";
-import { CmsFooter, CmsPage, CmsPageHeader, CmsScrollBody, CmsTab, CmsTabs } from "../../components/cms/CmsLayout";
+import { CmsFooter, CmsPage, CmsPageHeader, CmsScrollBody } from "../../components/cms/CmsLayout";
+import { CmsIconTabs, type CmsIconTabItem } from "../../components/cms/CmsIconTabs";
 import { InitialsAvatar } from "../../components/InitialsAvatar";
 import { apiRequest, assetUrl } from "../../lib/api";
 import { notifyError, notifySuccess } from "../../lib/notify";
 
 type AttendanceStatus = "PRESENT" | "LATE" | "ABSENT" | "HALF_DAY" | "HOLIDAY";
 type PageTab = "mark" | "inout" | "leave" | "points" | "reports";
+
+const TABS: Array<CmsIconTabItem<PageTab>> = [
+  { key: "mark", label: "Mark Attendance", icon: FactCheckOutlined, tone: "emerald" },
+  {
+    key: "inout",
+    label: "In/Out Time Report",
+    shortLabel: "In/Out Report",
+    icon: AccessTimeOutlined,
+    tone: "amber",
+  },
+  { key: "leave", label: "Approve Leave", icon: EventBusyOutlined, tone: "rose" },
+  { key: "points", label: "Attendance Points", icon: StarsOutlined, tone: "violet" },
+  { key: "reports", label: "Reports", icon: AssessmentOutlined, tone: "purple" },
+];
 
 interface Named {
   id: string;
@@ -68,6 +88,7 @@ interface Leave {
   status: string;
   createdAt?: string;
   reviewNote?: string | null;
+  attachmentUrl?: string | null;
   studentEnrollment: {
     id?: string;
     rollNumber?: string | null;
@@ -75,23 +96,48 @@ interface Leave {
     classSection: ClassSection;
   };
 }
+interface AttendancePeriod {
+  key: string;
+  label: string;
+  startTime: string;
+  endTime: string;
+}
 interface Setup {
   attendanceType: "DAY_WISE" | "PERIOD_WISE" | "BIOMETRIC";
   currentSession: Named | null;
   classSections: ClassSection[];
   roster: RosterItem[];
   pendingLeaves: Leave[];
+  alreadySubmitted?: boolean;
+  isHolidayDate?: boolean;
+  holidayTitle?: string | null;
+  periods?: AttendancePeriod[];
+  classTimes?: {
+    inTime: string | null;
+    halfDayTime?: string | null;
+    outTime: string | null;
+  } | null;
 }
-interface Report {
-  summaries: Array<{
-    student: Student;
-    present: number;
-    late: number;
-    absent: number;
-    halfDay: number;
-    total: number;
-    percentage: number;
-  }>;
+type PackReportKey =
+  | "daily_attendance"
+  | "custom_attendance"
+  | "remaining_class"
+  | "student_summary"
+  | "staff_summary"
+  | "inout_time"
+  | "period_wise"
+  | "class_wise";
+interface PackReportCatalogItem {
+  key: PackReportKey;
+  label: string;
+  description: string;
+}
+interface PackReportResult {
+  reportKey: PackReportKey;
+  title: string;
+  summary?: Record<string, number>;
+  rows: Array<Record<string, unknown>>;
+  columns?: Array<{ key: string; label: string }>;
 }
 
 const today = new Date().toISOString().slice(0, 10);
@@ -128,10 +174,17 @@ export function AttendancePage() {
   const [setup, setSetup] = useState<Setup | null>(null);
   const [statuses, setStatuses] = useState<Record<string, AttendanceStatus>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
+  const [inTimes, setInTimes] = useState<Record<string, string>>({});
+  const [outTimes, setOutTimes] = useState<Record<string, string>>({});
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [markHoliday, setMarkHoliday] = useState(false);
   const [saving, setSaving] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [scanCode, setScanCode] = useState("");
+  const [scanMode, setScanMode] = useState<"IN" | "OUT">("IN");
+  const [scanDevice, setScanDevice] = useState<"BARCODE" | "RFID" | "BIOMETRIC">("BARCODE");
+  const [scanning, setScanning] = useState(false);
+  const scanInputRef = useRef<HTMLInputElement>(null);
 
   const classes = useMemo(() => {
     const map = new Map<string, string>();
@@ -154,6 +207,33 @@ export function AttendancePage() {
       if (sectionClassId) params.set("classSectionId", sectionClassId);
       const next = await apiRequest<Setup>(`/attendance/setup?${params}`, accessToken);
       setSetup(next);
+      if (next.attendanceType === "PERIOD_WISE") {
+        const periods = next.periods ?? [];
+        if (periods.length && !periods.some((item) => item.key === period)) {
+          const corrected = periods[0].key;
+          setPeriodKey(corrected);
+          if (sectionClassId && corrected !== period) {
+            const retryParams = new URLSearchParams({
+              date: selectedDate,
+              periodKey: corrected,
+              classSectionId: sectionClassId,
+            });
+            const retried = await apiRequest<Setup>(`/attendance/setup?${retryParams}`, accessToken);
+            setSetup(retried);
+            applyRosterState(retried);
+            return;
+          }
+        } else if (!periods.length && !period) {
+          setPeriodKey("PERIOD-1");
+        }
+      }
+      applyRosterState(next);
+    } catch (cause) {
+      notifyError(cause instanceof Error ? cause.message : "Unable to load attendance");
+    }
+  }
+
+  function applyRosterState(next: Setup) {
       setStatuses(
         Object.fromEntries(
           next.roster.map((item) => [
@@ -165,14 +245,27 @@ export function AttendancePage() {
       setNotes(
         Object.fromEntries(next.roster.map((item) => [item.id, item.attendanceRecords[0]?.note ?? ""])),
       );
+      setInTimes(
+        Object.fromEntries(
+          next.roster.map((item) => [
+            item.id,
+            (item.attendanceRecords[0]?.inTime ?? "").slice(0, 5),
+          ]),
+        ),
+      );
+      setOutTimes(
+        Object.fromEntries(
+          next.roster.map((item) => [
+            item.id,
+            (item.attendanceRecords[0]?.outTime ?? "").slice(0, 5),
+          ]),
+        ),
+      );
       setSelected(Object.fromEntries(next.roster.map((item) => [item.id, false])));
       const allHoliday =
         next.roster.length > 0 &&
         next.roster.every((item) => item.attendanceRecords[0]?.status === "HOLIDAY");
-      setMarkHoliday(allHoliday);
-    } catch (cause) {
-      notifyError(cause instanceof Error ? cause.message : "Unable to load attendance");
-    }
+      setMarkHoliday(Boolean(next.isHolidayDate) || allHoliday);
   }
 
   useEffect(() => {
@@ -241,29 +334,84 @@ export function AttendancePage() {
     }
     setSaving(true);
     try {
-      const result = await apiRequest<{ marked: number }>("/attendance/records", accessToken, {
-        method: "POST",
-        body: JSON.stringify({
-          classSectionId,
-          attendanceDate: date,
-          periodKey,
-          records: setup.roster.map((item) => ({
-            studentEnrollmentId: item.id,
-            status: markHoliday ? "HOLIDAY" : (statuses[item.id] ?? "PRESENT"),
-            note: notes[item.id]?.trim() || null,
-          })),
-        }),
-      });
+      const effectivePeriod =
+        setup.attendanceType === "PERIOD_WISE" ? periodKey || "PERIOD-1" : periodKey;
+      const result = await apiRequest<{ marked: number; periodKey: string; mode: "create" | "update" }>(
+        "/attendance/records",
+        accessToken,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            classSectionId,
+            attendanceDate: date,
+            periodKey: effectivePeriod,
+            records: setup.roster.map((item) => ({
+              studentEnrollmentId: item.id,
+              status: markHoliday ? "HOLIDAY" : (statuses[item.id] ?? "PRESENT"),
+              inTime: markHoliday ? null : inTimes[item.id]?.trim() || null,
+              outTime: markHoliday ? null : outTimes[item.id]?.trim() || null,
+              note: notes[item.id]?.trim() || null,
+            })),
+          }),
+        },
+      );
       notifySuccess(
         markHoliday
           ? `Marked ${result.marked} students as holiday`
-          : `${result.marked} attendance records saved`,
+          : result.mode === "update"
+            ? `Updated ${result.marked} attendance records`
+            : `${result.marked} attendance records saved`,
       );
-      await load(classSectionId, date, periodKey);
+      await load(classSectionId, date, effectivePeriod);
     } catch (cause) {
       notifyError(cause instanceof Error ? cause.message : "Unable to mark attendance");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function submitScan() {
+    const code = scanCode.trim();
+    if (!code) {
+      notifyError("Enter a barcode or RFID code");
+      return;
+    }
+    if (!classSectionId) {
+      notifyError("Search a class section first");
+      return;
+    }
+    setScanning(true);
+    try {
+      const result = await apiRequest<{
+        enrollmentId: string;
+        studentName: string;
+        status: AttendanceStatus;
+        inTime: string | null;
+        outTime: string | null;
+        mode: "IN" | "OUT";
+      }>("/attendance/scan", accessToken, {
+        method: "POST",
+        body: JSON.stringify({
+          code,
+          mode: scanMode,
+          deviceType: scanDevice,
+          classSectionId,
+          attendanceDate: date,
+          periodKey: setup?.attendanceType === "PERIOD_WISE" ? periodKey || "PERIOD-1" : undefined,
+        }),
+      });
+      setStatuses((prev) => ({ ...prev, [result.enrollmentId]: result.status }));
+      setInTimes((prev) => ({ ...prev, [result.enrollmentId]: (result.inTime ?? "").slice(0, 5) }));
+      setOutTimes((prev) => ({ ...prev, [result.enrollmentId]: (result.outTime ?? "").slice(0, 5) }));
+      notifySuccess(
+        `${result.studentName} marked ${result.mode === "IN" ? "in" : "out"} (${result.status.replaceAll("_", " ")})`,
+      );
+      setScanCode("");
+      requestAnimationFrame(() => scanInputRef.current?.focus());
+    } catch (cause) {
+      notifyError(cause instanceof Error ? cause.message : "Unable to scan attendance");
+    } finally {
+      setScanning(false);
     }
   }
 
@@ -279,21 +427,13 @@ export function AttendancePage() {
         }
       />
 
-      <CmsTabs>
-        {(
-          [
-            ["mark", "Mark Attendance"],
-            ["inout", "In/Out Time Report"],
-            ["leave", "Approve Leave"],
-            ["points", "Attendance Points"],
-            ["reports", "Reports"],
-          ] as const
-        ).map(([key, label]) => (
-          <CmsTab key={key} active={tab === key} onClick={() => setTab(key)}>
-            {label}
-          </CmsTab>
-        ))}
-      </CmsTabs>
+      <CmsIconTabs
+        ariaLabel="Attendance sections"
+        value={tab}
+        onChange={setTab}
+        columnsClass="grid-cols-2 sm:grid-cols-3 md:grid-cols-5"
+        items={TABS}
+      />
 
       <CmsScrollBody>
         {tab === "mark" && (
@@ -381,18 +521,44 @@ export function AttendancePage() {
               {setup?.attendanceType === "PERIOD_WISE" && (
                 <label className="mt-3 block max-w-xs">
                   <span className="nx-label">Period</span>
-                  <input
+                  <select
                     className="nx-input"
                     value={periodKey}
-                    onChange={(e) => setPeriodKey(e.target.value)}
-                    placeholder="PERIOD-1"
-                  />
+                    onChange={(e) => {
+                      const nextPeriod = e.target.value || "PERIOD-1";
+                      setPeriodKey(nextPeriod);
+                      if (searched && classSectionId) {
+                        void load(classSectionId, date, nextPeriod);
+                      }
+                    }}
+                  >
+                    {(setup.periods?.length ? setup.periods : [{ key: "PERIOD-1", label: "PERIOD-1", startTime: "", endTime: "" }]).map(
+                      (period) => (
+                        <option key={period.key} value={period.key}>
+                          {period.label}
+                        </option>
+                      ),
+                    )}
+                  </select>
                 </label>
               )}
             </div>
 
             {searched && classSectionId ? (
               <>
+                {setup?.isHolidayDate ? (
+                  <div className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-900">
+                    <EventBusyOutlined sx={{ fontSize: 18 }} />
+                    Holiday date — {setup.holidayTitle || "Sunday / holiday"}. Mark as holiday is enabled.
+                  </div>
+                ) : null}
+                {setup?.alreadySubmitted ? (
+                  <div className="flex items-center gap-3 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-[13px] text-sky-900">
+                    <InfoOutlined sx={{ fontSize: 18 }} />
+                    Attendance already submitted — you are editing.
+                  </div>
+                ) : null}
+
                 <div className="grid gap-3 sm:grid-cols-3">
                   <SummaryCard
                     label="Present"
@@ -445,14 +611,86 @@ export function AttendancePage() {
                     </div>
                   ) : null}
 
+                  <div className="border-b border-slate-100 bg-slate-50/70 px-4 py-3">
+                    <div className="mb-2 flex items-center gap-2 text-[13px] font-semibold text-slate-800">
+                      <QrCodeScannerOutlined sx={{ fontSize: 18 }} />
+                      Barcode / RFID scan
+                    </div>
+                    <div className="grid gap-2 lg:grid-cols-[1fr_auto_auto_auto] lg:items-end">
+                      <label>
+                        <span className="nx-label">Code</span>
+                        <input
+                          ref={scanInputRef}
+                          className="nx-input"
+                          value={scanCode}
+                          autoFocus
+                          disabled={markHoliday || scanning}
+                          placeholder="Scan or type admission / barcode"
+                          onChange={(e) => setScanCode(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              void submitScan();
+                            }
+                          }}
+                        />
+                      </label>
+                      <div>
+                        <span className="nx-label">Mode</span>
+                        <div className="flex overflow-hidden rounded-lg border border-slate-200">
+                          {(["IN", "OUT"] as const).map((mode) => (
+                            <button
+                              key={mode}
+                              type="button"
+                              disabled={markHoliday}
+                              className={`px-3 py-2 text-[12px] font-bold ${
+                                scanMode === mode
+                                  ? "bg-indigo-600 text-white"
+                                  : "bg-white text-slate-600 hover:bg-slate-50"
+                              }`}
+                              onClick={() => setScanMode(mode)}
+                            >
+                              {mode}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <label>
+                        <span className="nx-label">Device</span>
+                        <select
+                          className="nx-input"
+                          value={scanDevice}
+                          disabled={markHoliday}
+                          onChange={(e) =>
+                            setScanDevice(e.target.value as "BARCODE" | "RFID" | "BIOMETRIC")
+                          }
+                        >
+                          <option value="BARCODE">BARCODE</option>
+                          <option value="RFID">RFID</option>
+                          <option value="BIOMETRIC">BIOMETRIC</option>
+                        </select>
+                      </label>
+                      <button
+                        type="button"
+                        className="nx-btn-primary h-[42px]"
+                        disabled={markHoliday || scanning || !setup?.roster.length}
+                        onClick={() => void submitScan()}
+                      >
+                        {scanning ? "Scanning…" : "Scan"}
+                      </button>
+                    </div>
+                  </div>
+
                   <div className="overflow-x-auto">
-                    <table className="nx-table min-w-[860px]">
+                    <table className="nx-table min-w-[1100px]">
                       <thead>
                         <tr>
                           <th className="w-10">#</th>
                           <th>Student</th>
                           <th>Roll No</th>
                           <th>Attendance</th>
+                          <th>In Time</th>
+                          <th>Out Time</th>
                           <th>Note</th>
                         </tr>
                       </thead>
@@ -509,6 +747,28 @@ export function AttendancePage() {
                               </td>
                               <td>
                                 <input
+                                  className="nx-input min-w-[120px]"
+                                  type="time"
+                                  value={inTimes[item.id] ?? ""}
+                                  disabled={markHoliday}
+                                  onChange={(e) =>
+                                    setInTimes((prev) => ({ ...prev, [item.id]: e.target.value }))
+                                  }
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  className="nx-input min-w-[120px]"
+                                  type="time"
+                                  value={outTimes[item.id] ?? ""}
+                                  disabled={markHoliday}
+                                  onChange={(e) =>
+                                    setOutTimes((prev) => ({ ...prev, [item.id]: e.target.value }))
+                                  }
+                                />
+                              </td>
+                              <td>
+                                <input
                                   className="nx-input min-w-[180px]"
                                   placeholder="Add note (optional)"
                                   value={notes[item.id] ?? ""}
@@ -523,7 +783,7 @@ export function AttendancePage() {
                         })}
                         {!setup?.roster.length ? (
                           <tr>
-                            <td colSpan={5} className="py-10 text-center text-sm text-slate-500">
+                            <td colSpan={7} className="py-10 text-center text-sm text-slate-500">
                               No active students in this class section.
                             </td>
                           </tr>
@@ -540,10 +800,16 @@ export function AttendancePage() {
                       onClick={() => void submitAttendance()}
                     >
                       <SendOutlined sx={{ fontSize: 16 }} />
-                      {saving ? "Saving…" : "Submit attendance"}
+                      {saving
+                        ? "Saving…"
+                        : setup?.alreadySubmitted
+                          ? "Update Attendance"
+                          : "Submit attendance"}
                     </button>
                     <p className="text-[12px] text-slate-500">
-                      If already submitted for this date, you can only edit it.
+                      {setup?.alreadySubmitted
+                        ? "Existing records for this date will be updated."
+                        : "If already submitted for this date, you can only edit it."}
                     </p>
                   </div>
                 </div>
@@ -726,6 +992,10 @@ function InOutPanel({
   const [classId, setClassId] = useState("");
   const [sectionId, setSectionId] = useState("");
   const [selectedDate, setSelectedDate] = useState(date);
+  const [periodKey, setPeriodKey] = useState(
+    setup.attendanceType === "PERIOD_WISE" ? "PERIOD-1" : "DAY",
+  );
+  const [periods, setPeriods] = useState<AttendancePeriod[]>(setup.periods ?? []);
   const [rows, setRows] = useState<InOutRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
@@ -767,12 +1037,23 @@ function InOutPanel({
     }
     setLoading(true);
     try {
+      const effectivePeriod =
+        setup.attendanceType === "PERIOD_WISE" ? periodKey || "PERIOD-1" : "DAY";
       const params = new URLSearchParams({
         date: selectedDate,
         classSectionId,
-        periodKey: setup.attendanceType === "PERIOD_WISE" ? "PERIOD-1" : "DAY",
+        periodKey: effectivePeriod,
       });
       const next = await apiRequest<Setup>(`/attendance/setup?${params}`, token);
+      const nextPeriods = next.periods ?? [];
+      setPeriods(nextPeriods);
+      if (
+        setup.attendanceType === "PERIOD_WISE" &&
+        nextPeriods.length &&
+        !nextPeriods.some((item) => item.key === effectivePeriod)
+      ) {
+        setPeriodKey(nextPeriods[0].key);
+      }
       setRows(
         next.roster.map((item) => ({
           id: item.id,
@@ -873,6 +1154,28 @@ function InOutPanel({
             Export CSV
           </button>
         </div>
+        {setup.attendanceType === "PERIOD_WISE" ? (
+          <label className="mt-3 block max-w-xs">
+            <span className="nx-label">Period</span>
+            <select
+              className="nx-input"
+              value={periodKey}
+              onChange={(e) => {
+                setPeriodKey(e.target.value || "PERIOD-1");
+                setSearched(false);
+              }}
+            >
+              {(periods.length
+                ? periods
+                : [{ key: "PERIOD-1", label: "PERIOD-1", startTime: "", endTime: "" }]
+              ).map((period) => (
+                <option key={period.key} value={period.key}>
+                  {period.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
       </div>
 
       <div className="nx-card overflow-hidden">
@@ -1000,6 +1303,7 @@ function PointsPanel({
   const [presentPoints, setPresentPoints] = useState(2);
   const [halfDayPoints, setHalfDayPoints] = useState(1);
   const [latePoints, setLatePoints] = useState(-1);
+  const [month, setMonth] = useState(today.slice(0, 7));
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -1044,13 +1348,15 @@ function PointsPanel({
     return Array.from({ length: maxButtons }, (_, i) => start + i);
   }, [pageSafe, totalPages]);
 
-  async function loadScores() {
+  async function loadScores(selectedMonth = month) {
     setLoading(true);
     try {
+      const params = new URLSearchParams();
+      if (selectedMonth) params.set("month", selectedMonth);
       const data = await apiRequest<{
         config: { presentPoints: number; halfDayPoints: number; latePoints: number };
         scores: typeof scores;
-      }>("/attendance/points/scores", token);
+      }>(`/attendance/points/scores${params.toString() ? `?${params}` : ""}`, token);
       setPresentPoints(data.config.presentPoints);
       setHalfDayPoints(data.config.halfDayPoints);
       setLatePoints(data.config.latePoints);
@@ -1064,8 +1370,8 @@ function PointsPanel({
   }
 
   useEffect(() => {
-    void loadScores();
-  }, [token]);
+    void loadScores(month);
+  }, [token, month]);
 
   async function saveConfig() {
     setSaving(true);
@@ -1079,7 +1385,7 @@ function PointsPanel({
         }),
       });
       notifySuccess("Attendance points configuration saved");
-      await loadScores();
+      await loadScores(month);
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : "Unable to save points configuration");
     } finally {
@@ -1186,8 +1492,17 @@ function PointsPanel({
       </div>
 
       <div className="nx-card overflow-hidden">
-        <div className="border-b border-slate-100 px-4 py-3">
+        <div className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-100 px-4 py-3">
           <h2 className="text-[15px] font-bold text-slate-900">Student attendance scores</h2>
+          <label className="block min-w-[180px]">
+            <span className="nx-label">Month</span>
+            <input
+              className="nx-input"
+              type="month"
+              value={month}
+              onChange={(e) => setMonth(e.target.value)}
+            />
+          </label>
         </div>
         <div className="overflow-x-auto">
           <table className="nx-table min-w-[860px]">
@@ -1355,6 +1670,7 @@ function LeavePanel({
     reason: "",
     status: "PENDING" as "PENDING" | "APPROVED" | "REJECTED",
     fileName: "",
+    attachmentUrl: "" as string,
   });
 
   const classes = useMemo(() => {
@@ -1507,13 +1823,10 @@ function LeavePanel({
           toDate: form.toDate,
           reason: form.reason.trim(),
           status: form.status,
+          attachmentUrl: form.attachmentUrl || null,
         }),
       });
-      notifySuccess(
-        form.fileName
-          ? "Leave saved (attachment UI only — file not uploaded yet)"
-          : "Leave request saved",
-      );
+      notifySuccess("Leave request saved");
       setDrawerOpen(false);
       setForm({
         studentEnrollmentId: "",
@@ -1523,6 +1836,7 @@ function LeavePanel({
         reason: "",
         status: "PENDING",
         fileName: "",
+        attachmentUrl: "",
       });
       setStudentQuery("");
       setStudentResults([]);
@@ -1594,6 +1908,7 @@ function LeavePanel({
                 <th>Reason</th>
                 <th>Applied On</th>
                 <th>Status</th>
+                <th className="w-10">File</th>
                 <th className="w-36">Actions</th>
               </tr>
             </thead>
@@ -1632,6 +1947,26 @@ function LeavePanel({
                       </span>
                     </td>
                     <td>
+                      {leave.attachmentUrl ? (
+                        <a
+                          href={
+                            leave.attachmentUrl.startsWith("data:") ||
+                            leave.attachmentUrl.startsWith("http")
+                              ? leave.attachmentUrl
+                              : assetUrl(leave.attachmentUrl)
+                          }
+                          target="_blank"
+                          rel="noreferrer"
+                          className="grid size-8 place-items-center rounded-lg bg-indigo-50 text-indigo-600"
+                          title="View attachment"
+                        >
+                          <AttachFileOutlined sx={{ fontSize: 18 }} />
+                        </a>
+                      ) : (
+                        <span className="text-[12px] text-slate-400">—</span>
+                      )}
+                    </td>
+                    <td>
                       <div className="flex items-center gap-1.5">
                         <button
                           type="button"
@@ -1666,7 +2001,7 @@ function LeavePanel({
               })}
               {!pageRows.length ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-sm text-slate-500">
+                  <td colSpan={9} className="py-12 text-center text-sm text-slate-500">
                     {loading ? "Loading leave requests…" : "No leave requests found for this filter."}
                   </td>
                 </tr>
@@ -1840,7 +2175,16 @@ function LeavePanel({
                           onError("File must be 5MB or less");
                           return;
                         }
-                        setForm((prev) => ({ ...prev, fileName: file.name }));
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                          setForm((prev) => ({
+                            ...prev,
+                            fileName: file.name,
+                            attachmentUrl: String(reader.result ?? ""),
+                          }));
+                        };
+                        reader.onerror = () => onError("Unable to read attachment");
+                        reader.readAsDataURL(file);
                       }}
                     />
                   </label>
@@ -1916,6 +2260,25 @@ function LeavePanel({
               <p>
                 <span className="font-semibold text-slate-500">Reason:</span> {viewLeave.reason}
               </p>
+              {viewLeave.attachmentUrl ? (
+                <p>
+                  <span className="font-semibold text-slate-500">Attachment:</span>{" "}
+                  <a
+                    href={
+                      viewLeave.attachmentUrl.startsWith("data:") ||
+                      viewLeave.attachmentUrl.startsWith("http")
+                        ? viewLeave.attachmentUrl
+                        : assetUrl(viewLeave.attachmentUrl)
+                    }
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 font-semibold text-indigo-600 hover:text-indigo-700"
+                  >
+                    <AttachFileOutlined sx={{ fontSize: 16 }} />
+                    View file
+                  </a>
+                </p>
+              ) : null}
             </div>
             {viewLeave.status === "PENDING" ? (
               <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-3">
@@ -1942,6 +2305,84 @@ function LeavePanel({
   );
 }
 
+function packReportIcon(key: PackReportKey): ReactNode {
+  if (key === "daily_attendance" || key === "custom_attendance") {
+    return <CalendarMonthOutlined sx={{ fontSize: 22 }} />;
+  }
+  if (key === "remaining_class") return <DonutLargeOutlined sx={{ fontSize: 22 }} />;
+  if (key === "student_summary") return <PersonOutlined sx={{ fontSize: 22 }} />;
+  if (key === "staff_summary") return <BadgeOutlined sx={{ fontSize: 22 }} />;
+  if (key === "inout_time") return <AccessTimeOutlined sx={{ fontSize: 22 }} />;
+  if (key === "period_wise") return <FormatListBulletedOutlined sx={{ fontSize: 22 }} />;
+  return <GroupsOutlined sx={{ fontSize: 22 }} />;
+}
+
+function packReportTint(key: PackReportKey): string {
+  const map: Record<PackReportKey, string> = {
+    daily_attendance: "#7c3aed",
+    custom_attendance: "#0ea5e9",
+    remaining_class: "#10b981",
+    student_summary: "#f59e0b",
+    staff_summary: "#8b5cf6",
+    inout_time: "#eab308",
+    period_wise: "#38bdf8",
+    class_wise: "#ec4899",
+  };
+  return map[key];
+}
+
+function humanizeColumnKey(key: string) {
+  return key
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replaceAll("_", " ")
+    .replace(/^\w/, (c) => c.toUpperCase());
+}
+
+function formatPackCell(value: unknown): string {
+  if (value == null) return "--";
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  if (typeof value === "object" && value !== null && "name" in value) {
+    return String((value as { name?: unknown }).name ?? "--");
+  }
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return "--";
+  }
+}
+
+function derivePackColumns(result: PackReportResult): Array<{ key: string; label: string }> {
+  if (result.columns?.length) return result.columns;
+  const sample = result.rows[0];
+  if (!sample) return [];
+  return Object.keys(sample)
+    .filter((key) => {
+      const value = sample[key];
+      return value == null || ["string", "number", "boolean"].includes(typeof value);
+    })
+    .map((key) => ({ key, label: humanizeColumnKey(key) }));
+}
+
+function exportPackReportCsv(result: PackReportResult) {
+  const columns = derivePackColumns(result);
+  if (!columns.length) return;
+  const header = columns.map((col) => col.label);
+  const body = result.rows.map((row) => columns.map((col) => formatPackCell(row[col.key])));
+  const csv = [header, ...body]
+    .map((cols) => cols.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(","))
+    .join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `${result.reportKey}-${today}.csv`;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
 function AttendanceReportPanel({
   setup,
   token,
@@ -1951,246 +2392,78 @@ function AttendanceReportPanel({
   token: string;
   onError: (message: string) => void;
 }) {
-  type ReportKey =
-    | "daily"
-    | "custom"
-    | "remaining"
-    | "student_summary"
-    | "staff_summary"
-    | "inout"
-    | "periods"
-    | "class_wise";
-
-  const reportCards: Array<{
-    key: ReportKey;
-    title: string;
-    description: string;
-    tint: string;
-    icon: ReactNode;
-  }> = [
-    {
-      key: "daily",
-      title: "Daily Attendance Report",
-      description: "Generate a report of attendance for a specific date across classes or sections.",
-      tint: "#7c3aed",
-      icon: <CalendarMonthOutlined sx={{ fontSize: 22 }} />,
-    },
-    {
-      key: "custom",
-      title: "Custom Attendance Report",
-      description: "Generate attendance report for a custom date range with advanced filters.",
-      tint: "#0ea5e9",
-      icon: <CalendarMonthOutlined sx={{ fontSize: 22 }} />,
-    },
-    {
-      key: "remaining",
-      title: "Remaining Class Attendance Report",
-      description: "View students who have remaining attendance percentage below the required threshold.",
-      tint: "#10b981",
-      icon: <DonutLargeOutlined sx={{ fontSize: 22 }} />,
-    },
-    {
-      key: "student_summary",
-      title: "Student Attendance Summary",
-      description: "Get an overall attendance summary of students with percentage and attendance count.",
-      tint: "#f59e0b",
-      icon: <PersonOutlined sx={{ fontSize: 22 }} />,
-    },
-    {
-      key: "staff_summary",
-      title: "Staff Attendance Summary",
-      description: "Get an overall attendance summary of staff members with percentage and attendance count.",
-      tint: "#8b5cf6",
-      icon: <BadgeOutlined sx={{ fontSize: 22 }} />,
-    },
-    {
-      key: "inout",
-      title: "In/Out Time Attendance Report",
-      description: "View detailed in-time, out-time and duration report for students on a given date or range.",
-      tint: "#eab308",
-      icon: <AccessTimeOutlined sx={{ fontSize: 22 }} />,
-    },
-    {
-      key: "periods",
-      title: "Periods-wise Attendance Report",
-      description: "Generate attendance report period wise for a class or section on a given date.",
-      tint: "#38bdf8",
-      icon: <FormatListBulletedOutlined sx={{ fontSize: 22 }} />,
-    },
-    {
-      key: "class_wise",
-      title: "Class-wise Attendance Report",
-      description: "Compare attendance across multiple classes or sections in a selected date range.",
-      tint: "#ec4899",
-      icon: <GroupsOutlined sx={{ fontSize: 22 }} />,
-    },
-  ];
-
-  const [active, setActive] = useState<(typeof reportCards)[number] | null>(null);
+  const [catalog, setCatalog] = useState<PackReportCatalogItem[]>([]);
+  const [catalogLoading, setCatalogLoading] = useState(true);
+  const [active, setActive] = useState<PackReportCatalogItem | null>(null);
   const [loading, setLoading] = useState(false);
-  const [threshold, setThreshold] = useState(75);
+  const [result, setResult] = useState<PackReportResult | null>(null);
   const [form, setForm] = useState({
     classSectionId: "",
+    date: today,
     fromDate: today,
     toDate: today,
     periodKey: setup.attendanceType === "PERIOD_WISE" ? "PERIOD-1" : "",
+    month: today.slice(0, 7),
   });
-  const [studentReport, setStudentReport] = useState<Report | null>(null);
-  const [inoutRows, setInoutRows] = useState<
-    Array<{
-      student: Student;
-      status: AttendanceStatus;
-      inTime: string | null;
-      outTime: string | null;
-      date: string;
-    }>
-  >([]);
-  const [classWise, setClassWise] = useState<
-    Array<{ label: string; present: number; late: number; absent: number; halfDay: number; percentage: number }>
-  >([]);
-  const [staffRows, setStaffRows] = useState<
-    Array<{ name: string; present: number; late: number; absent: number; halfDay: number; total: number; percentage: number }>
-  >([]);
 
-  function openReport(card: (typeof reportCards)[number]) {
-    setActive(card);
-    setStudentReport(null);
-    setInoutRows([]);
-    setClassWise([]);
-    setStaffRows([]);
+  useEffect(() => {
+    let cancelled = false;
+    async function loadCatalog() {
+      setCatalogLoading(true);
+      try {
+        const data = await apiRequest<PackReportCatalogItem[]>("/attendance/reports/catalog", token);
+        if (!cancelled) setCatalog(data);
+      } catch (cause) {
+        if (!cancelled) {
+          onError(cause instanceof Error ? cause.message : "Unable to load report catalog");
+        }
+      } finally {
+        if (!cancelled) setCatalogLoading(false);
+      }
+    }
+    void loadCatalog();
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  function openReport(item: PackReportCatalogItem) {
+    setActive(item);
+    setResult(null);
     setForm({
       classSectionId: "",
+      date: today,
       fromDate: today,
       toDate: today,
       periodKey: setup.attendanceType === "PERIOD_WISE" ? "PERIOD-1" : "",
+      month: today.slice(0, 7),
     });
   }
 
   async function generate() {
     if (!active) return;
     setLoading(true);
-    setStudentReport(null);
-    setInoutRows([]);
-    setClassWise([]);
-    setStaffRows([]);
+    setResult(null);
     try {
-      if (active.key === "staff_summary") {
-        const month = form.fromDate.slice(0, 7);
-        const data = await apiRequest<{
-          staff: Array<{
-            user: { firstName: string; lastName: string | null };
-            attendance: Array<{ status: string }>;
-          }>;
-        }>(`/hr/setup?month=${month}-01`, token);
-        setStaffRows(
-          data.staff.map((item) => {
-            let present = 0;
-            let late = 0;
-            let absent = 0;
-            let halfDay = 0;
-            for (const row of item.attendance) {
-              if (row.status === "PRESENT") present += 1;
-              else if (row.status === "LATE") late += 1;
-              else if (row.status === "ABSENT") absent += 1;
-              else if (row.status === "HALF_DAY") halfDay += 1;
-            }
-            const total = present + late + absent + halfDay;
-            const attended = present + late + halfDay * 0.5;
-            return {
-              name: `${item.user.firstName} ${item.user.lastName ?? ""}`.trim(),
-              present,
-              late,
-              absent,
-              halfDay,
-              total,
-              percentage: total ? Math.round((attended / total) * 10000) / 100 : 0,
-            };
-          }),
-        );
-        return;
+      const params = new URLSearchParams({ reportKey: active.key });
+      if (active.key === "daily_attendance" || active.key === "remaining_class") {
+        params.set("date", form.date);
+      } else if (active.key === "staff_summary") {
+        params.set("month", form.month);
+      } else {
+        params.set("fromDate", form.fromDate);
+        params.set("toDate", form.toDate);
       }
-
-      const needsSection = active.key === "periods";
-
-      if (needsSection && !form.classSectionId) {
-        onError("Select a class section for period-wise report");
-        return;
-      }
-
-      const fromDate = form.fromDate;
-      const toDate = active.key === "daily" || active.key === "periods" ? form.fromDate : form.toDate;
-
-      if (active.key === "class_wise") {
-        const sections = form.classSectionId
-          ? setup.classSections.filter((item) => item.id === form.classSectionId)
-          : setup.classSections;
-        const rows = [];
-        for (const section of sections) {
-          const params = new URLSearchParams({
-            fromDate,
-            toDate,
-            classSectionId: section.id,
-          });
-          const data = await apiRequest<Report>(`/attendance/reports?${params}`, token);
-          const present = data.summaries.reduce((sum, item) => sum + item.present, 0);
-          const late = data.summaries.reduce((sum, item) => sum + item.late, 0);
-          const absent = data.summaries.reduce((sum, item) => sum + item.absent, 0);
-          const halfDay = data.summaries.reduce((sum, item) => sum + item.halfDay, 0);
-          const total = present + late + absent + halfDay;
-          const attended = present + late + halfDay * 0.5;
-          rows.push({
-            label: `${section.academicClass.name} · ${section.section.name}`,
-            present,
-            late,
-            absent,
-            halfDay,
-            percentage: total ? Math.round((attended / total) * 10000) / 100 : 0,
-          });
-        }
-        setClassWise(rows);
-        return;
-      }
-
-      const params = new URLSearchParams({
-        fromDate,
-        toDate,
-      });
       if (form.classSectionId) params.set("classSectionId", form.classSectionId);
-      if (active.key === "periods" && form.periodKey) params.set("periodKey", form.periodKey);
-
-      const data = await apiRequest<
-        Report & {
-          records?: Array<{
-            attendanceDate: string;
-            status: AttendanceStatus;
-            inTime: string | null;
-            outTime: string | null;
-            studentEnrollment: { student: Student };
-          }>;
-        }
-      >(`/attendance/reports?${params}`, token);
-
-      if (active.key === "inout") {
-        setInoutRows(
-          (data.records ?? []).map((record) => ({
-            student: record.studentEnrollment.student,
-            status: record.status,
-            inTime: record.inTime,
-            outTime: record.outTime,
-            date: String(record.attendanceDate).slice(0, 10),
-          })),
-        );
-        return;
+      if (form.periodKey && (active.key === "period_wise" || active.key === "daily_attendance" || active.key === "remaining_class")) {
+        params.set("periodKey", form.periodKey);
       }
 
-      if (active.key === "remaining") {
-        setStudentReport({
-          summaries: data.summaries.filter((item) => item.percentage < threshold),
-        });
-        return;
-      }
-
-      setStudentReport(data);
+      const data = await apiRequest<PackReportResult>(`/attendance/reports/run?${params}`, token);
+      setResult({
+        ...data,
+        rows: Array.isArray(data.rows) ? data.rows : [],
+      });
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : "Unable to generate report");
     } finally {
@@ -2198,52 +2471,73 @@ function AttendanceReportPanel({
     }
   }
 
-  const showDateRange = active && active.key !== "daily" && active.key !== "periods" && active.key !== "staff_summary";
-  const showSingleDate = active && (active.key === "daily" || active.key === "periods");
-  const showSection =
+  const showDateRange =
     active &&
-    active.key !== "staff_summary" &&
-    active.key !== "class_wise";
-  const showPeriod = active?.key === "periods";
-  const showThreshold = active?.key === "remaining";
+    active.key !== "daily_attendance" &&
+    active.key !== "remaining_class" &&
+    active.key !== "staff_summary";
+  const showSingleDate = active && (active.key === "daily_attendance" || active.key === "remaining_class");
+  const showSection = active && active.key !== "staff_summary";
+  const showPeriod =
+    active &&
+    setup.attendanceType === "PERIOD_WISE" &&
+    (active.key === "period_wise" || active.key === "daily_attendance" || active.key === "remaining_class");
+  const columns = result ? derivePackColumns(result) : [];
+
+  const cards = catalog.length
+    ? catalog
+    : ([
+        { key: "daily_attendance", label: "Daily Attendance Report", description: "Attendance records for a selected day" },
+        { key: "custom_attendance", label: "Custom Attendance Report", description: "Filtered attendance records over a date range" },
+        { key: "remaining_class", label: "Remaining Class Attendance Report", description: "Class sections with attendance not yet marked" },
+        { key: "student_summary", label: "Student Attendance Summary", description: "Per-student present/absent/late totals and percentage" },
+        { key: "staff_summary", label: "Staff Attendance Summary", description: "Staff present/absent/late counts for a month" },
+        { key: "inout_time", label: "In/Out Time Attendance Report", description: "Attendance records with in and out times" },
+        { key: "period_wise", label: "Periods wise Attendance Report", description: "Attendance counts grouped by period" },
+        { key: "class_wise", label: "Class wise Attendance Report", description: "Aggregated attendance per class section" },
+      ] as PackReportCatalogItem[]);
 
   return (
     <section className="space-y-4">
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {reportCards.map((card) => (
-          <div key={card.key} className="nx-card flex flex-col p-5">
-            <div className="flex items-start gap-3">
-              <span
-                className="grid size-11 shrink-0 place-items-center rounded-full"
-                style={{ background: `${card.tint}1a`, color: card.tint }}
-              >
-                {card.icon}
-              </span>
-              <div className="min-w-0">
-                <h3 className="text-[15px] font-bold text-slate-900">{card.title}</h3>
-                <p className="mt-1 text-[13px] leading-relaxed text-slate-500">{card.description}</p>
+      {catalogLoading ? (
+        <div className="nx-card px-6 py-10 text-center text-sm text-slate-500">Loading report catalog…</div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {cards.map((card) => (
+            <div key={card.key} className="nx-card flex flex-col p-5">
+              <div className="flex items-start gap-3">
+                <span
+                  className="grid size-11 shrink-0 place-items-center rounded-full"
+                  style={{ background: `${packReportTint(card.key)}1a`, color: packReportTint(card.key) }}
+                >
+                  {packReportIcon(card.key)}
+                </span>
+                <div className="min-w-0">
+                  <h3 className="text-[15px] font-bold text-slate-900">{card.label}</h3>
+                  <p className="mt-1 text-[13px] leading-relaxed text-slate-500">{card.description}</p>
+                </div>
               </div>
+              <button
+                type="button"
+                className="mt-5 self-start text-[13px] font-bold text-indigo-600 hover:text-indigo-700"
+                onClick={() => openReport(card)}
+              >
+                Generate
+              </button>
             </div>
-            <button
-              type="button"
-              className="mt-5 self-start text-[13px] font-bold text-indigo-600 hover:text-indigo-700"
-              onClick={() => openReport(card)}
-            >
-              Generate
-            </button>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {active ? (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40 p-4" onClick={() => setActive(null)}>
           <div
-            className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl"
+            className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between border-b border-slate-100 px-5 py-4">
               <div>
-                <h3 className="text-[16px] font-bold text-slate-900">{active.title}</h3>
+                <h3 className="text-[16px] font-bold text-slate-900">{active.label}</h3>
                 <p className="mt-0.5 text-[13px] text-slate-500">{active.description}</p>
               </div>
               <button type="button" className="text-slate-400" onClick={() => setActive(null)}>
@@ -2271,32 +2565,14 @@ function AttendanceReportPanel({
                   </label>
                 ) : null}
 
-                {active.key === "class_wise" ? (
-                  <label>
-                    <span className="nx-label">Class section (optional)</span>
-                    <select
-                      className="nx-input"
-                      value={form.classSectionId}
-                      onChange={(e) => setForm({ ...form, classSectionId: e.target.value })}
-                    >
-                      <option value="">All classes</option>
-                      {setup.classSections.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.academicClass.name} · {item.section.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                ) : null}
-
                 {showSingleDate ? (
                   <label>
                     <span className="nx-label">Date</span>
                     <input
                       className="nx-input"
                       type="date"
-                      value={form.fromDate}
-                      onChange={(e) => setForm({ ...form, fromDate: e.target.value, toDate: e.target.value })}
+                      value={form.date}
+                      onChange={(e) => setForm({ ...form, date: e.target.value })}
                     />
                   </label>
                 ) : null}
@@ -2330,14 +2606,8 @@ function AttendanceReportPanel({
                     <input
                       className="nx-input"
                       type="month"
-                      value={form.fromDate.slice(0, 7)}
-                      onChange={(e) =>
-                        setForm({
-                          ...form,
-                          fromDate: `${e.target.value}-01`,
-                          toDate: `${e.target.value}-01`,
-                        })
-                      }
+                      value={form.month}
+                      onChange={(e) => setForm({ ...form, month: e.target.value })}
                     />
                   </label>
                 ) : null}
@@ -2345,149 +2615,78 @@ function AttendanceReportPanel({
                 {showPeriod ? (
                   <label>
                     <span className="nx-label">Period</span>
-                    <input
+                    <select
                       className="nx-input"
                       value={form.periodKey}
-                      onChange={(e) => setForm({ ...form, periodKey: e.target.value })}
-                      placeholder="PERIOD-1"
-                    />
-                  </label>
-                ) : null}
-
-                {showThreshold ? (
-                  <label>
-                    <span className="nx-label">Below threshold %</span>
-                    <input
-                      className="nx-input"
-                      type="number"
-                      min={1}
-                      max={100}
-                      value={threshold}
-                      onChange={(e) => setThreshold(Number(e.target.value))}
-                    />
+                      onChange={(e) => setForm({ ...form, periodKey: e.target.value || "PERIOD-1" })}
+                    >
+                      {(setup.periods?.length
+                        ? setup.periods
+                        : [{ key: "PERIOD-1", label: "PERIOD-1", startTime: "", endTime: "" }]
+                      ).map((period) => (
+                        <option key={period.key} value={period.key}>
+                          {period.label}
+                        </option>
+                      ))}
+                    </select>
                   </label>
                 ) : null}
               </div>
 
-              <button type="button" className="nx-btn-primary" disabled={loading} onClick={() => void generate()}>
-                {loading ? "Generating…" : "Generate report"}
-              </button>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" className="nx-btn-primary" disabled={loading} onClick={() => void generate()}>
+                  {loading ? "Generating…" : "Generate report"}
+                </button>
+                {result?.rows.length ? (
+                  <button type="button" className="nx-btn-secondary" onClick={() => exportPackReportCsv(result)}>
+                    <FileDownloadOutlined sx={{ fontSize: 16 }} />
+                    Export CSV
+                  </button>
+                ) : null}
+              </div>
             </div>
 
             <div className="min-h-0 flex-1 overflow-auto px-5 py-4">
-              {studentReport ? (
-                <div className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200">
-                  {studentReport.summaries.map((item) => (
-                    <div
-                      className="grid gap-3 p-4 sm:grid-cols-[1fr_repeat(4,90px)]"
-                      key={item.student.id}
-                    >
-                      <div>
-                        <p className="font-semibold text-slate-900">{studentName(item.student)}</p>
-                        <p className="text-[12px] text-slate-500">{item.student.admissionNumber}</p>
-                      </div>
-                      <span className="text-sm">Present {item.present}</span>
-                      <span className="text-sm">Late {item.late}</span>
-                      <span className="text-sm">Absent {item.absent}</span>
-                      <strong className="text-sm">{item.percentage}%</strong>
-                    </div>
-                  ))}
-                  {!studentReport.summaries.length ? (
-                    <p className="p-8 text-center text-sm text-slate-500">No matching records.</p>
+              {result ? (
+                <div className="space-y-3">
+                  {result.summary ? (
+                    <p className="text-[13px] text-slate-500">
+                      {Object.entries(result.summary)
+                        .map(([key, value]) => `${humanizeColumnKey(key)}: ${value}`)
+                        .join(" · ")}
+                    </p>
                   ) : null}
-                </div>
-              ) : null}
-
-              {inoutRows.length > 0 ? (
-                <div className="overflow-x-auto rounded-xl border border-slate-200">
-                  <table className="nx-table">
-                    <thead>
-                      <tr>
-                        <th>Student</th>
-                        <th>Date</th>
-                        <th>In</th>
-                        <th>Out</th>
-                        <th>Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {inoutRows.map((row, index) => (
-                        <tr key={`${row.student.id}-${row.date}-${index}`}>
-                          <td className="font-semibold">{studentName(row.student)}</td>
-                          <td>{row.date}</td>
-                          <td>{row.inTime || "--"}</td>
-                          <td>{row.outTime || "--"}</td>
-                          <td>{row.status.replaceAll("_", " ")}</td>
+                  <div className="overflow-x-auto rounded-xl border border-slate-200">
+                    <table className="nx-table">
+                      <thead>
+                        <tr>
+                          {columns.map((col) => (
+                            <th key={col.key}>{col.label}</th>
+                          ))}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {result.rows.map((row, index) => (
+                          <tr key={String(row.id ?? row.studentId ?? row.staffId ?? row.classSectionId ?? index)}>
+                            {columns.map((col) => (
+                              <td key={col.key} className={col.key.toLowerCase().includes("name") || col.key === "classSection" ? "font-semibold" : undefined}>
+                                {formatPackCell(row[col.key])}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                        {!result.rows.length ? (
+                          <tr>
+                            <td colSpan={Math.max(columns.length, 1)} className="py-8 text-center text-sm text-slate-500">
+                              No matching records.
+                            </td>
+                          </tr>
+                        ) : null}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-              ) : null}
-
-              {classWise.length > 0 ? (
-                <div className="overflow-x-auto rounded-xl border border-slate-200">
-                  <table className="nx-table">
-                    <thead>
-                      <tr>
-                        <th>Class / Section</th>
-                        <th>Present</th>
-                        <th>Late</th>
-                        <th>Absent</th>
-                        <th>Half-day</th>
-                        <th>%</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {classWise.map((row) => (
-                        <tr key={row.label}>
-                          <td className="font-semibold">{row.label}</td>
-                          <td>{row.present}</td>
-                          <td>{row.late}</td>
-                          <td>{row.absent}</td>
-                          <td>{row.halfDay}</td>
-                          <td className="font-bold">{row.percentage}%</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : null}
-
-              {staffRows.length > 0 ? (
-                <div className="overflow-x-auto rounded-xl border border-slate-200">
-                  <table className="nx-table">
-                    <thead>
-                      <tr>
-                        <th>Staff</th>
-                        <th>Present</th>
-                        <th>Late</th>
-                        <th>Absent</th>
-                        <th>Half-day</th>
-                        <th>%</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {staffRows.map((row) => (
-                        <tr key={row.name}>
-                          <td className="font-semibold">{row.name}</td>
-                          <td>{row.present}</td>
-                          <td>{row.late}</td>
-                          <td>{row.absent}</td>
-                          <td>{row.halfDay}</td>
-                          <td className="font-bold">{row.percentage}%</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : null}
-
-              {!loading &&
-              !studentReport &&
-              !inoutRows.length &&
-              !classWise.length &&
-              !staffRows.length ? (
+              ) : !loading ? (
                 <p className="py-8 text-center text-sm text-slate-500">
                   Choose filters and click Generate report.
                 </p>

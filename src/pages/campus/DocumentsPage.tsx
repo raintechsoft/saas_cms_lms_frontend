@@ -6,11 +6,13 @@ import {
   ChevronRightOutlined,
   CloudUploadOutlined,
   ContentCopyOutlined,
+  CreditCardOutlined,
   CropLandscapeOutlined,
   CropPortraitOutlined,
   DeleteOutlineOutlined,
   EditOutlined,
   FileDownloadOutlined,
+  HistoryOutlined,
   MoreVertOutlined,
   NoteAddOutlined,
   PrintOutlined,
@@ -25,9 +27,8 @@ import {
   CmsPageHeader,
   CmsScrollBody,
   CmsSectionCard,
-  CmsTab,
-  CmsTabs,
 } from "../../components/cms/CmsLayout";
+import { CmsIconTabs, type CmsIconTabItem } from "../../components/cms/CmsIconTabs";
 import { apiRequest } from "../../lib/api";
 import { confirmDelete } from "../../lib/confirm";
 import { notifyError, notifySuccess } from "../../lib/notify";
@@ -78,12 +79,12 @@ interface Generated {
 
 type Tab = "design-cert" | "generate-cert" | "design-id" | "generate-id" | "history";
 
-const TABS: Array<{ key: Tab; label: string }> = [
-  { key: "design-cert", label: "Design Certificate" },
-  { key: "generate-cert", label: "Generate Certificate" },
-  { key: "design-id", label: "Design ID Card" },
-  { key: "generate-id", label: "Generate ID Card" },
-  { key: "history", label: "Generation History" },
+const TABS: Array<CmsIconTabItem<Tab>> = [
+  { key: "design-cert", label: "Design Certificate", icon: WorkspacePremiumOutlined, tone: "amber" },
+  { key: "generate-cert", label: "Generate Certificate", icon: PrintOutlined, tone: "emerald" },
+  { key: "design-id", label: "Design ID Card", icon: BadgeOutlined, tone: "sky" },
+  { key: "generate-id", label: "Generate ID Card", icon: CreditCardOutlined, tone: "indigo" },
+  { key: "history", label: "Generation History", icon: HistoryOutlined, tone: "slate" },
 ];
 
 interface PageSizeOption {
@@ -240,13 +241,13 @@ export function DocumentsPage() {
           )
         }
       />
-      <CmsTabs>
-        {TABS.map((item) => (
-          <CmsTab key={item.key} active={tab === item.key} onClick={() => setTab(item.key)}>
-            {item.label}
-          </CmsTab>
-        ))}
-      </CmsTabs>
+      <CmsIconTabs
+        ariaLabel="Documents sections"
+        value={tab}
+        onChange={setTab}
+        columnsClass="grid-cols-2 sm:grid-cols-3 md:grid-cols-5"
+        items={TABS}
+      />
       <CmsScrollBody className="space-y-4 pt-4">
         {tab === "design-cert" && (
           <DesignPanel

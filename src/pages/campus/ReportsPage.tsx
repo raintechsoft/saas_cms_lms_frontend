@@ -1,26 +1,44 @@
-import { useEffect, useMemo, useState, type ComponentType, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from "react";
 import {
   AccountBalanceWalletOutlined,
   AssessmentOutlined,
+  BadgeOutlined,
+  BookOutlined,
+  CakeOutlined,
   CalendarMonthOutlined,
   CheckCircleOutline,
   CancelOutlined,
+  Diversity3Outlined,
   DownloadOutlined,
   EmojiEventsOutlined,
   EventBusyOutlined,
+  ExpandLessOutlined,
+  ExpandMoreOutlined,
+  FamilyRestroomOutlined,
+  FemaleOutlined,
   FilterAltOutlined,
   GroupsOutlined,
   HistoryOutlined,
+  HowToRegOutlined,
+  LocalAtmOutlined,
+  LoginOutlined,
   MenuBookOutlined,
+  PercentOutlined,
   PaymentsOutlined,
+  PersonSearchOutlined,
   PlayArrowOutlined,
+  ReceiptLongOutlined,
+  SchoolOutlined,
   SummarizeOutlined,
+  SupervisorAccountOutlined,
+  TableViewOutlined,
   TodayOutlined,
   WarningAmberOutlined,
   WorkOutline,
 } from "@mui/icons-material";
 import { useAuth } from "../../auth/AuthContext";
 import { PageHeader } from "../../components/AppShell";
+import { CmsIconTabs, type CmsIconTabItem } from "../../components/cms/CmsIconTabs";
 import { apiRequest } from "../../lib/api";
 import { notifyError, notifySuccess } from "../../lib/notify";
 
@@ -52,11 +70,21 @@ interface Hub {
     bucket: "SHARED" | "CMS";
     needsExam?: boolean;
   }>;
+  studentReports?: Array<{
+    key: string;
+    label: string;
+    description: string;
+  }>;
+  feeReports?: Array<{
+    key: string;
+    label: string;
+    description: string;
+  }>;
   modules: Array<{ key: ReportModule; label: string; metrics: Record<string, string | number | null> }>;
 }
 
 interface CoreReportResult {
-  reportKey: CoreReportKey;
+  reportKey: string;
   title: string;
   session: { id: string; name: string } | null;
   summary: Record<string, unknown>;
@@ -84,30 +112,53 @@ function downloadCoreReportCsv(data: CoreReportResult) {
   const columns = data.rows[0]
     ? Object.keys(data.rows[0]).filter((key) => !HIDDEN_COLUMNS.has(key))
     : [];
-  if (!columns.length) {
+
+  if (!columns.length && !Object.keys(data.summary ?? {}).length) {
     notifyError("No rows available to download");
     return;
   }
 
-  const header = columns.map((key) => csvEscape(key)).join(",");
-  const lines = data.rows.map((row) => columns.map((key) => csvEscape(row[key])).join(","));
+  const lines: string[] = [];
+  if (columns.length) {
+    lines.push(columns.map((key) => csvEscape(key)).join(","));
+    for (const row of data.rows) {
+      lines.push(columns.map((key) => csvEscape(row[key])).join(","));
+    }
+  } else {
+    lines.push("metric,value");
+    for (const [key, value] of Object.entries(data.summary ?? {})) {
+      if (typeof value === "object") continue;
+      lines.push(`${csvEscape(key)},${csvEscape(value)}`);
+    }
+  }
+
   // BOM helps Excel open UTF-8 CSV correctly
-  const csv = ["\uFEFF" + header, ...lines].join("\r\n");
+  const csv = "\uFEFF" + lines.join("\r\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
   const stamp = new Date().toISOString().slice(0, 10);
-  const safeTitle = data.title
+  const safeTitle = (data.title || data.reportKey || "report")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
-  anchor.href = url;
-  anchor.download = `${safeTitle || data.reportKey}-${stamp}.csv`;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(url);
-  notifySuccess("CSV downloaded");
+  const filename = `${safeTitle || "report"}-${stamp}.csv`;
+
+  try {
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.rel = "noopener";
+    anchor.style.display = "none";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    // Keep URL briefly so Electron / slow browsers can finish the download
+    window.setTimeout(() => URL.revokeObjectURL(url), 2_000);
+    notifySuccess("CSV downloaded");
+  } catch (error) {
+    URL.revokeObjectURL(url);
+    notifyError(error instanceof Error ? error.message : "Unable to download CSV");
+  }
 }
 
 const REPORT_CARD_STYLE: Record<
@@ -163,6 +214,82 @@ const REPORT_CARD_STYLE: Record<
     badge: "bg-indigo-100 text-indigo-700",
   },
 };
+
+const STUDENT_REPORT_STYLE: Record<
+  string,
+  { icon: ComponentType<{ sx?: object }>; tone: string }
+> = {
+  new_admissions: { icon: HowToRegOutlined, tone: "bg-emerald-100 text-emerald-700" },
+  old_admissions: { icon: HistoryOutlined, tone: "bg-amber-100 text-amber-800" },
+  active_students: { icon: GroupsOutlined, tone: "bg-sky-100 text-sky-700" },
+  disabled_students: { icon: CancelOutlined, tone: "bg-rose-100 text-rose-700" },
+  alumni_students: { icon: SchoolOutlined, tone: "bg-violet-100 text-violet-700" },
+  student_history: { icon: SummarizeOutlined, tone: "bg-slate-200 text-slate-700" },
+  student_login_status: { icon: LoginOutlined, tone: "bg-cyan-100 text-cyan-700" },
+  student_profile: { icon: BadgeOutlined, tone: "bg-indigo-100 text-indigo-700" },
+  student_gender: { icon: FemaleOutlined, tone: "bg-fuchsia-100 text-fuchsia-700" },
+  student_birthday: { icon: CakeOutlined, tone: "bg-pink-100 text-pink-700" },
+  student_siblings: { icon: Diversity3Outlined, tone: "bg-teal-100 text-teal-700" },
+  student_guardian: { icon: FamilyRestroomOutlined, tone: "bg-orange-100 text-orange-700" },
+  student_teacher: { icon: SupervisorAccountOutlined, tone: "bg-lime-100 text-lime-800" },
+  online_admissions: { icon: PersonSearchOutlined, tone: "bg-blue-100 text-blue-700" },
+  at_school_admissions: { icon: SchoolOutlined, tone: "bg-emerald-100 text-emerald-800" },
+};
+
+const STUDENT_REPORT_GROUPS: Array<{ title: string; keys: string[] }> = [
+  {
+    title: "Admissions",
+    keys: ["new_admissions", "old_admissions", "online_admissions", "at_school_admissions"],
+  },
+  {
+    title: "Status & access",
+    keys: ["active_students", "disabled_students", "alumni_students", "student_login_status"],
+  },
+  {
+    title: "Profile & analytics",
+    keys: ["student_profile", "student_history", "student_gender", "student_birthday"],
+  },
+  {
+    title: "Family & teachers",
+    keys: ["student_siblings", "student_guardian", "student_teacher"],
+  },
+];
+
+const FEE_REPORT_STYLE: Record<string, { icon: ComponentType<{ sx?: object }>; tone: string }> = {
+  due_fees: { icon: AccountBalanceWalletOutlined, tone: "bg-rose-100 text-rose-700" },
+  fee_collection: { icon: PaymentsOutlined, tone: "bg-emerald-100 text-emerald-700" },
+  fee_master: { icon: MenuBookOutlined, tone: "bg-indigo-100 text-indigo-700" },
+  fee_assigned: { icon: HowToRegOutlined, tone: "bg-sky-100 text-sky-700" },
+  fee_summary: { icon: SummarizeOutlined, tone: "bg-violet-100 text-violet-700" },
+  day_book: { icon: BookOutlined, tone: "bg-amber-100 text-amber-800" },
+  till_date_due: { icon: TodayOutlined, tone: "bg-orange-100 text-orange-700" },
+  balance_fee: { icon: LocalAtmOutlined, tone: "bg-rose-100 text-rose-800" },
+  parents_wise_due: { icon: FamilyRestroomOutlined, tone: "bg-teal-100 text-teal-700" },
+  students_wise_fee: { icon: GroupsOutlined, tone: "bg-cyan-100 text-cyan-700" },
+  fine_report: { icon: WarningAmberOutlined, tone: "bg-amber-100 text-amber-800" },
+  discount_report: { icon: PercentOutlined, tone: "bg-fuchsia-100 text-fuchsia-700" },
+  online_fee: { icon: ReceiptLongOutlined, tone: "bg-blue-100 text-blue-700" },
+  daily_fees_collection: { icon: CalendarMonthOutlined, tone: "bg-emerald-100 text-emerald-800" },
+};
+
+const FEE_REPORT_GROUPS: Array<{ title: string; keys: string[] }> = [
+  {
+    title: "Dues & balances",
+    keys: ["due_fees", "till_date_due", "balance_fee", "parents_wise_due"],
+  },
+  {
+    title: "Collection",
+    keys: ["fee_collection", "daily_fees_collection", "day_book", "online_fee"],
+  },
+  {
+    title: "Structure & assignment",
+    keys: ["fee_master", "fee_assigned", "fee_summary", "students_wise_fee"],
+  },
+  {
+    title: "Adjustments",
+    keys: ["fine_report", "discount_report"],
+  },
+];
 
 const MODULE_CARD_STYLE: Record<
   ReportModule,
@@ -235,6 +362,7 @@ function statusPill(value: string): ReactNode {
 export function ReportsPage() {
   const { accessToken } = useAuth();
   const [hub, setHub] = useState<Hub | null>(null);
+  const [tab, setTab] = useState<"core" | "students" | "fees" | "modules">("core");
   const [selectedCore, setSelectedCore] = useState<CoreReportKey>("active_students");
   const [filters, setFilters] = useState({
     from: monthStart,
@@ -242,9 +370,13 @@ export function ReportsPage() {
     examId: "",
   });
   const [coreData, setCoreData] = useState<CoreReportResult | null>(null);
+  const [selectedStudentReport, setSelectedStudentReport] = useState<string | null>(null);
+  const [selectedFeeReport, setSelectedFeeReport] = useState<string | null>(null);
   const [module, setModule] = useState<ReportModule | null>(null);
   const [moduleData, setModuleData] = useState<unknown>(null);
   const [loading, setLoading] = useState(false);
+  const [catalogOpen, setCatalogOpen] = useState(true);
+  const resultsRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     apiRequest<Hub>("/reports", accessToken)
@@ -258,16 +390,40 @@ export function ReportsPage() {
       });
   }, [accessToken]);
 
+  useEffect(() => {
+    if (!coreData || tab === "modules") return;
+    setCatalogOpen(false);
+    const timer = window.setTimeout(() => {
+      resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [coreData, tab]);
+
   const selectedMeta = useMemo(
     () => hub?.coreReports.find((item) => item.key === selectedCore) ?? null,
     [hub, selectedCore],
   );
 
+  const studentReportMap = useMemo(() => {
+    const map = new Map<string, { key: string; label: string; description: string }>();
+    for (const item of hub?.studentReports ?? []) map.set(item.key, item);
+    return map;
+  }, [hub?.studentReports]);
+
+  const feeReportMap = useMemo(() => {
+    const map = new Map<string, { key: string; label: string; description: string }>();
+    for (const item of hub?.feeReports ?? []) map.set(item.key, item);
+    return map;
+  }, [hub?.feeReports]);
+
   async function runCore(reportKey = selectedCore) {
     setLoading(true);
     setModule(null);
     setModuleData(null);
+    setSelectedStudentReport(null);
+    setSelectedFeeReport(null);
     setSelectedCore(reportKey);
+    setTab("core");
     try {
       const query = new URLSearchParams({
         from: filters.from,
@@ -294,10 +450,65 @@ export function ReportsPage() {
     }
   }
 
+  async function runStudentReport(reportKey: string) {
+    setLoading(true);
+    setModule(null);
+    setModuleData(null);
+    setSelectedFeeReport(null);
+    setSelectedStudentReport(reportKey);
+    setTab("students");
+    try {
+      const query = new URLSearchParams({
+        from: filters.from,
+        to: filters.to,
+      });
+      if (hub?.currentSession) query.set("sessionId", hub.currentSession.id);
+      const data = await apiRequest<CoreReportResult>(
+        `/reports/student/${reportKey}?${query}`,
+        accessToken,
+      );
+      setCoreData(data);
+      notifySuccess(`${data.title} ready`);
+    } catch (cause) {
+      notifyError(cause instanceof Error ? cause.message : "Unable to generate student report");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function runFeeReport(reportKey: string) {
+    setLoading(true);
+    setModule(null);
+    setModuleData(null);
+    setSelectedStudentReport(null);
+    setSelectedFeeReport(reportKey);
+    setTab("fees");
+    try {
+      const query = new URLSearchParams({
+        from: filters.from,
+        to: filters.to,
+      });
+      if (hub?.currentSession) query.set("sessionId", hub.currentSession.id);
+      const data = await apiRequest<CoreReportResult>(
+        `/reports/fee/${reportKey}?${query}`,
+        accessToken,
+      );
+      setCoreData(data);
+      notifySuccess(`${data.title} ready`);
+    } catch (cause) {
+      notifyError(cause instanceof Error ? cause.message : "Unable to generate fee report");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function runModule(selected: ReportModule) {
     setLoading(true);
     setCoreData(null);
+    setSelectedStudentReport(null);
+    setSelectedFeeReport(null);
     setModule(selected);
+    setTab("modules");
     try {
       const query = new URLSearchParams({
         from: filters.from,
@@ -313,15 +524,99 @@ export function ReportsPage() {
     }
   }
 
+  function runSelected() {
+    if (tab === "students") {
+      if (!selectedStudentReport) {
+        notifyError("Select a student report first");
+        return;
+      }
+      void runStudentReport(selectedStudentReport);
+      return;
+    }
+    if (tab === "fees") {
+      if (!selectedFeeReport) {
+        notifyError("Select a fee report first");
+        return;
+      }
+      void runFeeReport(selectedFeeReport);
+      return;
+    }
+    if (tab === "modules") {
+      if (!module) {
+        notifyError("Select a module report first");
+        return;
+      }
+      void runModule(module);
+      return;
+    }
+    void runCore();
+  }
+
+  type ReportsTab = "core" | "students" | "fees" | "modules";
+
+  const reportTabItems = useMemo((): Array<CmsIconTabItem<ReportsTab>> => {
+    const items: Array<CmsIconTabItem<ReportsTab>> = [
+      {
+        key: "core",
+        label: "Core reports",
+        icon: AssessmentOutlined,
+        tone: "indigo",
+        badge: (
+          <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-500">
+            {hub?.coreReports.length ?? 0}
+          </span>
+        ),
+      },
+    ];
+    if ((hub?.studentReports?.length ?? 0) > 0) {
+      items.push({
+        key: "students",
+        label: "Student reports",
+        icon: GroupsOutlined,
+        tone: "sky",
+        badge: (
+          <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-500">
+            {hub?.studentReports?.length ?? 0}
+          </span>
+        ),
+      });
+    }
+    if ((hub?.feeReports?.length ?? 0) > 0) {
+      items.push({
+        key: "fees",
+        label: "Fee reports",
+        icon: PaymentsOutlined,
+        tone: "emerald",
+        badge: (
+          <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-500">
+            {hub?.feeReports?.length ?? 0}
+          </span>
+        ),
+      });
+    }
+    items.push({
+      key: "modules",
+      label: "Module dumps",
+      icon: TableViewOutlined,
+      tone: "violet",
+      badge: (
+        <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-500">
+          {hub?.modules.length ?? 0}
+        </span>
+      ),
+    });
+    return items;
+  }, [hub]);
+
   return (
     <main className="page-main">
       <PageHeader
         eyebrow="Data reports"
-        title="Core school reports"
-        description="Run the most used campus reports for students, fees, attendance, and exams."
+        title="School reports"
+        description="Pick a report, set filters, then run. Results open above the list with download."
         action={
           <div className="flex flex-wrap items-center gap-2">
-            {coreData?.rows?.length ? (
+            {coreData && (coreData.rows?.length || Object.keys(coreData.summary ?? {}).length) ? (
               <button
                 className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-500"
                 type="button"
@@ -339,161 +634,366 @@ export function ReportsPage() {
       />
 
       <div className="page-scroll">
-      <section className="mt-6 overflow-hidden rounded-2xl border border-indigo-100 bg-gradient-to-r from-indigo-50 via-white to-sky-50 shadow-sm">
-        <div className="flex items-center gap-2 border-b border-indigo-100/80 px-5 py-3">
-          <span className="inline-flex size-8 items-center justify-center rounded-lg bg-indigo-100 text-indigo-700">
-            <FilterAltOutlined sx={{ fontSize: 18 }} />
-          </span>
-          <div>
-            <p className="text-sm font-semibold text-slate-900">Report filters</p>
-            <p className="text-xs text-slate-500">
-              {hub?.currentSession ? `Session: ${hub.currentSession.name}` : "No current session set"}
-            </p>
-          </div>
-        </div>
-        <div className="grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-4">
-          <label className="rounded-xl border border-sky-100 bg-white/80 p-3">
-            <span className="mb-1 flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-sky-700">
-              <CalendarMonthOutlined sx={{ fontSize: 14 }} /> From
-            </span>
-            <input
-              className="input"
-              type="date"
-              value={filters.from}
-              onChange={(e) => setFilters({ ...filters, from: e.target.value })}
-            />
-          </label>
-          <label className="rounded-xl border border-violet-100 bg-white/80 p-3">
-            <span className="mb-1 flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-violet-700">
-              <CalendarMonthOutlined sx={{ fontSize: 14 }} /> To
-            </span>
-            <input
-              className="input"
-              type="date"
-              value={filters.to}
-              onChange={(e) => setFilters({ ...filters, to: e.target.value })}
-            />
-          </label>
-          <label className="rounded-xl border border-amber-100 bg-white/80 p-3">
-            <span className="mb-1 flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-amber-800">
-              <EmojiEventsOutlined sx={{ fontSize: 14 }} /> Exam (for rank)
-            </span>
-            <select
-              className="input"
-              value={filters.examId}
-              onChange={(e) => setFilters({ ...filters, examId: e.target.value })}
-            >
-              <option value="">Select exam</option>
-              {(hub?.exams ?? []).map((exam) => (
-                <option key={exam.id} value={exam.id}>
-                  {exam.examGroup.name} · {exam.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="flex items-end">
+        <CmsIconTabs
+          ariaLabel="Report categories"
+          value={tab}
+          onChange={(key) => {
+            setTab(key);
+            setCatalogOpen(true);
+          }}
+          columnsClass="grid-cols-2 sm:grid-cols-4"
+          items={reportTabItems}
+        />
+
+        <section className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-3">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex size-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                <FilterAltOutlined sx={{ fontSize: 18 }} />
+              </span>
+              <div>
+                <p className="text-sm font-semibold text-slate-900">Filters</p>
+                <p className="text-xs text-slate-500">
+                  {hub?.currentSession ? `Session: ${hub.currentSession.name}` : "No current session set"}
+                </p>
+              </div>
+            </div>
             <button
-              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:opacity-60"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500 disabled:opacity-60"
               type="button"
               disabled={loading}
-              onClick={() => void runCore()}
+              onClick={runSelected}
             >
               <PlayArrowOutlined sx={{ fontSize: 18 }} />
-              {loading ? "Running…" : "Run selected report"}
+              {loading ? "Running…" : "Run selected"}
             </button>
           </div>
-        </div>
-      </section>
-
-      <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {(hub?.coreReports ?? []).map((item) => {
-          const style = REPORT_CARD_STYLE[item.key];
-          const Icon = style.icon;
-          const isSelected = selectedCore === item.key && Boolean(coreData);
-          return (
-            <button
-              key={item.key}
-              type="button"
-              onClick={() => void runCore(item.key)}
-              className={`rounded-2xl border p-5 text-left transition ${style.card} ${
-                isSelected ? style.selected : ""
-              }`}
-            >
-              <div className="flex items-start gap-3">
-                <span className={`inline-flex size-11 shrink-0 items-center justify-center rounded-xl ${style.iconWrap}`}>
-                  <Icon sx={{ fontSize: 22 }} />
-                </span>
-                <div className="min-w-0">
-                  <p className="font-semibold text-slate-900">{item.label}</p>
-                  <p className="mt-1 text-sm text-slate-600">{item.description}</p>
-                  {item.needsExam ? (
-                    <span className={`mt-3 inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${style.badge}`}>
-                      Needs exam
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-            </button>
-          );
-        })}
-      </section>
-
-      {coreData ? <CoreReportView data={coreData} metaLabel={selectedMeta?.label} /> : null}
-
-      <section className="mt-10 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex items-center gap-3 border-b border-slate-100 bg-slate-50 px-5 py-4">
-          <span className="inline-flex size-10 items-center justify-center rounded-xl bg-slate-200 text-slate-700">
-            <AssessmentOutlined sx={{ fontSize: 20 }} />
-          </span>
-          <div>
-            <h2 className="text-lg font-semibold text-slate-900">More module reports</h2>
-            <p className="text-sm text-slate-500">Extra module-level extracts for deeper dumps.</p>
-          </div>
-        </div>
-        <div className="grid gap-3 p-5 sm:grid-cols-2 xl:grid-cols-4">
-          {(hub?.modules ?? []).map((item) => {
-            const style = MODULE_CARD_STYLE[item.key];
-            const Icon = style.icon;
-            const active = module === item.key;
-            return (
-              <button
-                key={item.key}
-                type="button"
-                className={`rounded-xl border p-4 text-left transition ${style.card} ${
-                  active ? "ring-2 ring-indigo-200" : "hover:brightness-95"
-                }`}
-                onClick={() => void runModule(item.key)}
+          <div className="grid gap-3 p-4 sm:grid-cols-3">
+            <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              From
+              <input
+                className="input mt-1"
+                type="date"
+                value={filters.from}
+                onChange={(e) => setFilters({ ...filters, from: e.target.value })}
+              />
+            </label>
+            <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              To
+              <input
+                className="input mt-1"
+                type="date"
+                value={filters.to}
+                onChange={(e) => setFilters({ ...filters, to: e.target.value })}
+              />
+            </label>
+            <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Exam (core rank only)
+              <select
+                className="input mt-1"
+                value={filters.examId}
+                onChange={(e) => setFilters({ ...filters, examId: e.target.value })}
               >
-                <span className={`mb-3 inline-flex size-9 items-center justify-center rounded-lg ${style.wrap}`}>
-                  <Icon sx={{ fontSize: 18 }} />
-                </span>
-                <p className="font-semibold text-slate-900">{item.label}</p>
-              </button>
-            );
-          })}
-        </div>
-        {module && moduleData ? <ModuleDump module={module} data={moduleData} /> : null}
-      </section>
+                <option value="">Select exam</option>
+                {(hub?.exams ?? []).map((exam) => (
+                  <option key={exam.id} value={exam.id}>
+                    {exam.examGroup.name} · {exam.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </section>
+
+        {coreData && tab !== "modules" ? (
+          <div ref={resultsRef} className="scroll-mt-4">
+            <CoreReportView
+              data={coreData}
+              metaLabel={
+                selectedFeeReport
+                  ? hub?.feeReports?.find((r) => r.key === selectedFeeReport)?.label
+                  : selectedStudentReport
+                    ? hub?.studentReports?.find((r) => r.key === selectedStudentReport)?.label
+                    : selectedMeta?.label
+              }
+            />
+          </div>
+        ) : null}
+
+        {tab !== "modules" ? (
+          <section className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <button
+              type="button"
+              className="flex w-full items-center justify-between gap-3 px-5 py-3.5 text-left hover:bg-slate-50"
+              onClick={() => setCatalogOpen((open) => !open)}
+            >
+              <div>
+                <p className="text-sm font-semibold text-slate-900">
+                  {tab === "students"
+                    ? "Choose student report"
+                    : tab === "fees"
+                      ? "Choose fee report"
+                      : "Choose core report"}
+                </p>
+                <p className="text-xs text-slate-500">
+                  {coreData
+                    ? catalogOpen
+                      ? "Pick another report, or collapse this list"
+                      : "Report ready above — expand to pick another"
+                    : "Select a report to run"}
+                </p>
+              </div>
+              {catalogOpen ? (
+                <ExpandLessOutlined className="text-slate-500" />
+              ) : (
+                <ExpandMoreOutlined className="text-slate-500" />
+              )}
+            </button>
+
+            {catalogOpen ? (
+              <div className="border-t border-slate-100">
+                {tab === "core" ? (
+                  <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">
+                    {(hub?.coreReports ?? []).map((item) => {
+                      const style = REPORT_CARD_STYLE[item.key];
+                      const Icon = style.icon;
+                      const isSelected =
+                        selectedCore === item.key &&
+                        Boolean(coreData) &&
+                        !selectedStudentReport &&
+                        !selectedFeeReport;
+                      return (
+                        <button
+                          key={item.key}
+                          type="button"
+                          onClick={() => void runCore(item.key)}
+                          className={`rounded-2xl border bg-white p-4 text-left transition hover:border-slate-300 ${
+                            isSelected
+                              ? "border-indigo-400 ring-2 ring-indigo-100"
+                              : "border-slate-200"
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <span
+                              className={`inline-flex size-10 shrink-0 items-center justify-center rounded-xl ${style.iconWrap}`}
+                            >
+                              <Icon sx={{ fontSize: 20 }} />
+                            </span>
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-slate-900">{item.label}</p>
+                              <p className="mt-0.5 text-xs text-slate-500">{item.description}</p>
+                              {item.needsExam ? (
+                                <span className="mt-2 inline-flex rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold text-indigo-700">
+                                  Needs exam
+                                </span>
+                              ) : null}
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+
+                {tab === "students" ? (
+                  <div className="grid gap-0 lg:grid-cols-2">
+                    {STUDENT_REPORT_GROUPS.map((group) => {
+                      const rows = group.keys
+                        .map((key) => studentReportMap.get(key))
+                        .filter(Boolean) as Array<{
+                        key: string;
+                        label: string;
+                        description: string;
+                      }>;
+                      if (!rows.length) return null;
+                      return (
+                        <div
+                          key={group.title}
+                          className="border-b border-slate-100 lg:[&:nth-child(odd)]:border-r"
+                        >
+                          <div className="bg-slate-50 px-5 py-2.5 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                            {group.title}
+                          </div>
+                          <div className="divide-y divide-slate-100">
+                            {rows.map((item) => {
+                              const style = STUDENT_REPORT_STYLE[item.key] ?? {
+                                icon: AssessmentOutlined,
+                                tone: "bg-slate-100 text-slate-600",
+                              };
+                              const Icon = style.icon;
+                              const isSelected =
+                                selectedStudentReport === item.key && Boolean(coreData);
+                              return (
+                                <button
+                                  key={item.key}
+                                  type="button"
+                                  onClick={() => void runStudentReport(item.key)}
+                                  className={`flex w-full items-center gap-3 px-5 py-3 text-left transition hover:bg-slate-50 ${
+                                    isSelected ? "bg-indigo-50/70" : "bg-white"
+                                  }`}
+                                >
+                                  <span
+                                    className={`inline-flex size-9 shrink-0 items-center justify-center rounded-lg ${style.tone}`}
+                                  >
+                                    <Icon sx={{ fontSize: 18 }} />
+                                  </span>
+                                  <span className="min-w-0 flex-1">
+                                    <span className="block text-sm font-semibold text-slate-900">
+                                      {item.label.replace(/ Report$/i, "")}
+                                    </span>
+                                    <span className="block truncate text-xs text-slate-500">
+                                      {item.description}
+                                    </span>
+                                  </span>
+                                  {isSelected ? (
+                                    <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-bold uppercase text-indigo-700">
+                                      Active
+                                    </span>
+                                  ) : null}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
+
+                {tab === "fees" ? (
+                  <div className="grid gap-0 lg:grid-cols-2">
+                    {FEE_REPORT_GROUPS.map((group) => {
+                      const rows = group.keys
+                        .map((key) => feeReportMap.get(key))
+                        .filter(Boolean) as Array<{
+                        key: string;
+                        label: string;
+                        description: string;
+                      }>;
+                      if (!rows.length) return null;
+                      return (
+                        <div
+                          key={group.title}
+                          className="border-b border-slate-100 lg:[&:nth-child(odd)]:border-r"
+                        >
+                          <div className="bg-slate-50 px-5 py-2.5 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                            {group.title}
+                          </div>
+                          <div className="divide-y divide-slate-100">
+                            {rows.map((item) => {
+                              const style = FEE_REPORT_STYLE[item.key] ?? {
+                                icon: AssessmentOutlined,
+                                tone: "bg-slate-100 text-slate-600",
+                              };
+                              const Icon = style.icon;
+                              const isSelected =
+                                selectedFeeReport === item.key && Boolean(coreData);
+                              return (
+                                <button
+                                  key={item.key}
+                                  type="button"
+                                  onClick={() => void runFeeReport(item.key)}
+                                  className={`flex w-full items-center gap-3 px-5 py-3 text-left transition hover:bg-slate-50 ${
+                                    isSelected ? "bg-indigo-50/70" : "bg-white"
+                                  }`}
+                                >
+                                  <span
+                                    className={`inline-flex size-9 shrink-0 items-center justify-center rounded-lg ${style.tone}`}
+                                  >
+                                    <Icon sx={{ fontSize: 18 }} />
+                                  </span>
+                                  <span className="min-w-0 flex-1">
+                                    <span className="block text-sm font-semibold text-slate-900">
+                                      {item.label.replace(/ Report$/i, "")}
+                                    </span>
+                                    <span className="block truncate text-xs text-slate-500">
+                                      {item.description}
+                                    </span>
+                                  </span>
+                                  {isSelected ? (
+                                    <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-bold uppercase text-indigo-700">
+                                      Active
+                                    </span>
+                                  ) : null}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+
+        {tab === "modules" ? (
+          <section className="mt-5 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="border-b border-slate-100 px-5 py-4">
+              <h2 className="text-base font-semibold text-slate-900">Module dumps</h2>
+              <p className="mt-0.5 text-sm text-slate-500">
+                Raw module extracts for deeper data pulls.
+              </p>
+            </div>
+            <div className="grid gap-2 p-4 sm:grid-cols-2 xl:grid-cols-4">
+              {(hub?.modules ?? []).map((item) => {
+                const style = MODULE_CARD_STYLE[item.key];
+                const Icon = style.icon;
+                const active = module === item.key;
+                return (
+                  <button
+                    key={item.key}
+                    type="button"
+                    className={`flex items-center gap-3 rounded-xl border px-3 py-3 text-left transition ${
+                      active
+                        ? "border-indigo-300 bg-indigo-50 ring-2 ring-indigo-100"
+                        : "border-slate-200 bg-white hover:border-slate-300"
+                    }`}
+                    onClick={() => void runModule(item.key)}
+                  >
+                    <span
+                      className={`inline-flex size-9 items-center justify-center rounded-lg ${style.wrap}`}
+                    >
+                      <Icon sx={{ fontSize: 18 }} />
+                    </span>
+                    <p className="text-sm font-semibold text-slate-900">{item.label}</p>
+                  </button>
+                );
+              })}
+            </div>
+            {module && moduleData ? <ModuleDump module={module} data={moduleData} /> : null}
+          </section>
+        ) : null}
       </div>
     </main>
   );
 }
 
 function CoreReportView({ data, metaLabel }: { data: CoreReportResult; metaLabel?: string }) {
-  const style = REPORT_CARD_STYLE[data.reportKey];
-  const Icon = style.icon;
+  const coreStyle = REPORT_CARD_STYLE[data.reportKey as CoreReportKey];
+  const studentStyle = STUDENT_REPORT_STYLE[data.reportKey];
+  const feeStyle = FEE_REPORT_STYLE[data.reportKey];
+  const Icon = coreStyle?.icon ?? studentStyle?.icon ?? feeStyle?.icon ?? AssessmentOutlined;
+  const iconWrap =
+    coreStyle?.iconWrap ?? studentStyle?.tone ?? feeStyle?.tone ?? "bg-slate-100 text-slate-700";
+  const headerTone = coreStyle?.card ?? "border-slate-100 bg-slate-50";
   const summaryEntries = Object.entries(data.summary ?? {}).filter(
     ([, value]) => typeof value !== "object",
   );
   const columns = data.rows[0]
     ? Object.keys(data.rows[0]).filter((key) => !HIDDEN_COLUMNS.has(key))
     : [];
+  const canDownload = Boolean(columns.length || summaryEntries.length);
 
   return (
-    <section className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <div className={`flex flex-wrap items-start justify-between gap-4 border-b px-5 py-4 ${style.card}`}>
+    <section className="mt-5 overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-md">
+      <div
+        className={`sticky top-0 z-20 flex flex-wrap items-start justify-between gap-4 border-b px-5 py-4 backdrop-blur ${headerTone}`}
+      >
         <div className="flex items-start gap-3">
-          <span className={`inline-flex size-11 items-center justify-center rounded-xl ${style.iconWrap}`}>
+          <span className={`inline-flex size-11 items-center justify-center rounded-xl ${iconWrap}`}>
             <Icon sx={{ fontSize: 22 }} />
           </span>
           <div>
@@ -520,7 +1020,7 @@ function CoreReportView({ data, metaLabel }: { data: CoreReportResult; metaLabel
           <button
             type="button"
             className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-500 disabled:opacity-50"
-            disabled={!data.rows.length}
+            disabled={!canDownload}
             onClick={() => downloadCoreReportCsv(data)}
           >
             <DownloadOutlined sx={{ fontSize: 18 }} />

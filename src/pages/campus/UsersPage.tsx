@@ -6,11 +6,13 @@ import {
   EditOutlined,
   GroupsOutlined,
   LockOutlined,
+  PeopleOutlined,
   ShieldOutlined,
   VerifiedUserOutlined,
 } from "@mui/icons-material";
 import { useAuth } from "../../auth/AuthContext";
-import { CmsFooter, CmsPage, CmsPageHeader, CmsTab, CmsTabs } from "../../components/cms/CmsLayout";
+import { CmsFooter, CmsPage, CmsPageHeader } from "../../components/cms/CmsLayout";
+import { CmsIconTabs } from "../../components/cms/CmsIconTabs";
 import { InitialsAvatar } from "../../components/InitialsAvatar";
 import { confirmDelete } from "../../lib/confirm";
 import { apiRequest } from "../../lib/api";
@@ -185,26 +187,29 @@ export function UsersPage() {
           })}
         </div>
 
-        <CmsTabs>
-          <CmsTab
-            active={tab === "users"}
-            onClick={() => {
-              setTab("users");
-              setMode("view");
-            }}
-          >
-            Users ({users.length})
-          </CmsTab>
-          <CmsTab
-            active={tab === "roles"}
-            onClick={() => {
-              setTab("roles");
-              setMode("view");
-            }}
-          >
-            Roles ({roles.length})
-          </CmsTab>
-        </CmsTabs>
+        <CmsIconTabs
+          ariaLabel="Users sections"
+          value={tab}
+          onChange={(key) => {
+            setTab(key);
+            setMode("view");
+          }}
+          columnsClass="grid-cols-2"
+          items={[
+            {
+              key: "users",
+              label: `Users (${users.length})`,
+              icon: PeopleOutlined,
+              tone: "indigo",
+            },
+            {
+              key: "roles",
+              label: `Roles (${roles.length})`,
+              icon: AdminPanelSettingsOutlined,
+              tone: "violet",
+            },
+          ]}
+        />
 
         {tab === "users" ? (
           <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[minmax(280px,0.95fr)_minmax(340px,1.15fr)]">

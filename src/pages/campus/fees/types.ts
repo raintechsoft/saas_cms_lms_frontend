@@ -7,10 +7,16 @@ export interface FeeType extends Named {
   code: string | null;
   description?: string | null;
   isActive?: boolean;
+  canDelete?: boolean;
+  masterCount?: number;
+  groupCount?: number;
 }
 
 export interface FeeGroup extends Named {
   items: Array<{ feeType: FeeType }>;
+  canDelete?: boolean;
+  masterCount?: number;
+  collectedPaymentCount?: number;
 }
 
 export interface Student {
@@ -23,6 +29,8 @@ export interface Student {
   motherPhone?: string | null;
   parentContact?: string | null;
   rteEnabled?: boolean;
+  siblingGroupId?: string | null;
+  photoUrl?: string | null;
 }
 
 export interface Enrollment {
@@ -43,6 +51,7 @@ export interface FeeMaster {
   dueDate: string;
   createdAt?: string;
   isCustom?: boolean;
+  sortOrder?: number;
   fineType?: "NONE" | "FIXED" | "PERCENTAGE" | "PER_DAY" | "DATE_RANGE";
   fineValue?: string;
   graceDays?: number;
@@ -57,6 +66,41 @@ export interface FeeMaster {
   feeGroup: FeeGroup;
   classSection: ClassSection | null;
   _count: { assignments: number };
+}
+
+export interface FeeMasterAssignCandidate {
+  enrollmentId: string;
+  student: Student & { status?: string };
+  classSection: {
+    academicClass: Named;
+    section: Named;
+  } | null;
+  assigned: boolean;
+  assignmentId: string | null;
+  collected: boolean;
+  disabled: boolean;
+  canSelect: boolean;
+  selected: boolean;
+  lockReason: "COLLECTED" | "DISABLED" | null;
+}
+
+export interface FeeMasterAssignPreview {
+  master: {
+    id: string;
+    amount: string;
+    dueDate: string;
+    feeType: FeeType;
+    feeGroup: FeeGroup;
+    classSection: ClassSection | null;
+  };
+  students: FeeMasterAssignCandidate[];
+  summary: {
+    total: number;
+    selectable: number;
+    assigned: number;
+    collected: number;
+    disabled: number;
+  };
 }
 
 export interface FeeDiscount extends Named {
@@ -112,8 +156,27 @@ export interface StudentFees {
   student: Student;
   assignments: Array<{
     id: string;
-    feeMaster: { feeType: FeeType; dueDate: string };
+    feeMaster: {
+      feeType: FeeType;
+      feeGroup?: FeeGroup;
+      dueDate: string;
+      sortOrder?: number;
+      amount?: string;
+    };
+    discount?: FeeDiscount | null;
     totals: { base: number; discount: number; fine: number; paid: number; balance: number };
+    paymentItems?: Array<{
+      id: string;
+      paidAmount: string;
+      payment: { id: string; receiptNumber: string; status: string; paymentDate: string };
+    }>;
+    enrollment?: {
+      id: string;
+      classSection?: {
+        academicClass: Named;
+        section: Named;
+      } | null;
+    };
   }>;
   totals: { base: number; discount: number; fine: number; paid: number; balance: number };
 }
@@ -139,7 +202,11 @@ export interface Payment {
 
 export interface FeeDue {
   id: string;
-  feeMaster: { feeType: FeeType; dueDate: string };
+  feeMaster: {
+    feeType: FeeType;
+    feeGroup?: FeeGroup;
+    dueDate: string;
+  };
   totals: { base: number; discount: number; fine: number; paid: number; balance: number };
   student: Student;
 }
@@ -158,6 +225,7 @@ export interface StudentDetail {
 }
 
 export type FeesTab =
+  | "collect"
   | "dues"
   | "search"
   | "carry"

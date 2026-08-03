@@ -1,7 +1,24 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { CloseOutlined, EventOutlined } from "@mui/icons-material";
+import {
+  AssessmentOutlined,
+  AutoStoriesOutlined,
+  BadgeOutlined,
+  CalendarMonthOutlined,
+  CategoryOutlined,
+  CloseOutlined,
+  EventOutlined,
+  GroupsOutlined,
+  MenuBookOutlined,
+  PersonSearchOutlined,
+  SchoolOutlined,
+  SwapHorizOutlined,
+  UpgradeOutlined,
+  ViewWeekOutlined,
+  WorkspacePremiumOutlined,
+} from "@mui/icons-material";
 import { useAuth } from "../../auth/AuthContext";
-import { CmsFooter, CmsPage, CmsPageHeader, CmsScrollBody, CmsTab, CmsTabs } from "../../components/cms/CmsLayout";
+import { CmsFooter, CmsPage, CmsPageHeader, CmsScrollBody } from "../../components/cms/CmsLayout";
+import { CmsIconTabs, type CmsIconTabItem } from "../../components/cms/CmsIconTabs";
 import { apiRequest } from "../../lib/api";
 import { notifyError, notifySuccess } from "../../lib/notify";
 import { AcademicReportsPanel } from "./academics/AcademicReportsPanel";
@@ -17,17 +34,75 @@ import { TeacherTimetablePanel } from "./academics/TeacherTimetablePanel";
 import type { AcademicSetup, AcademicsTab } from "./academics/types";
 import { headerForTab } from "./academics/utils";
 
-const TABS: Array<[AcademicsTab, string]> = [
-  ["classes", "Classes & Sections"],
-  ["subjects", "Subjects"],
-  ["subject-groups", "Subject Groups"],
-  ["class-timetable", "Class Timetable"],
-  ["electives", "Elective Subjects"],
-  ["teacher-timetable", "Teacher Timetable"],
-  ["promote", "Promote Students"],
-  ["scholars", "School Scholars"],
-  ["bulk-update", "Bulk Update"],
-  ["reports", "Reports"],
+const TABS: Array<CmsIconTabItem<AcademicsTab>> = [
+  { key: "sections", label: "Sections", shortLabel: "Sections", icon: ViewWeekOutlined, tone: "sky" },
+  { key: "classes", label: "Class", shortLabel: "Class", icon: SchoolOutlined, tone: "indigo" },
+  {
+    key: "incharge",
+    label: "Assign Class Incharge",
+    shortLabel: "Class Incharge",
+    icon: BadgeOutlined,
+    tone: "violet",
+  },
+  {
+    key: "elective-categories",
+    label: "Elective Subject Category",
+    shortLabel: "Elective Category",
+    icon: CategoryOutlined,
+    tone: "fuchsia",
+  },
+  { key: "subjects", label: "Subjects", shortLabel: "Subjects", icon: MenuBookOutlined, tone: "blue" },
+  {
+    key: "subject-groups",
+    label: "Subject Group",
+    shortLabel: "Subject Group",
+    icon: AutoStoriesOutlined,
+    tone: "cyan",
+  },
+  {
+    key: "assign-electives",
+    label: "Assign Elective Subjects",
+    shortLabel: "Assign Electives",
+    icon: GroupsOutlined,
+    tone: "teal",
+  },
+  {
+    key: "class-timetable",
+    label: "Class Timetable",
+    shortLabel: "Class Timetable",
+    icon: CalendarMonthOutlined,
+    tone: "amber",
+  },
+  {
+    key: "teacher-timetable",
+    label: "Teachers Timetable",
+    shortLabel: "Teacher Timetable",
+    icon: EventOutlined,
+    tone: "orange",
+  },
+  { key: "promote", label: "Promote Students", shortLabel: "Promote", icon: UpgradeOutlined, tone: "emerald" },
+  {
+    key: "scholars",
+    label: "School Scholars",
+    shortLabel: "Scholars",
+    icon: WorkspacePremiumOutlined,
+    tone: "rose",
+  },
+  {
+    key: "student-details",
+    label: "Update Student Details",
+    shortLabel: "Student Details",
+    icon: PersonSearchOutlined,
+    tone: "slate",
+  },
+  {
+    key: "section-update",
+    label: "Std Section Update",
+    shortLabel: "Section Update",
+    icon: SwapHorizOutlined,
+    tone: "lime",
+  },
+  { key: "reports", label: "Reports", shortLabel: "Reports", icon: AssessmentOutlined, tone: "purple" },
 ];
 
 const defaultSessionForm = {
@@ -42,7 +117,7 @@ export function AcademicsPage() {
   const canManageSessions = Boolean(user?.permissions.includes("sessions.manage"));
   const [setup, setSetup] = useState<AcademicSetup | null>(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<AcademicsTab>("classes");
+  const [tab, setTab] = useState<AcademicsTab>("sections");
 
   const [sessionModalOpen, setSessionModalOpen] = useState(false);
   const [sessionForm, setSessionForm] = useState(defaultSessionForm);
@@ -129,21 +204,28 @@ export function AcademicsPage() {
     <CmsPage>
       <CmsPageHeader title={header.title} description={header.description} actions={headerActions} />
 
-      <CmsTabs>
-        {TABS.map(([key, label]) => (
-          <CmsTab key={key} active={tab === key} onClick={() => setTab(key)}>
-            {label}
-          </CmsTab>
-        ))}
-      </CmsTabs>
+      <CmsIconTabs
+        ariaLabel="Academics sections"
+        value={tab}
+        onChange={setTab}
+        columnsClass="grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-7"
+        items={TABS}
+      />
 
       <CmsScrollBody>
         {!setup ? (
           <p className="mt-8 text-center text-sm text-slate-500">{loading ? "Loading academics…" : "Unable to load academics."}</p>
         ) : (
           <>
-            {tab === "classes" ? (
-              <ClassesSectionsPanel setup={setup} token={accessToken} canManage={canManage} onSaved={load} onError={notifyError} />
+            {tab === "sections" || tab === "classes" || tab === "incharge" ? (
+              <ClassesSectionsPanel
+                setup={setup}
+                token={accessToken}
+                canManage={canManage}
+                focus={tab}
+                onSaved={load}
+                onError={notifyError}
+              />
             ) : null}
             {tab === "subjects" ? (
               <SubjectsPanel setup={setup} token={accessToken} canManage={canManage} onSaved={load} onError={notifyError} />
@@ -154,8 +236,15 @@ export function AcademicsPage() {
             {tab === "class-timetable" ? (
               <ClassTimetablePanel setup={setup} token={accessToken} canManage={canManage} onError={notifyError} />
             ) : null}
-            {tab === "electives" ? (
-              <ElectiveSubjectsPanel setup={setup} token={accessToken} canManage={canManage} onSaved={load} onError={notifyError} />
+            {tab === "elective-categories" || tab === "assign-electives" ? (
+              <ElectiveSubjectsPanel
+                setup={setup}
+                token={accessToken}
+                canManage={canManage}
+                focus={tab === "elective-categories" ? "categories" : "assign"}
+                onSaved={load}
+                onError={notifyError}
+              />
             ) : null}
             {tab === "teacher-timetable" ? (
               <TeacherTimetablePanel setup={setup} token={accessToken} onError={notifyError} />
@@ -166,8 +255,15 @@ export function AcademicsPage() {
             {tab === "scholars" ? (
               <SchoolScholarsPanel setup={setup} token={accessToken} canManage={canManage} onError={notifyError} />
             ) : null}
-            {tab === "bulk-update" ? (
-              <BulkUpdatePanel setup={setup} token={accessToken} canManage={canManage} onSaved={load} onError={notifyError} />
+            {tab === "student-details" || tab === "section-update" ? (
+              <BulkUpdatePanel
+                setup={setup}
+                token={accessToken}
+                canManage={canManage}
+                focus={tab === "student-details" ? "details" : "section"}
+                onSaved={load}
+                onError={notifyError}
+              />
             ) : null}
             {tab === "reports" ? (
               <AcademicReportsPanel setup={setup} token={accessToken} onError={notifyError} />

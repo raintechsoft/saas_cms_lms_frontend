@@ -55,11 +55,43 @@ export function DiscountsPanel({
   const [className, setClassName] = useState("");
   const [sectionName, setSectionName] = useState("");
   const [studentSearch, setStudentSearch] = useState("");
+  const [searched, setSearched] = useState(false);
+  const [appliedClassName, setAppliedClassName] = useState("");
+  const [appliedSectionName, setAppliedSectionName] = useState("");
+  const [appliedStudentSearch, setAppliedStudentSearch] = useState("");
   const [selectedStudentIds, setSelectedStudentIds] = useState<Record<string, boolean>>({});
+  const [includeSiblings, setIncludeSiblings] = useState(true);
   const [assigning, setAssigning] = useState(false);
 
   const rows = useMemo(() => setup.discounts, [setup.discounts]);
   const pageRows = useMemo(() => paginateItems(rows, page, PAGE_SIZE), [rows, page]);
+
+  const allSessionStudents = useMemo(() => {
+    const list: Array<Student & { roll: string; rte: boolean; classLabel: string }> = [];
+    const seen = new Set<string>();
+    setup.classSections.forEach((cs) => {
+      cs.enrollments.forEach(({ student }) => {
+        if (seen.has(student.id)) return;
+        seen.add(student.id);
+        list.push({
+          ...student,
+          roll: student.admissionNumber,
+          rte: Boolean(student.rteEnabled),
+          classLabel: `${cs.academicClass.name} - ${cs.section.name}`,
+        });
+      });
+    });
+    return list;
+  }, [setup.classSections]);
+
+  const siblingCountByGroup = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const student of allSessionStudents) {
+      if (!student.siblingGroupId) continue;
+      counts.set(student.siblingGroupId, (counts.get(student.siblingGroupId) ?? 0) + 1);
+    }
+    return counts;
+  }, [allSessionStudents]);
 
   const classOptions = useMemo(
     () => [...new Set(setup.classSections.map((cs) => cs.academicClass.name))].sort(),
@@ -73,11 +105,12 @@ export function DiscountsPanel({
   }, [setup.classSections, className]);
 
   const assignStudents = useMemo(() => {
-    const list: Array<Student & { roll: string; rte: boolean }> = [];
+    if (!searched) return [];
+    const list: Array<Student & { roll: string; rte: boolean; classLabel: string }> = [];
     const seen = new Set<string>();
     setup.classSections.forEach((cs) => {
-      if (className && cs.academicClass.name !== className) return;
-      if (sectionName && cs.section.name !== sectionName) return;
+      if (appliedClassName && cs.academicClass.name !== appliedClassName) return;
+      if (appliedSectionName && cs.section.name !== appliedSectionName) return;
       cs.enrollments.forEach(({ student }) => {
         if (seen.has(student.id)) return;
         seen.add(student.id);
@@ -85,17 +118,53 @@ export function DiscountsPanel({
           ...student,
           roll: student.admissionNumber,
           rte: Boolean(student.rteEnabled),
+          classLabel: `${cs.academicClass.name} - ${cs.section.name}`,
         });
       });
     });
-    const q = studentSearch.trim().toLowerCase();
+    const q = appliedStudentSearch.trim().toLowerCase();
     if (!q) return list;
     return list.filter(
       (s) =>
         studentDisplayName(s).toLowerCase().includes(q) ||
         s.admissionNumber.toLowerCase().includes(q),
     );
-  }, [setup.classSections, className, sectionName, studentSearch]);
+  }, [
+    setup.classSections,
+    searched,
+    appliedClassName,
+    appliedSectionName,
+    appliedStudentSearch,
+  ]);
+
+  function expandWithSiblings(studentIds: string[]) {
+    if (!includeSiblings) return [...new Set(studentIds)];
+    const selected = new Set(studentIds);
+    const groups = new Set(
+      allSessionStudents
+        .filter((s) => selected.has(s.id) && s.siblingGroupId)
+        .map((s) => s.siblingGroupId as string),
+    );
+    for (const student of allSessionStudents) {
+      if (student.siblingGroupId && groups.has(student.siblingGroupId)) {
+        selected.add(student.id);
+      }
+    }
+    return [...selected];
+  }
+
+  function selectSiblingsFor(student: Student) {
+    if (!student.siblingGroupId) {
+      onError("This student has no linked siblings");
+      return;
+    }
+    const next = { ...selectedStudentIds };
+    allSessionStudents.forEach((s) => {
+      if (s.siblingGroupId === student.siblingGroupId) next[s.id] = true;
+    });
+    setSelectedStudentIds(next);
+    notifySuccess("Linked siblings selected");
+  }
 
   useEffect(() => {
     const maxPage = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
@@ -129,8 +198,21 @@ export function DiscountsPanel({
     setClassName(classOptions[0] ?? "");
     setSectionName("");
     setStudentSearch("");
+    setSearched(false);
+    setAppliedClassName("");
+    setAppliedSectionName("");
+    setAppliedStudentSearch("");
     setSelectedStudentIds({});
+    setIncludeSiblings(true);
     setShowAssign(true);
+  }
+
+  function runAssignSearch() {
+    setAppliedClassName(className);
+    setAppliedSectionName(sectionName);
+    setAppliedStudentSearch(studentSearch);
+    setSearched(true);
+    setSelectedStudentIds({});
   }
 
   function startEdit(item: FeeDiscount) {
@@ -200,9 +282,15 @@ export function DiscountsPanel({
       onError("Select a discount to assign");
       return;
     }
-    const ids = Object.entries(selectedStudentIds)
-      .filter(([, on]) => on)
-      .map(([id]) => id);
+    if (!searched) {
+      onError("Select class/section and click Search first");
+      return;
+    }
+    const ids = expandWithSiblings(
+      Object.entries(selectedStudentIds)
+        .filter(([, on]) => on)
+        .map(([id]) => id),
+    );
     if (!ids.length) {
       onError("Select at least one student");
       return;
@@ -224,7 +312,7 @@ export function DiscountsPanel({
       }
       notifySuccess(
         applied
-          ? `Discount applied to ${applied} fee assignment(s)`
+          ? `Discount applied to ${applied} fee assignment(s) across ${ids.length} student(s)`
           : "No fee assignments found for selected students",
       );
       setShowAssign(false);
@@ -377,9 +465,9 @@ export function DiscountsPanel({
           <div className="flex w-full max-w-3xl max-h-[min(92vh,820px)] flex-col overflow-hidden rounded-xl bg-white shadow-xl">
             <div className="flex shrink-0 items-start justify-between border-b border-slate-100 px-5 py-4">
               <div>
-                <h3 className="text-[18px] font-bold text-slate-900">Assign Discount</h3>
+                <h3 className="text-[18px] font-bold text-slate-900">Assign / View Discount</h3>
                 <p className="mt-1 text-[13px] text-slate-500">
-                  Bulk assign selected discounts to students across classes.
+                  Select class and section, click Search, then choose students and save.
                 </p>
               </div>
               <button
@@ -419,6 +507,7 @@ export function DiscountsPanel({
                     onChange={(e) => {
                       setClassName(e.target.value);
                       setSectionName("");
+                      setSearched(false);
                     }}
                   >
                     <option value="">All Classes</option>
@@ -434,7 +523,10 @@ export function DiscountsPanel({
                   <select
                     className="nx-input"
                     value={sectionName}
-                    onChange={(e) => setSectionName(e.target.value)}
+                    onChange={(e) => {
+                      setSectionName(e.target.value);
+                      setSearched(false);
+                    }}
                   >
                     <option value="">All Sections</option>
                     {sectionOptions.map((nameOption) => (
@@ -445,18 +537,48 @@ export function DiscountsPanel({
                   </select>
                 </label>
               </div>
-              <div className="relative">
-                <SearchOutlined
-                  sx={{ fontSize: 18 }}
-                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-                />
-                <input
-                  className="nx-input pl-10"
-                  placeholder="Name or roll no..."
-                  value={studentSearch}
-                  onChange={(e) => setStudentSearch(e.target.value)}
-                />
+              <div className="flex flex-wrap items-end gap-3">
+                <label className="min-w-[220px] flex-1">
+                  <span className="nx-label">Name / roll (optional)</span>
+                  <div className="relative">
+                    <SearchOutlined
+                      sx={{ fontSize: 18 }}
+                      className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                    />
+                    <input
+                      className="nx-input pl-10"
+                      placeholder="Name or roll no..."
+                      value={studentSearch}
+                      onChange={(e) => {
+                        setStudentSearch(e.target.value);
+                        setSearched(false);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          runAssignSearch();
+                        }
+                      }}
+                    />
+                  </div>
+                </label>
+                <button type="button" className="nx-btn-primary !py-2.5" onClick={runAssignSearch}>
+                  <SearchOutlined sx={{ fontSize: 16 }} />
+                  Search
+                </button>
               </div>
+              <label className="flex items-start gap-2 text-[13px] text-slate-600">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 size-4 accent-[#6366f1]"
+                  checked={includeSiblings}
+                  onChange={(e) => setIncludeSiblings(e.target.checked)}
+                />
+                <span>
+                  Also assign to linked siblings (students sharing a sibling group, even in another
+                  class)
+                </span>
+              </label>
             </div>
 
             <div className="min-h-0 flex-1 overflow-auto">
@@ -467,6 +589,7 @@ export function DiscountsPanel({
                       <input
                         type="checkbox"
                         checked={allStudentsChecked}
+                        disabled={!searched || !pageStudentIds.length}
                         onChange={(e) => {
                           const next = { ...selectedStudentIds };
                           pageStudentIds.forEach((id) => {
@@ -478,42 +601,72 @@ export function DiscountsPanel({
                     </th>
                     <th>Student Name</th>
                     <th>Roll Number</th>
-                    <th>RTE Applicable</th>
+                    <th>Class</th>
+                    <th>RTE</th>
+                    <th>Siblings</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {assignStudents.map((student) => (
-                    <tr key={student.id}>
-                      <td>
-                        <input
-                          type="checkbox"
-                          checked={!!selectedStudentIds[student.id]}
-                          onChange={(e) =>
-                            setSelectedStudentIds({
-                              ...selectedStudentIds,
-                              [student.id]: e.target.checked,
-                            })
-                          }
-                        />
-                      </td>
-                      <td className="font-semibold text-slate-900">
-                        {studentDisplayName(student)}
-                      </td>
-                      <td className="font-mono text-[12px] text-slate-600">{student.roll}</td>
-                      <td>
-                        <span
-                          className={
-                            student.rte ? "nx-pill nx-pill-success" : "nx-pill nx-pill-neutral"
-                          }
-                        >
-                          {student.rte ? "Yes" : "No"}
-                        </span>
+                  {assignStudents.map((student) => {
+                    const siblingTotal = student.siblingGroupId
+                      ? (siblingCountByGroup.get(student.siblingGroupId) ?? 0)
+                      : 0;
+                    const hasSiblings = siblingTotal > 1;
+                    return (
+                      <tr key={student.id}>
+                        <td>
+                          <input
+                            type="checkbox"
+                            checked={!!selectedStudentIds[student.id]}
+                            onChange={(e) =>
+                              setSelectedStudentIds({
+                                ...selectedStudentIds,
+                                [student.id]: e.target.checked,
+                              })
+                            }
+                          />
+                        </td>
+                        <td className="font-semibold text-slate-900">
+                          {studentDisplayName(student)}
+                        </td>
+                        <td className="font-mono text-[12px] text-slate-600">{student.roll}</td>
+                        <td className="text-[12px] text-slate-600">{student.classLabel}</td>
+                        <td>
+                          <span
+                            className={
+                              student.rte ? "nx-pill nx-pill-success" : "nx-pill nx-pill-neutral"
+                            }
+                          >
+                            {student.rte ? "Yes" : "No"}
+                          </span>
+                        </td>
+                        <td>
+                          {hasSiblings ? (
+                            <button
+                              type="button"
+                              className="text-[12px] font-semibold text-indigo-600 hover:underline"
+                              onClick={() => selectSiblingsFor(student)}
+                            >
+                              Select {siblingTotal - 1} sibling
+                              {siblingTotal - 1 === 1 ? "" : "s"}
+                            </button>
+                          ) : (
+                            <span className="text-[12px] text-slate-400">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {!searched ? (
+                    <tr>
+                      <td colSpan={6} className="px-5 py-10 text-center text-slate-500">
+                        Select class and section, then click <strong>Search</strong> to load students.
                       </td>
                     </tr>
-                  ))}
-                  {!assignStudents.length ? (
+                  ) : null}
+                  {searched && !assignStudents.length ? (
                     <tr>
-                      <td colSpan={4} className="px-5 py-10 text-center text-slate-500">
+                      <td colSpan={6} className="px-5 py-10 text-center text-slate-500">
                         No students match the selected filters.
                       </td>
                     </tr>
@@ -525,15 +678,16 @@ export function DiscountsPanel({
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-5 py-3">
               <p className="flex items-start gap-2 text-[12px] text-slate-500">
                 <InfoOutlined sx={{ fontSize: 16 }} className="mt-0.5 shrink-0 text-indigo-500" />
-                Students flagged as RTE-applicable in their profile are marked for quick assignment.
+                Linked siblings are managed in Student profile. With “Also assign to linked siblings”
+                on, Save includes them automatically.
               </p>
               <button
                 type="button"
                 className="nx-btn-primary"
-                disabled={assigning}
+                disabled={assigning || !searched}
                 onClick={() => void applyAssign()}
               >
-                {assigning ? "Applying…" : "Apply to selected"}
+                {assigning ? "Saving…" : "Save"}
               </button>
             </div>
           </div>
@@ -589,7 +743,7 @@ export function DiscountsPanel({
                         className="text-[12px] font-bold uppercase tracking-wide text-indigo-600 hover:underline"
                         onClick={() => openAssign(item)}
                       >
-                        Assign
+                        Assign / View
                       </button>
                       <button
                         type="button"
