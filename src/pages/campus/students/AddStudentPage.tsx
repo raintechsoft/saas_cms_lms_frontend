@@ -457,12 +457,20 @@ export function AddStudentPage() {
             <div className="grid gap-x-5 gap-y-4 lg:grid-cols-3">
               {/* Left column */}
               <div className="space-y-4">
-                <Field label="Admission No">
+                <Field label="First Name" required>
                   <input
-                    className="nx-input bg-slate-50"
-                    placeholder="Auto if blank"
-                    value={form.admissionNumber}
-                    onChange={(e) => update("admissionNumber", e.target.value)}
+                    className="nx-input"
+                    placeholder="Enter first name"
+                    value={form.firstName}
+                    onChange={(e) => update("firstName", e.target.value)}
+                  />
+                </Field>
+                <Field label="Last Name" required>
+                  <input
+                    className="nx-input"
+                    placeholder="Enter last name"
+                    value={form.lastName}
+                    onChange={(e) => update("lastName", e.target.value)}
                   />
                 </Field>
                 <Field label="Roll No" required>
@@ -473,12 +481,12 @@ export function AddStudentPage() {
                     onChange={(e) => update("rollNumber", e.target.value)}
                   />
                 </Field>
-                <Field label="First Name" required>
+                <Field label="Admission No">
                   <input
-                    className="nx-input"
-                    placeholder="Enter first name"
-                    value={form.firstName}
-                    onChange={(e) => update("firstName", e.target.value)}
+                    className="nx-input bg-slate-50"
+                    placeholder="Auto if blank"
+                    value={form.admissionNumber}
+                    onChange={(e) => update("admissionNumber", e.target.value)}
                   />
                 </Field>
                 <Field label="Gender" required>
@@ -489,28 +497,12 @@ export function AddStudentPage() {
                     <option value="OTHER">Other</option>
                   </select>
                 </Field>
-                <Field label="Category" required>
-                  <select className="nx-input" value={form.categoryId} onChange={(e) => update("categoryId", e.target.value)}>
-                    <option value="">Select Category</option>
-                    {setup.categories.map((item) => (
-                      <option key={item.id} value={item.id}>{item.name}</option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="Blood Group">
-                  <select className="nx-input" value={form.bloodGroup} onChange={(e) => update("bloodGroup", e.target.value)}>
-                    <option value="">Select</option>
-                    {["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].map((bg) => (
-                      <option key={bg} value={bg}>{bg}</option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="Mobile Number" required>
+                <Field label="Date of Birth" required>
                   <input
                     className="nx-input"
-                    placeholder="Mobile Number"
-                    value={form.mobile}
-                    onChange={(e) => update("mobile", e.target.value)}
+                    type="date"
+                    value={form.dateOfBirth}
+                    onChange={(e) => update("dateOfBirth", e.target.value)}
                   />
                 </Field>
               </div>
@@ -536,6 +528,30 @@ export function AddStudentPage() {
                     ))}
                   </div>
                 </div>
+                <Field label="Category" required>
+                  <select className="nx-input" value={form.categoryId} onChange={(e) => update("categoryId", e.target.value)}>
+                    <option value="">Select Category</option>
+                    {setup.categories.map((item) => (
+                      <option key={item.id} value={item.id}>{item.name}</option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Religion" required>
+                  <input
+                    className="nx-input"
+                    placeholder="Religion"
+                    value={form.religion}
+                    onChange={(e) => update("religion", e.target.value)}
+                  />
+                </Field>
+                <Field label="Caste">
+                  <input
+                    className="nx-input"
+                    placeholder="Caste"
+                    value={form.caste}
+                    onChange={(e) => update("caste", e.target.value)}
+                  />
+                </Field>
                 <Field label="Section" required>
                   <select
                     className="nx-input"
@@ -550,38 +566,6 @@ export function AddStudentPage() {
                     ))}
                   </select>
                 </Field>
-                <Field label="Last Name" required>
-                  <input
-                    className="nx-input"
-                    placeholder="Enter last name"
-                    value={form.lastName}
-                    onChange={(e) => update("lastName", e.target.value)}
-                  />
-                </Field>
-                <Field label="Date of Birth" required>
-                  <input
-                    className="nx-input"
-                    type="date"
-                    value={form.dateOfBirth}
-                    onChange={(e) => update("dateOfBirth", e.target.value)}
-                  />
-                </Field>
-                <Field label="Religion" required>
-                  <input
-                    className="nx-input"
-                    placeholder="Religion"
-                    value={form.religion}
-                    onChange={(e) => update("religion", e.target.value)}
-                  />
-                </Field>
-                <Field label="House">
-                  <select className="nx-input" value={form.houseId} onChange={(e) => update("houseId", e.target.value)}>
-                    <option value="">Blue, Red, Green...</option>
-                    {setup.houses.map((item) => (
-                      <option key={item.id} value={item.id}>{item.name}</option>
-                    ))}
-                  </select>
-                </Field>
                 <Field label="Email Address" required>
                   <input
                     className="nx-input"
@@ -593,6 +577,22 @@ export function AddStudentPage() {
                   <p className="mt-1 text-[11px] text-slate-500">
                     This becomes the student portal login email.
                   </p>
+                </Field>
+                <Field label="Mobile Number" required>
+                  <input
+                    className="nx-input"
+                    placeholder="Mobile Number"
+                    value={form.mobile}
+                    onChange={(e) => update("mobile", e.target.value)}
+                  />
+                </Field>
+                <Field label="House">
+                  <select className="nx-input" value={form.houseId} onChange={(e) => update("houseId", e.target.value)}>
+                    <option value="">Blue, Red, Green...</option>
+                    {setup.houses.map((item) => (
+                      <option key={item.id} value={item.id}>{item.name}</option>
+                    ))}
+                  </select>
                 </Field>
               </div>
 
@@ -632,14 +632,6 @@ export function AddStudentPage() {
                     />
                   </div>
                 </div>
-                <Field label="Caste">
-                  <input
-                    className="nx-input"
-                    placeholder="Caste"
-                    value={form.caste}
-                    onChange={(e) => update("caste", e.target.value)}
-                  />
-                </Field>
                 <Field label="Admission Date" required>
                   <input
                     className="nx-input"
@@ -667,6 +659,14 @@ export function AddStudentPage() {
                     value={form.weight}
                     onChange={(e) => update("weight", e.target.value)}
                   />
+                </Field>
+                <Field label="Blood Group">
+                  <select className="nx-input" value={form.bloodGroup} onChange={(e) => update("bloodGroup", e.target.value)}>
+                    <option value="">Select</option>
+                    {["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].map((bg) => (
+                      <option key={bg} value={bg}>{bg}</option>
+                    ))}
+                  </select>
                 </Field>
               </div>
             </div>
