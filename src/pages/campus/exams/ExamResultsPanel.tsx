@@ -225,7 +225,12 @@ export function ExamResultsPanel({
       setPublished(Boolean(data.published));
       setSelectedIds([]);
       setShowOnPortal(
-        Object.fromEntries(data.results.map((item) => [item.examStudentId, Boolean(data.published)])),
+        Object.fromEntries(
+          data.results.map((item) => [
+            item.examStudentId,
+            item.showOnPortal ?? Boolean(data.published),
+          ]),
+        ),
       );
       setPage(1);
     } catch (cause) {
@@ -767,6 +772,24 @@ export function ExamResultsPanel({
                             checked={Boolean(showOnPortal[result.examStudentId])}
                             onChange={(next) => {
                               setShowOnPortal((prev) => ({ ...prev, [result.examStudentId]: next }));
+                              void apiRequest(
+                                `/exams/students/${result.examStudentId}/portal-visibility`,
+                                token,
+                                {
+                                  method: "PUT",
+                                  body: JSON.stringify({ showOnPortal: next }),
+                                },
+                              ).catch((cause: unknown) => {
+                                setShowOnPortal((prev) => ({
+                                  ...prev,
+                                  [result.examStudentId]: !next,
+                                }));
+                                onError(
+                                  cause instanceof Error
+                                    ? cause.message
+                                    : "Unable to update portal visibility",
+                                );
+                              });
                               pushActivity(
                                 studentName(result),
                                 next

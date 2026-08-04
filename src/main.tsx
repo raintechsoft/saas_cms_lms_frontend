@@ -8,12 +8,14 @@ import { ToastContainer } from "./lib/notify";
 import { store } from "./store";
 import "./styles.css";
 
-// Backend/email links may omit the hash. Rewrite auth deep-links for HashRouter.
+// Backend/email links may omit the hash. Rewrite deep-links for HashRouter.
 {
   const path = window.location.pathname.replace(/\/$/, "") || "/";
   const search = window.location.search;
   const hashAuthPaths = new Set(["/reset-password", "/forgot-password", "/login", "/admin/login"]);
-  if (!window.location.hash && hashAuthPaths.has(path)) {
+  const isPrintPath =
+    path === "/print/documents" || path.startsWith("/print/documents/");
+  if (!window.location.hash && (hashAuthPaths.has(path) || isPrintPath)) {
     window.location.replace(`${window.location.origin}/#${path}${search}`);
   }
 }

@@ -1,8 +1,9 @@
-import { useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useMemo, useState, useEffect, type FormEvent, type ReactNode } from "react";
 import {
   BlockOutlined,
   CheckCircleOutlined,
   CloseOutlined,
+  DeleteOutline,
   EditOutlined,
   FormatListBulletedOutlined,
   GridViewOutlined,
@@ -14,6 +15,7 @@ import { InitialsAvatar } from "../../../components/InitialsAvatar";
 import { apiRequest } from "../../../lib/api";
 import { confirmDelete } from "../../../lib/confirm";
 import { notifySuccess } from "../../../lib/notify";
+import { DisableStaffModal } from "./DisableStaffModal";
 import { staffName, type HrSetup, type Staff } from "./types";
 
 const PAGE_SIZE = 8;
@@ -44,11 +46,17 @@ export function StaffListPanel({
   token,
   onSaved,
   onError,
+  onViewStaff,
+  pendingEdit,
+  onPendingEditHandled,
 }: {
   setup: HrSetup;
   token: string;
   onSaved: () => Promise<void>;
   onError: (message: string) => void;
+  onViewStaff: (id: string) => void;
+  pendingEdit?: Staff | null;
+  onPendingEditHandled?: () => void;
 }) {
   const [view, setView] = useState<"card" | "list">("list");
   const [statusFilter, setStatusFilter] = useState<"ACTIVE" | "DISABLED">("ACTIVE");
@@ -57,10 +65,18 @@ export function StaffListPanel({
   const [departmentId, setDepartmentId] = useState("");
   const [page, setPage] = useState(1);
   const [menuFor, setMenuFor] = useState("");
-  const [viewing, setViewing] = useState<Staff | null>(null);
+  const [disabling, setDisabling] = useState<Staff | null>(null);
   const [editing, setEditing] = useState<Staff | null>(null);
   const [form, setForm] = useState<StaffForm>(emptyForm);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (pendingEdit) {
+      openEdit(pendingEdit);
+      onPendingEditHandled?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingEdit]);
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -87,29 +103,32 @@ export function StaffListPanel({
   const from = filtered.length ? (safePage - 1) * PAGE_SIZE + 1 : 0;
   const to = Math.min(safePage * PAGE_SIZE, filtered.length);
 
-  async function toggleStatus(member: Staff) {
-    const disabling = member.status === "ACTIVE";
-    if (disabling) {
-      const ok = await confirmDelete({
-        title: "Disable staff?",
-        text: `${staffName(member)} will be disabled and lose portal access.`,
-        confirmText: "Yes, disable",
-      });
-      if (!ok) return;
-    }
+  async function enableStaff(member: Staff) {
     try {
       await apiRequest(`/hr/staff/${member.id}/status`, token, {
         method: "PUT",
-        body: JSON.stringify(
-          disabling
-            ? { status: "DISABLED", disabledReason: "Disabled by administrator" }
-            : { status: "ACTIVE" },
-        ),
+        body: JSON.stringify({ status: "ACTIVE" }),
       });
-      notifySuccess(disabling ? "Staff disabled" : "Staff enabled");
+      notifySuccess("Staff enabled");
       await onSaved();
     } catch (cause) {
-      onError(cause instanceof Error ? cause.message : "Unable to update staff status");
+      onError(cause instanceof Error ? cause.message : "Unable to enable staff");
+    }
+  }
+
+  async function deleteStaff(member: Staff) {
+    const ok = await confirmDelete({
+      title: "Delete staff permanently?",
+      text: `${staffName(member)} will be removed. This fails if they have paid payroll history.`,
+      confirmText: "Yes, delete",
+    });
+    if (!ok) return;
+    try {
+      await apiRequest(`/hr/staff/${member.id}`, token, { method: "DELETE" });
+      notifySuccess("Staff deleted");
+      await onSaved();
+    } catch (cause) {
+      onError(cause instanceof Error ? cause.message : "Unable to delete staff");
     }
   }
 
@@ -159,7 +178,7 @@ export function StaffListPanel({
           type="button"
           title="View"
           className="grid size-8 place-items-center rounded-lg border border-slate-200 text-slate-500 transition hover:bg-slate-50"
-          onClick={() => setViewing(member)}
+          onClick={() => onViewStaff(member.id)}
         >
           <VisibilityOutlined sx={{ fontSize: 16 }} />
         </button>
@@ -171,22 +190,35 @@ export function StaffListPanel({
         >
           <EditOutlined sx={{ fontSize: 16 }} />
         </button>
-        <button
-          type="button"
-          title={member.status === "ACTIVE" ? "Disable" : "Enable"}
-          className={`grid size-8 place-items-center rounded-lg border transition ${
-            member.status === "ACTIVE"
-              ? "border-rose-200 text-rose-500 hover:bg-rose-50"
-              : "border-emerald-200 text-emerald-600 hover:bg-emerald-50"
-          }`}
-          onClick={() => void toggleStatus(member)}
-        >
-          {member.status === "ACTIVE" ? (
+        {member.status === "ACTIVE" ? (
+          <button
+            type="button"
+            title="Disable"
+            className="grid size-8 place-items-center rounded-lg border border-rose-200 text-rose-500 transition hover:bg-rose-50"
+            onClick={() => setDisabling(member)}
+          >
             <BlockOutlined sx={{ fontSize: 16 }} />
-          ) : (
-            <CheckCircleOutlined sx={{ fontSize: 16 }} />
-          )}
-        </button>
+          </button>
+        ) : (
+          <>
+            <button
+              type="button"
+              title="Enable"
+              className="grid size-8 place-items-center rounded-lg border border-emerald-200 text-emerald-600 transition hover:bg-emerald-50"
+              onClick={() => void enableStaff(member)}
+            >
+              <CheckCircleOutlined sx={{ fontSize: 16 }} />
+            </button>
+            <button
+              type="button"
+              title="Delete"
+              className="grid size-8 place-items-center rounded-lg border border-rose-200 text-rose-500 transition hover:bg-rose-50"
+              onClick={() => void deleteStaff(member)}
+            >
+              <DeleteOutline sx={{ fontSize: 16 }} />
+            </button>
+          </>
+        )}
         <button
           type="button"
           title="More"
@@ -469,46 +501,14 @@ export function StaffListPanel({
         </Modal>
       ) : null}
 
-      {viewing ? (
-        <Modal title="Staff details" onClose={() => setViewing(null)}>
-          <div className="flex items-center gap-3">
-            <InitialsAvatar
-              name={staffName(viewing)}
-              photoUrl={viewing.photoUrl ?? viewing.user.avatarUrl}
-              size={52}
-            />
-            <div>
-              <p className="font-semibold text-slate-900">{staffName(viewing)}</p>
-              <p className="text-[12.5px] text-slate-500">{viewing.user.email}</p>
-            </div>
-            <div className="ml-auto">
-              <StatusPill status={viewing.status} />
-            </div>
-          </div>
-          <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-[13px]">
-            <Detail label="Staff ID" value={viewing.employeeNumber} />
-            <Detail label="Phone" value={viewing.phone ?? viewing.user.phone ?? "—"} />
-            <Detail label="Role" value={viewing.designation?.name ?? "—"} />
-            <Detail label="Department" value={viewing.department?.name ?? "—"} />
-            <Detail
-              label="Joining date"
-              value={
-                viewing.joiningDate ? new Date(viewing.joiningDate).toLocaleDateString() : "—"
-              }
-            />
-            <Detail
-              label="Basic salary"
-              value={`₹${Number(viewing.basicSalary).toLocaleString()}`}
-            />
-            <Detail label="Leaves recorded" value={String(viewing._count?.leaves ?? 0)} />
-            <Detail label="Ratings received" value={String(viewing._count?.ratings ?? 0)} />
-          </dl>
-          {viewing.status === "DISABLED" && viewing.disabledReason ? (
-            <p className="mt-4 rounded-lg bg-rose-50 px-3 py-2 text-[12.5px] text-rose-700">
-              Disabled reason: {viewing.disabledReason}
-            </p>
-          ) : null}
-        </Modal>
+      {disabling ? (
+        <DisableStaffModal
+          member={disabling}
+          token={token}
+          onClose={() => setDisabling(null)}
+          onSaved={onSaved}
+          onError={onError}
+        />
       ) : null}
     </section>
   );
@@ -612,14 +612,6 @@ function StatusPill({ status }: { status: "ACTIVE" | "DISABLED" }) {
   );
 }
 
-function Detail({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <dt className="text-[11px] font-bold uppercase tracking-wide text-slate-400">{label}</dt>
-      <dd className="mt-0.5 text-slate-700">{value}</dd>
-    </div>
-  );
-}
 
 function Pagination({
   from,

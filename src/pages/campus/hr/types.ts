@@ -11,6 +11,7 @@ export interface HrUser {
   phone?: string | null;
   avatarUrl?: string | null;
   status?: string;
+  roles?: Array<{ role: { name: string; code: string } }>;
 }
 
 export interface AttendanceRecord {
@@ -44,6 +45,9 @@ export interface Staff {
   workShift?: string | null;
   workLocation?: string | null;
   leaveAllowance?: number | null;
+  absenceDeduction?: string | null;
+  leavingDate?: string | null;
+  resignationLetter?: string | null;
   bankAccountTitle?: string | null;
   bankAccountNumber?: string | null;
   bankName?: string | null;
@@ -79,9 +83,35 @@ export interface Payroll {
   netAmount: string;
   basicSalary?: string;
   attendanceDeduction: string;
+  payrollMonth?: string;
   status: "GENERATED" | "PAID";
   staff: Staff;
   items?: Array<{ id: string; name: string; type: string; amount: string }>;
+  academicSession?: Named | null;
+}
+
+export interface StaffAdjustment {
+  id: string;
+  name: string;
+  type: "EARNING" | "DEDUCTION";
+  amount: string;
+  isRecurring?: boolean;
+  isActive?: boolean;
+  createdAt?: string;
+}
+
+export interface TeacherRating {
+  id: string;
+  rating: number;
+  comment?: string | null;
+  ratingDate: string;
+}
+
+export interface StaffDetail extends Staff {
+  adjustments: StaffAdjustment[];
+  leaves: Leave[];
+  payrolls: Payroll[];
+  ratings?: TeacherRating[];
 }
 
 export interface PayParameter {
@@ -107,6 +137,7 @@ export interface HrSetup {
 
 export type HrTab =
   | "staff"
+  | "disabled"
   | "setup"
   | "attendance"
   | "leave"

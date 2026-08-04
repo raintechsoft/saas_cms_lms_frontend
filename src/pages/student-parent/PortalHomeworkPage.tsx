@@ -1,17 +1,18 @@
-import { useEffect, useState, type FormEvent } from "react";
-import { Navigate } from "react-router-dom";
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { AttachFileOutlined, CloseOutlined } from "@mui/icons-material";
 import { apiRequest } from "../../lib/api";
-import { isProductBucketAllowed } from "../../lib/productMode";
+import { notifyError } from "../../lib/notify";
 import { usePortal } from "./PortalContext";
 import type { PortalHomeworkItem } from "./portalTypes";
 
+const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
+
 export function PortalHomeworkPage() {
-  const { accessToken, child, productMode, basePath, canSubmitHomework, reload } = usePortal();
+  const { accessToken, child, canSubmitHomework, reload } = usePortal();
   const [items, setItems] = useState<PortalHomeworkItem[]>([]);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
-  const showLms = isProductBucketAllowed(productMode, "LMS");
 
   async function loadHomework() {
     if (!child) {
@@ -20,7 +21,12 @@ export function PortalHomeworkPage() {
     }
     try {
       setError("");
-      setItems(await apiRequest<PortalHomeworkItem[]>(`/portal/children/${child.student.id}/homework`, accessToken));
+      setItems(
+        await apiRequest<PortalHomeworkItem[]>(
+          `/portal/children/${child.student.id}/homework`,
+          accessToken,
+        ),
+      );
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to load homework");
     } finally {
@@ -29,16 +35,8 @@ export function PortalHomeworkPage() {
   }
 
   useEffect(() => {
-    if (!showLms) {
-      setLoading(false);
-      return;
-    }
     void loadHomework();
-  }, [accessToken, child?.student.id, showLms]);
-
-  if (!showLms) {
-    return <Navigate to={basePath} replace />;
-  }
+  }, [accessToken, child?.student.id]);
 
   if (!child) {
     return <p className="text-sm text-slate-500">No student profile linked.</p>;
@@ -55,7 +53,9 @@ export function PortalHomeworkPage() {
 
       {error && <p className="alert-error">{error}</p>}
       {message && (
-        <p className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">{message}</p>
+        <p className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
+          {message}
+        </p>
       )}
 
       {loading ? (
@@ -102,24 +102,56 @@ function HomeworkRow({
   const [open, setOpen] = useState(false);
   const [answerText, setAnswerText] = useState("");
   const [attachmentUrl, setAttachmentUrl] = useState("");
+  const [fileAttachment, setFileAttachment] = useState<{ name: string; url: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const canAct = canSubmit && (!item.submission || item.submission.status === "RESUBMIT_REQUESTED");
+
+  function handleFile(file: File | undefined) {
+    if (!file) return;
+    if (file.size > MAX_ATTACHMENT_BYTES) {
+      notifyError("Attachment must be 20MB or smaller");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setFileAttachment({ name: file.name, url: String(reader.result) });
+      setAttachmentUrl("");
+    };
+    reader.onerror = () => notifyError("Unable to read the selected file");
+    reader.readAsDataURL(file);
+  }
+
+  function onPick(event: ChangeEvent<HTMLInputElement>) {
+    handleFile(event.target.files?.[0]);
+    event.target.value = "";
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    const attachment = fileAttachment?.url ?? (attachmentUrl.trim() || null);
+    if (!answerText.trim() && !attachment) {
+      onError("Enter an answer or attach a file");
+      return;
+    }
+    setBusy(true);
     try {
       await apiRequest(`/portal/homework/${item.id}/submissions`, token, {
         method: "POST",
         body: JSON.stringify({
-          answerText,
-          attachmentUrl: attachmentUrl || null,
+          answerText: answerText.trim() || null,
+          attachmentUrl: attachment,
         }),
       });
       setOpen(false);
       setAnswerText("");
       setAttachmentUrl("");
+      setFileAttachment(null);
       await onSaved();
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : "Unable to submit homework");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -133,7 +165,9 @@ function HomeworkRow({
           </p>
         </div>
         {item.submission ? (
-          <span className={`badge ${item.submission.status === "RESUBMIT_REQUESTED" ? "badge-danger" : "badge-success"}`}>
+          <span
+            className={`badge ${item.submission.status === "RESUBMIT_REQUESTED" ? "badge-danger" : "badge-success"}`}
+          >
             {item.submission.status}
           </span>
         ) : (
@@ -143,7 +177,6 @@ function HomeworkRow({
       <p className="mt-2 text-sm">{item.description}</p>
       {item.attachmentUrl &&
         (item.attachmentUrl.startsWith("data:") ? (
-          // Browsers block navigating to data: URLs, so uploaded files download instead.
           <a
             className="mt-2 inline-block text-sm font-semibold text-indigo-700"
             href={item.attachmentUrl}
@@ -169,23 +202,55 @@ function HomeworkRow({
           <form className="mt-3 rounded-lg bg-slate-50 p-3" onSubmit={submit}>
             <textarea
               className="input"
-              required
-              placeholder="Your answer"
+              placeholder="Your answer (optional if you attach a file)"
               value={answerText}
               onChange={(e) => setAnswerText(e.target.value)}
             />
-            <input
-              className="input mt-2"
-              type="url"
-              placeholder="Attachment URL (optional)"
-              value={attachmentUrl}
-              onChange={(e) => setAttachmentUrl(e.target.value)}
-            />
-            <div className="mt-3 flex gap-2">
-              <button className="button-primary" type="submit">
-                Submit
+            <div className="mt-2">
+              <input ref={fileInputRef} type="file" className="hidden" onChange={onPick} />
+              <button
+                type="button"
+                className="button-secondary text-sm"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <AttachFileOutlined sx={{ fontSize: 16 }} /> Choose file
               </button>
-              <button className="button-secondary" type="button" onClick={() => setOpen(false)}>
+              {fileAttachment ? (
+                <div className="mt-2 flex items-center justify-between gap-2 rounded-lg bg-indigo-50 px-3 py-2 text-sm text-indigo-700">
+                  <span className="truncate">{fileAttachment.name}</span>
+                  <button
+                    type="button"
+                    className="text-slate-400 hover:text-rose-600"
+                    onClick={() => setFileAttachment(null)}
+                  >
+                    <CloseOutlined sx={{ fontSize: 16 }} />
+                  </button>
+                </div>
+              ) : (
+                <input
+                  className="input mt-2"
+                  type="url"
+                  placeholder="…or attachment URL (optional)"
+                  value={attachmentUrl}
+                  onChange={(e) => setAttachmentUrl(e.target.value)}
+                />
+              )}
+            </div>
+            <div className="mt-3 flex gap-2">
+              <button className="button-primary" type="submit" disabled={busy}>
+                {busy ? "Submitting…" : "Submit"}
+              </button>
+              <button
+                className="button-secondary"
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  setOpen(false);
+                  setAnswerText("");
+                  setAttachmentUrl("");
+                  setFileAttachment(null);
+                }}
+              >
                 Cancel
               </button>
             </div>

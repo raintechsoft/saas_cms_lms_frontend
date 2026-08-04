@@ -168,7 +168,7 @@ export function HomeworkPage() {
   const [loading, setLoading] = useState(true);
   const [evaluateTarget, setEvaluateTarget] = useState("");
   const [editing, setEditing] = useState<Homework | null>(null);
-  const formRef = useRef<HTMLDivElement | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
 
   const canManage = Boolean(user?.permissions.includes("homework.manage"));
   const canEvaluate = Boolean(user?.permissions.includes("homework.evaluate"));
@@ -189,11 +189,10 @@ export function HomeworkPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken]);
 
-  function scrollToForm() {
+  function openAddForm() {
     setEditing(null);
-    requestAnimationFrame(() =>
-      formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
-    );
+    setFormOpen(true);
+    setTab("list");
   }
 
   async function startEdit(item: Homework) {
@@ -208,9 +207,13 @@ export function HomeworkPage() {
       }
     }
     setEditing(full);
-    requestAnimationFrame(() =>
-      formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
-    );
+    setFormOpen(true);
+    setTab("list");
+  }
+
+  function closeForm() {
+    setFormOpen(false);
+    setEditing(null);
   }
 
   function startEvaluate(id: string) {
@@ -238,10 +241,7 @@ export function HomeworkPage() {
             <button
               type="button"
               className="nx-btn-primary"
-              onClick={() => {
-                setTab("list");
-                scrollToForm();
-              }}
+              onClick={openAddForm}
             >
               <AddOutlined sx={{ fontSize: 16 }} /> Add homework
             </button>
@@ -271,15 +271,21 @@ export function HomeworkPage() {
                 canManage={canManage}
                 canEvaluate={canEvaluate}
                 canSubmit={canSubmit}
-                editing={editing}
                 onEdit={startEdit}
-                onCancelEdit={() => setEditing(null)}
                 onEvaluate={startEvaluate}
+                onSaved={load}
+              />
+            ) : null}
+            {formOpen && canManage ? (
+              <HomeworkFormModal
+                setup={setup}
+                token={accessToken}
+                editing={editing}
+                onClose={closeForm}
                 onSaved={async () => {
-                  setEditing(null);
+                  closeForm();
                   await load();
                 }}
-                formRef={formRef}
               />
             ) : null}
             {tab === "evaluate" ? (
@@ -301,28 +307,24 @@ function ListPanel({
   canManage,
   canEvaluate,
   canSubmit,
-  editing,
   onEdit,
-  onCancelEdit,
   onEvaluate,
   onSaved,
-  formRef,
 }: {
   setup: Setup;
   token: string;
   canManage: boolean;
   canEvaluate: boolean;
   canSubmit: boolean;
-  editing: Homework | null;
   onEdit: (item: Homework) => void;
-  onCancelEdit: () => void;
   onEvaluate: (id: string) => void;
   onSaved: () => Promise<void>;
-  formRef: React.MutableRefObject<HTMLDivElement | null>;
 }) {
   const [classFilter, setClassFilter] = useState("");
   const [sectionFilter, setSectionFilter] = useState("");
   const [subjectFilter, setSubjectFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [search, setSearch] = useState("");
   const [menuFor, setMenuFor] = useState<string | null>(null);
   const [submitRowFor, setSubmitRowFor] = useState<string | null>(null);
@@ -365,8 +367,20 @@ function ListPanel({
       .filter((item) => !classFilter || item.classSection.academicClass.id === classFilter)
       .filter((item) => !sectionFilter || item.classSection.section.id === sectionFilter)
       .filter((item) => !subjectFilter || item.classSubject.subject.name === subjectFilter)
-      .filter((item) => !query || item.title.toLowerCase().includes(query));
-  }, [setup.homework, classFilter, sectionFilter, subjectFilter, search]);
+      .filter((item) => {
+        const hwDate = item.homeworkDate.slice(0, 10);
+        if (dateFrom && hwDate < dateFrom) return false;
+        if (dateTo && hwDate > dateTo) return false;
+        return true;
+      })
+      .filter(
+        (item) =>
+          !query ||
+          item.title.toLowerCase().includes(query) ||
+          item.description.toLowerCase().includes(query) ||
+          item.classSubject.subject.name.toLowerCase().includes(query),
+      );
+  }, [setup.homework, classFilter, sectionFilter, subjectFilter, dateFrom, dateTo, search]);
 
   async function openRowAttachment(item: Homework) {
     try {
@@ -460,10 +474,28 @@ function ListPanel({
             ))}
           </select>
         </label>
+        <label className="block">
+          <span className="nx-label">Homework date from</span>
+          <input
+            className="nx-input mt-1 w-40"
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+          />
+        </label>
+        <label className="block">
+          <span className="nx-label">Homework date to</span>
+          <input
+            className="nx-input mt-1 w-40"
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+          />
+        </label>
         <div className="relative ml-auto">
           <input
             className="nx-input w-64 pr-9"
-            placeholder="Search homework title…"
+            placeholder="Search title, description, subject…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -667,19 +699,6 @@ function ListPanel({
           ) : null}
         </div>
       </div>
-
-      {canManage ? (
-        <div ref={formRef}>
-          <HomeworkForm
-            key={editing?.id ?? "new"}
-            setup={setup}
-            token={token}
-            editing={editing}
-            onCancelEdit={onCancelEdit}
-            onSaved={onSaved}
-          />
-        </div>
-      ) : null}
     </section>
   );
 }
@@ -701,17 +720,52 @@ function MenuItem({ label, onClick }: { label: string; onClick: () => void }) {
   );
 }
 
-function HomeworkForm({
+function HomeworkFormModal({
   setup,
   token,
   editing,
-  onCancelEdit,
+  onClose,
   onSaved,
 }: {
   setup: Setup;
   token: string;
   editing: Homework | null;
-  onCancelEdit: () => void;
+  onClose: () => void;
+  onSaved: () => Promise<void>;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="flex max-h-[min(92vh,820px)] w-full max-w-4xl flex-col overflow-hidden rounded-xl bg-white shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <HomeworkForm
+          key={editing?.id ?? "new"}
+          setup={setup}
+          token={token}
+          editing={editing}
+          onClose={onClose}
+          onSaved={onSaved}
+        />
+      </div>
+    </div>
+  );
+}
+
+function HomeworkForm({
+  setup,
+  token,
+  editing,
+  onClose,
+  onSaved,
+}: {
+  setup: Setup;
+  token: string;
+  editing: Homework | null;
+  onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
   const [form, setForm] = useState(() => ({
@@ -822,96 +876,95 @@ function HomeworkForm({
   }
 
   return (
-    <form className="nx-card p-5" onSubmit={submit}>
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-[14px] font-bold text-slate-900">
+    <form className="flex flex-col overflow-hidden" onSubmit={submit}>
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-100 px-5 py-3">
+        <h2 className="text-[16px] font-bold text-slate-900">
           {editing ? "Edit Homework" : "Add New Homework"}
         </h2>
-        {editing ? (
-          <button
-            type="button"
-            className="nx-btn-secondary !px-3 !py-1.5 text-[12px]"
-            onClick={onCancelEdit}
-          >
-            <CloseOutlined sx={{ fontSize: 14 }} /> Cancel edit
-          </button>
-        ) : null}
+        <button
+          type="button"
+          className="rounded p-1 text-slate-400 hover:bg-slate-100"
+          onClick={onClose}
+        >
+          <CloseOutlined sx={{ fontSize: 18 }} />
+        </button>
       </div>
 
-      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-        <label className="block">
-          <span className="nx-label">Class *</span>
-          <select
-            className="nx-input mt-1 w-full"
-            required
-            value={form.classId}
-            onChange={(e) =>
-              setForm({ ...form, classId: e.target.value, sectionId: "", classSubjectId: "" })
-            }
-          >
-            <option value="">Select class</option>
-            {classes.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block">
-          <span className="nx-label">Section *</span>
-          <select
-            className="nx-input mt-1 w-full"
-            required
-            value={form.sectionId}
-            onChange={(e) => setForm({ ...form, sectionId: e.target.value, classSubjectId: "" })}
-          >
-            <option value="">Select section</option>
-            {sectionOptions.map((cs) => (
-              <option key={cs.id} value={cs.section.id}>
-                {cs.section.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block">
-          <span className="nx-label">Subject *</span>
-          <select
-            className="nx-input mt-1 w-full"
-            required
-            value={form.classSubjectId}
-            onChange={(e) => setForm({ ...form, classSubjectId: e.target.value })}
-          >
-            <option value="">Select subject</option>
-            {classSection?.subjects.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.subject.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block">
-          <span className="nx-label">Homework Date *</span>
-          <input
-            className="nx-input mt-1 w-full"
-            type="date"
-            required
-            value={form.homeworkDate}
-            onChange={(e) => setForm({ ...form, homeworkDate: e.target.value })}
-          />
-        </label>
-        <label className="block">
-          <span className="nx-label">Submission Date *</span>
-          <input
-            className="nx-input mt-1 w-full"
-            type="date"
-            required
-            value={form.submissionDate}
-            onChange={(e) => setForm({ ...form, submissionDate: e.target.value })}
-          />
-        </label>
-      </div>
+      <div className="overflow-y-auto p-5">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <label className="block">
+            <span className="nx-label">Class *</span>
+            <select
+              className="nx-input mt-1 w-full"
+              required
+              value={form.classId}
+              onChange={(e) =>
+                setForm({ ...form, classId: e.target.value, sectionId: "", classSubjectId: "" })
+              }
+            >
+              <option value="">Select class</option>
+              {classes.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="nx-label">Section *</span>
+            <select
+              className="nx-input mt-1 w-full"
+              required
+              value={form.sectionId}
+              onChange={(e) => setForm({ ...form, sectionId: e.target.value, classSubjectId: "" })}
+            >
+              <option value="">Select section</option>
+              {sectionOptions.map((cs) => (
+                <option key={cs.id} value={cs.section.id}>
+                  {cs.section.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="nx-label">Subject *</span>
+            <select
+              className="nx-input mt-1 w-full"
+              required
+              value={form.classSubjectId}
+              onChange={(e) => setForm({ ...form, classSubjectId: e.target.value })}
+            >
+              <option value="">Select subject</option>
+              {classSection?.subjects.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.subject.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="nx-label">Homework Date *</span>
+            <input
+              className="nx-input mt-1 w-full"
+              type="date"
+              required
+              value={form.homeworkDate}
+              onChange={(e) => setForm({ ...form, homeworkDate: e.target.value })}
+            />
+          </label>
+          <label className="block">
+            <span className="nx-label">Submission Date *</span>
+            <input
+              className="nx-input mt-1 w-full"
+              type="date"
+              required
+              value={form.submissionDate}
+              onChange={(e) => setForm({ ...form, submissionDate: e.target.value })}
+            />
+          </label>
+        </div>
 
-      <div className="mt-3 grid gap-3 md:grid-cols-[1fr_200px]">
+        <div className="mt-3 grid gap-3 md:grid-cols-[1fr_200px]">
         <label className="block">
           <span className="nx-label">Homework Title *</span>
           <input
@@ -1012,9 +1065,13 @@ function HomeworkForm({
             {form.description.length}/{DESCRIPTION_LIMIT} characters
           </p>
         </label>
+        </div>
       </div>
 
-      <div className="mt-2 flex justify-end">
+      <div className="flex shrink-0 justify-end gap-2 border-t border-slate-100 px-5 py-3">
+        <button type="button" className="nx-btn-secondary" onClick={onClose}>
+          Cancel
+        </button>
         <button className="nx-btn-primary min-w-28" disabled={busy}>
           {busy ? "Saving…" : editing ? "Update" : "Save"}
         </button>
@@ -1206,7 +1263,13 @@ function EvaluatePanel({
                   {roster.roster.map((item) => {
                     const submission = item.homeworkSubmissions[0];
                     const name = `${item.student.firstName} ${item.student.lastName ?? ""}`.trim();
-                    const isOpen = submission?.status === "SUBMITTED";
+                    const canMarkPerfect = submission?.status === "SUBMITTED";
+                    const canResubmit =
+                      submission &&
+                      (submission.status === "SUBMITTED" ||
+                        submission.status === "COMPLETED" ||
+                        submission.status === "EVALUATED");
+                    const canEditNotes = Boolean(canMarkPerfect || canResubmit);
                     const activeState: "COMPLETED" | "RESUBMIT_REQUESTED" | "NOT_SUBMITTED" | null =
                       !submission
                         ? "NOT_SUBMITTED"
@@ -1271,12 +1334,12 @@ function EvaluatePanel({
                         <td className="px-3 py-3">
                           <div className="flex items-center gap-1.5">
                             <SegmentButton
-                              label="Complete"
+                              label="Mark perfect"
                               tone="green"
                               active={activeState === "COMPLETED"}
-                              disabled={!isOpen}
+                              disabled={!canMarkPerfect}
                               onClick={
-                                isOpen
+                                canMarkPerfect
                                   ? () =>
                                       setPending((p) => {
                                         const next = { ...p };
@@ -1294,9 +1357,9 @@ function EvaluatePanel({
                               label="Re-submit"
                               tone="amber"
                               active={activeState === "RESUBMIT_REQUESTED"}
-                              disabled={!isOpen}
+                              disabled={!canResubmit}
                               onClick={
-                                isOpen
+                                canResubmit
                                   ? () =>
                                       setPending((p) => {
                                         const next = { ...p };
@@ -1322,7 +1385,7 @@ function EvaluatePanel({
                           <input
                             className="nx-input w-full min-w-40 !py-1.5 text-[12.5px]"
                             placeholder="Add a note (optional)"
-                            disabled={!isOpen}
+                            disabled={!canEditNotes}
                             value={submission ? (notes[submission.id] ?? "") : ""}
                             onChange={(e) =>
                               submission &&

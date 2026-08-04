@@ -19,6 +19,7 @@ import {
   WorkHistoryOutlined,
 } from "@mui/icons-material";
 import { InitialsAvatar } from "../../../components/InitialsAvatar";
+import { useAuth } from "../../../auth/AuthContext";
 import { apiRequest } from "../../../lib/api";
 import { notifySuccess } from "../../../lib/notify";
 import { staffName, type HrSetup, type Leave } from "./types";
@@ -159,7 +160,11 @@ function ApproveRequests({
           reviewNote: draft.note.trim() || null,
         }),
       });
-      notifySuccess(`Leave marked ${STATUS_LABEL[draft.status].toLowerCase()}`);
+      notifySuccess(
+        draft.status === "APPROVED"
+          ? "Leave approved — attendance marked absent for leave days"
+          : `Leave marked ${STATUS_LABEL[draft.status].toLowerCase()}`,
+      );
       setDrafts((current) => {
         const next = { ...current };
         delete next[leave.id];
@@ -431,6 +436,8 @@ function ApplyLeave({
   onSaved: () => Promise<void>;
   onError: (message: string) => void;
 }) {
+  const { user } = useAuth();
+  const ownStaffId = setup.staff.find((item) => item.user.id === user?.id)?.id ?? "";
   const [staffId, setStaffId] = useState("");
   const [form, setForm] = useState({ leaveTypeId: "", fromDate: "", toDate: "", reason: "" });
   const [attachment, setAttachment] = useState<{ name: string; dataUrl: string } | null>(null);
@@ -520,16 +527,30 @@ function ApplyLeave({
     }
     setBusy(true);
     try {
-      await apiRequest("/hr/leaves", token, {
-        method: "POST",
-        body: JSON.stringify({ staffId, ...form, attachment }),
-      });
+      const body = { ...form, attachment };
+      const isOwnLeave = staffId === ownStaffId && ownStaffId;
+      if (isOwnLeave) {
+        await apiRequest("/hr/leaves/mine", token, {
+          method: "POST",
+          body: JSON.stringify(body),
+        });
+      } else {
+        await apiRequest("/hr/leaves", token, {
+          method: "POST",
+          body: JSON.stringify({ staffId, ...body }),
+        });
+      }
       setForm({ leaveTypeId: "", fromDate: "", toDate: "", reason: "" });
       setAttachment(null);
       notifySuccess("Leave request submitted");
       await onSaved();
     } catch (cause) {
-      onError(cause instanceof Error ? cause.message : "Unable to apply leave");
+      const message = cause instanceof Error ? cause.message : "Unable to apply leave";
+      if (message.includes("LEAVE_QUOTA") || message.toLowerCase().includes("quota")) {
+        onError("Leave quota exceeded for this type — check remaining balance above.");
+      } else {
+        onError(message);
+      }
     } finally {
       setBusy(false);
     }
@@ -612,11 +633,25 @@ function ApplyLeave({
 
         <form className="rounded-xl border border-slate-100 p-4" onSubmit={submit}>
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-[14px] font-bold text-slate-900">Apply for leave</h3>
+            <div>
+              <h3 className="text-[14px] font-bold text-slate-900">Apply for leave</h3>
+              <p className="mt-0.5 text-[11.5px] text-slate-500">
+                Approved leave auto-marks attendance as Absent for each leave day.
+              </p>
+            </div>
             <button type="submit" className="nx-btn-primary" disabled={busy}>
               <AddOutlined sx={{ fontSize: 16 }} /> {busy ? "Applying…" : "Apply Leave"}
             </button>
           </div>
+          {staffId && form.leaveTypeId ? (
+            <p className="mt-2 rounded-lg bg-indigo-50 px-3 py-2 text-[12px] text-indigo-800">
+              {(() => {
+                const row = balance.rows.find((item) => item.id === form.leaveTypeId);
+                if (!row || row.remaining == null) return null;
+                return `Remaining quota for ${row.name}: ${row.remaining.toFixed(1)} day(s)`;
+              })()}
+            </p>
+          ) : null}
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <label className="block">
               <span className="nx-label">Staff Member *</span>

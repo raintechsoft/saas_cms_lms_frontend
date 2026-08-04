@@ -12,6 +12,7 @@ import { ListPagination } from "../../../components/ListPagination";
 import { apiRequest } from "../../../lib/api";
 import { confirmDelete } from "../../../lib/confirm";
 import { notifyInfo, notifySuccess } from "../../../lib/notify";
+import { openPrintDocuments } from "../../../lib/print";
 import type { ExamWithGroup, Setup } from "./types";
 
 type Mode = "design" | "print";
@@ -68,6 +69,8 @@ const PAGE_SIZES: Record<
   Letter: { label: "Letter (8.5 × 11 in)", portrait: [816, 1056], landscape: [1056, 816] },
   A5: { label: "A5 (148 × 210 mm)", portrait: [559, 794], landscape: [794, 559] },
 };
+
+const BULK_PRINT_CAP = 150;
 
 const emptyForm = (): FormState => ({
   name: "",
@@ -264,6 +267,8 @@ export function AdmitCardPanel({
   const [menuId, setMenuId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const pageSize = 4;
+  const [generatedPage, setGeneratedPage] = useState(1);
+  const generatedPageSize = 10;
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [students, setStudents] = useState<StudentOption[]>([]);
@@ -273,9 +278,8 @@ export function AdmitCardPanel({
     examId: "",
     classId: "",
     classSectionId: "",
-    studentId: "",
-    barcodeValue: "",
   });
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
   const [generating, setGenerating] = useState(false);
 
   async function loadTemplates() {
@@ -306,14 +310,68 @@ export function AdmitCardPanel({
 
   async function loadPrintData() {
     try {
-      const studentQuery = new URLSearchParams({ limit: "200" });
-      if (printForm.classSectionId) studentQuery.set("classSectionId", printForm.classSectionId);
-      const [studentPage, docs] = await Promise.all([
-        apiRequest<{ items: StudentOption[] }>(`/students?${studentQuery}`, token),
-        apiRequest<GeneratedAdmit[]>("/documents/generated?type=ADMIT_CARD", token),
+      const docsPromise = apiRequest<GeneratedAdmit[]>(
+        "/documents/generated?type=ADMIT_CARD",
+        token,
+      );
+      if (!printForm.examId) {
+        setStudents([]);
+        setSelectedStudentIds([]);
+        setGenerated(await docsPromise);
+        return;
+      }
+      const query = printForm.classSectionId
+        ? `?classSectionId=${encodeURIComponent(printForm.classSectionId)}`
+        : "";
+      const [roster, docs] = await Promise.all([
+        apiRequest<
+          Array<{
+            rollNumber: string | null;
+            studentEnrollment: {
+              student: {
+                id: string;
+                firstName: string;
+                lastName: string | null;
+                admissionNumber: string;
+              };
+              classSection: {
+                id: string;
+                academicClass: { id: string; name: string };
+                section: { name: string };
+              };
+            };
+          }>
+        >(`/exams/${printForm.examId}/students${query}`, token),
+        docsPromise,
       ]);
-      setStudents(studentPage.items);
+      let options: StudentOption[] = roster.map((row) => ({
+        id: row.studentEnrollment.student.id,
+        firstName: row.studentEnrollment.student.firstName,
+        lastName: row.studentEnrollment.student.lastName,
+        admissionNumber: row.studentEnrollment.student.admissionNumber,
+      }));
+      if (printForm.classId && !printForm.classSectionId) {
+        const sectionIds = new Set(
+          setup.classSections
+            .filter((item) => item.academicClass.id === printForm.classId)
+            .map((item) => item.id),
+        );
+        options = roster
+          .filter((row) => sectionIds.has(row.studentEnrollment.classSection.id))
+          .map((row) => ({
+            id: row.studentEnrollment.student.id,
+            firstName: row.studentEnrollment.student.firstName,
+            lastName: row.studentEnrollment.student.lastName,
+            admissionNumber: row.studentEnrollment.student.admissionNumber,
+          }));
+      }
+      setStudents(options);
+      setSelectedStudentIds((prev) => {
+        const allowed = new Set(options.map((item) => item.id));
+        return prev.filter((id) => allowed.has(id));
+      });
       setGenerated(docs);
+      setGeneratedPage(1);
     } catch (cause) {
       onError(cause instanceof Error ? cause.message : "Unable to load print data");
     }
@@ -327,7 +385,7 @@ export function AdmitCardPanel({
   useEffect(() => {
     if (mode === "print") void loadPrintData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, token, printForm.classSectionId]);
+  }, [mode, token, printForm.examId, printForm.classId, printForm.classSectionId]);
 
   useEffect(() => {
     function onDocClick() {
@@ -475,34 +533,68 @@ export function AdmitCardPanel({
     }
   }
 
-  async function generateAdmit(event: FormEvent) {
-    event.preventDefault();
-    if (!printForm.templateId || !printForm.examId || !printForm.studentId) {
-      onError("Template, exam, and student are required");
+  async function generateBulk(studentIds: string[]) {
+    if (!printForm.templateId || !printForm.examId) {
+      onError("Template and exam are required");
+      return;
+    }
+    if (studentIds.length === 0) {
+      onError("Select at least one student");
       return;
     }
     setGenerating(true);
     try {
-      const doc = await apiRequest<GeneratedAdmit>("/documents/generated", token, {
+      const result = await apiRequest<{
+        documents: Array<{ id: string; studentId: string; serialNumber: string }>;
+      }>("/documents/generated/bulk", token, {
         method: "POST",
         body: JSON.stringify({
           templateId: printForm.templateId,
           examId: printForm.examId,
-          studentId: printForm.studentId,
-          barcodeValue: printForm.barcodeValue || undefined,
+          studentIds,
         }),
       });
-      notifySuccess("Admit card generated");
+      const ids = result.documents.map((doc) => doc.id);
+      notifySuccess(
+        ids.length === 1
+          ? "Admit card generated"
+          : `${ids.length} admit cards generated`,
+      );
       await loadPrintData();
-      window.open(`/print/documents/${doc.id}`, "_blank", "noopener,noreferrer");
+      if (ids.length > 0) {
+        openPrintDocuments(ids);
+      }
     } catch (cause) {
-      onError(cause instanceof Error ? cause.message : "Unable to generate admit card");
+      onError(cause instanceof Error ? cause.message : "Unable to generate admit cards");
     } finally {
       setGenerating(false);
     }
   }
 
+  function toggleStudent(studentId: string) {
+    setSelectedStudentIds((prev) =>
+      prev.includes(studentId)
+        ? prev.filter((id) => id !== studentId)
+        : [...prev, studentId],
+    );
+  }
+
   const activeTemplates = templates.filter((item) => item.isActive);
+  const filteredStudentIds = students.map((item) => item.id);
+  const allFilteredSelected =
+    filteredStudentIds.length > 0 &&
+    filteredStudentIds.every((id) => selectedStudentIds.includes(id));
+  const selectionOverCap = selectedStudentIds.length > BULK_PRINT_CAP;
+  const filteredOverCap = filteredStudentIds.length > BULK_PRINT_CAP;
+  const generatedPageCount = Math.max(1, Math.ceil(generated.length / generatedPageSize));
+  const pagedGenerated = generated.slice(
+    (generatedPage - 1) * generatedPageSize,
+    generatedPage * generatedPageSize,
+  );
+
+  useEffect(() => {
+    if (generatedPage > generatedPageCount) setGeneratedPage(generatedPageCount);
+  }, [generatedPage, generatedPageCount]);
 
   return (
     <section className="mt-5 space-y-4">
@@ -900,9 +992,10 @@ export function AdmitCardPanel({
           <div className="nx-card p-5">
             <h2 className="text-[15px] font-bold text-slate-900">Print Admit Cards</h2>
             <p className="mt-1 text-[12.5px] text-slate-500">
-              Choose a template, exam, and student to generate a printable admit card.
+              Choose a template and exam. The list shows students assigned to that exam — use Assign
+              Students on Exam Groups first if the list is empty.
             </p>
-            <form className="mt-5 grid gap-3 md:grid-cols-2" onSubmit={(event) => void generateAdmit(event)}>
+            <div className="mt-5 grid gap-3 md:grid-cols-2">
               <label className="block">
                 <span className="nx-label !normal-case !tracking-normal">Template</span>
                 <select
@@ -969,39 +1062,90 @@ export function AdmitCardPanel({
                   ))}
                 </select>
               </label>
-              <label className="block md:col-span-2">
-                <span className="nx-label !normal-case !tracking-normal">Student</span>
-                <select
-                  className="nx-input bg-white"
-                  required
-                  value={printForm.studentId}
-                  onChange={(event) => setPrintForm({ ...printForm, studentId: event.target.value })}
+
+              <div className="md:col-span-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="nx-label !normal-case !tracking-normal">
+                    Students ({selectedStudentIds.length} selected
+                    {students.length ? ` of ${students.length}` : ""})
+                  </span>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      className="nx-btn-secondary !px-2.5 !py-1 text-[12px]"
+                      disabled={students.length === 0 || allFilteredSelected}
+                      onClick={() => setSelectedStudentIds(filteredStudentIds)}
+                    >
+                      Select all
+                    </button>
+                    <button
+                      type="button"
+                      className="nx-btn-secondary !px-2.5 !py-1 text-[12px]"
+                      disabled={selectedStudentIds.length === 0}
+                      onClick={() => setSelectedStudentIds([])}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+                <div className="mt-2 max-h-56 overflow-y-auto rounded-lg border border-slate-200 bg-white">
+                  {students.length === 0 ? (
+                    <p className="px-3 py-6 text-center text-[12.5px] text-slate-400">
+                      {printForm.examId
+                        ? "No students assigned to this exam yet. Go to Exam Groups → Assign Students, then return here."
+                        : "Select an exam to load assigned students."}
+                    </p>
+                  ) : (
+                    <ul className="divide-y divide-slate-100">
+                      {students.map((student) => {
+                        const checked = selectedStudentIds.includes(student.id);
+                        return (
+                          <li key={student.id}>
+                            <label className="flex cursor-pointer items-center gap-2.5 px-3 py-2 text-[13px] text-slate-700 hover:bg-slate-50">
+                              <input
+                                type="checkbox"
+                                className="size-4 rounded border-slate-300"
+                                checked={checked}
+                                onChange={() => toggleStudent(student.id)}
+                              />
+                              <span className="min-w-0 truncate">
+                                {student.firstName} {student.lastName ?? ""} ·{" "}
+                                {student.admissionNumber}
+                              </span>
+                            </label>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
+                {selectionOverCap || filteredOverCap ? (
+                  <p className="mt-2 text-[12px] text-amber-700">
+                    Large batches (over {BULK_PRINT_CAP}) may be slow to generate and print. Prefer
+                    smaller groups when possible.
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="md:col-span-2 flex flex-wrap justify-end gap-2">
+                <button
+                  type="button"
+                  className="nx-btn-secondary"
+                  disabled={generating || selectedStudentIds.length === 0}
+                  onClick={() => void generateBulk(selectedStudentIds)}
                 >
-                  <option value="">Select student</option>
-                  {students.map((student) => (
-                    <option key={student.id} value={student.id}>
-                      {student.firstName} {student.lastName ?? ""} · {student.admissionNumber}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block md:col-span-2">
-                <span className="nx-label !normal-case !tracking-normal">Custom barcode (optional)</span>
-                <input
-                  className="nx-input bg-white"
-                  value={printForm.barcodeValue}
-                  placeholder="Auto-generated if blank"
-                  onChange={(event) =>
-                    setPrintForm({ ...printForm, barcodeValue: event.target.value })
-                  }
-                />
-              </label>
-              <div className="md:col-span-2 flex justify-end">
-                <button type="submit" className="nx-btn-primary" disabled={generating}>
-                  {generating ? "Generating…" : "Generate & Print"}
+                  {generating ? "Generating…" : "Generate selected"}
+                </button>
+                <button
+                  type="button"
+                  className="nx-btn-primary"
+                  disabled={generating || students.length === 0}
+                  onClick={() => void generateBulk(filteredStudentIds)}
+                >
+                  {generating ? "Generating…" : "Generate all filtered"}
                 </button>
               </div>
-            </form>
+            </div>
             {!activeTemplates.length ? (
               <p className="mt-3 text-[12px] text-amber-700">
                 No active templates. Switch to Design to create one.
@@ -1028,36 +1172,43 @@ export function AdmitCardPanel({
                 Generated admit cards will appear here for reprinting.
               </p>
             ) : (
-              <div className="divide-y divide-slate-100">
-                {generated.slice(0, 20).map((doc) => (
-                  <div
-                    key={doc.id}
-                    className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
-                  >
-                    <div>
-                      <p className="text-[13px] font-medium text-slate-900">
-                        {doc.student
-                          ? `${doc.student.firstName} ${doc.student.lastName ?? ""}`
-                          : "Student"}{" "}
-                        · {doc.template.name}
-                      </p>
-                      <p className="text-[12px] text-slate-500">
-                        {doc.exam?.name ?? "Exam"} · {doc.serialNumber} ·{" "}
-                        {new Date(doc.generatedAt).toLocaleString()}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      className="nx-btn-secondary"
-                      onClick={() =>
-                        window.open(`/print/documents/${doc.id}`, "_blank", "noopener,noreferrer")
-                      }
+              <>
+                <div className="divide-y divide-slate-100">
+                  {pagedGenerated.map((doc) => (
+                    <div
+                      key={doc.id}
+                      className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
                     >
-                      Open & print
-                    </button>
-                  </div>
-                ))}
-              </div>
+                      <div>
+                        <p className="text-[13px] font-medium text-slate-900">
+                          {doc.student
+                            ? `${doc.student.firstName} ${doc.student.lastName ?? ""}`
+                            : "Student"}{" "}
+                          · {doc.template.name}
+                        </p>
+                        <p className="text-[12px] text-slate-500">
+                          {doc.exam?.name ?? "Exam"} · {doc.serialNumber} ·{" "}
+                          {new Date(doc.generatedAt).toLocaleString()}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        className="nx-btn-secondary"
+                        onClick={() => openPrintDocuments(doc.id)}
+                      >
+                        Open & print
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <ListPagination
+                  page={generatedPage}
+                  pageSize={generatedPageSize}
+                  total={generated.length}
+                  onPageChange={setGeneratedPage}
+                  label="admit cards"
+                />
+              </>
             )}
           </div>
         </div>

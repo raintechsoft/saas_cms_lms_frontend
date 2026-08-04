@@ -31,6 +31,7 @@ type FormState = {
   room: string;
   maximumMarks: string;
   minimumMarks: string;
+  creditHours: string;
   markField: string;
 };
 
@@ -45,6 +46,7 @@ function emptyForm(examId = "", classSectionId = ""): FormState {
     room: "",
     maximumMarks: "100",
     minimumMarks: "40",
+    creditHours: "",
     markField: "Theory",
   };
 }
@@ -173,6 +175,10 @@ export function SchedulePanel({
       room: schedule.room ?? "",
       maximumMarks: String(schedule.maximumMarks),
       minimumMarks: String(schedule.minimumMarks),
+      creditHours:
+        schedule.creditHours != null && schedule.creditHours !== ""
+          ? String(schedule.creditHours)
+          : "",
       markField: schedule.components?.[0]?.name ?? "Theory",
     });
     setFormOpen(true);
@@ -196,6 +202,12 @@ export function SchedulePanel({
     }
     setSaving(true);
     try {
+      const creditHoursPayload =
+        showCreditHours && form.creditHours.trim() !== ""
+          ? { creditHours: Number(form.creditHours) }
+          : showCreditHours
+            ? { creditHours: null }
+            : {};
       if (editing) {
         await apiRequest(`/exams/schedules/${editing.id}`, token, {
           method: "PUT",
@@ -206,6 +218,7 @@ export function SchedulePanel({
             room: form.room.trim() || null,
             maximumMarks: Number(form.maximumMarks) || 100,
             minimumMarks: Number(form.minimumMarks) || 0,
+            ...creditHoursPayload,
           }),
         });
         notifySuccess("Schedule updated.");
@@ -221,6 +234,7 @@ export function SchedulePanel({
             room: form.room.trim() || null,
             maximumMarks: Number(form.maximumMarks) || 100,
             minimumMarks: Number(form.minimumMarks) || 40,
+            ...creditHoursPayload,
           }),
         });
         await apiRequest(`/exams/${form.examId}/students`, token, {
@@ -394,7 +408,13 @@ export function SchedulePanel({
                     </td>
                     <td>{durationLabel(schedule.startTime, schedule.endTime)}</td>
                     <td>{schedule.room || "—"}</td>
-                    {showCreditHours ? <td>—</td> : null}
+                    {showCreditHours ? (
+                      <td>
+                        {schedule.creditHours != null && schedule.creditHours !== ""
+                          ? String(schedule.creditHours)
+                          : "—"}
+                      </td>
+                    ) : null}
                     <td>{markFieldLabel(schedule)}</td>
                     <td>
                       <div className="flex justify-end gap-2">
@@ -576,6 +596,20 @@ export function SchedulePanel({
                 onChange={(event) => setForm({ ...form, room: event.target.value })}
               />
             </label>
+            {showCreditHours ? (
+              <label>
+                <span className="nx-label">Credit Hours</span>
+                <input
+                  className="nx-input"
+                  type="number"
+                  min="0"
+                  step="0.5"
+                  placeholder="e.g. 3"
+                  value={form.creditHours}
+                  onChange={(event) => setForm({ ...form, creditHours: event.target.value })}
+                />
+              </label>
+            ) : null}
             <label>
               <span className="nx-label">
                 Max Marks <span className="text-rose-500">*</span>

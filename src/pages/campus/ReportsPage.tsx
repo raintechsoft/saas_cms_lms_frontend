@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 import {
   AccountBalanceWalletOutlined,
   AssessmentOutlined,
@@ -11,7 +12,9 @@ import {
   Diversity3Outlined,
   DownloadOutlined,
   EmojiEventsOutlined,
+  AssignmentTurnedInOutlined,
   EventBusyOutlined,
+  TrendingUpOutlined,
   ExpandLessOutlined,
   ExpandMoreOutlined,
   FamilyRestroomOutlined,
@@ -26,6 +29,7 @@ import {
   PercentOutlined,
   PaymentsOutlined,
   PersonSearchOutlined,
+  PersonOffOutlined,
   PlayArrowOutlined,
   ReceiptLongOutlined,
   SchoolOutlined,
@@ -76,6 +80,11 @@ interface Hub {
     description: string;
   }>;
   feeReports?: Array<{
+    key: string;
+    label: string;
+    description: string;
+  }>;
+  homeworkReports?: Array<{
     key: string;
     label: string;
     description: string;
@@ -291,6 +300,12 @@ const FEE_REPORT_GROUPS: Array<{ title: string; keys: string[] }> = [
   },
 ];
 
+const HOMEWORK_REPORT_STYLE: Record<string, { icon: ComponentType<{ sx?: object }>; tone: string }> = {
+  complete: { icon: AssignmentTurnedInOutlined, tone: "bg-indigo-100 text-indigo-700" },
+  progress: { icon: TrendingUpOutlined, tone: "bg-emerald-100 text-emerald-700" },
+  due: { icon: EventBusyOutlined, tone: "bg-orange-100 text-orange-700" },
+};
+
 const MODULE_CARD_STYLE: Record<
   ReportModule,
   { icon: ComponentType<{ sx?: object }>; wrap: string; card: string }
@@ -362,7 +377,7 @@ function statusPill(value: string): ReactNode {
 export function ReportsPage() {
   const { accessToken } = useAuth();
   const [hub, setHub] = useState<Hub | null>(null);
-  const [tab, setTab] = useState<"core" | "students" | "fees" | "modules">("core");
+  const [tab, setTab] = useState<"core" | "students" | "fees" | "homework" | "modules">("core");
   const [selectedCore, setSelectedCore] = useState<CoreReportKey>("active_students");
   const [filters, setFilters] = useState({
     from: monthStart,
@@ -372,6 +387,7 @@ export function ReportsPage() {
   const [coreData, setCoreData] = useState<CoreReportResult | null>(null);
   const [selectedStudentReport, setSelectedStudentReport] = useState<string | null>(null);
   const [selectedFeeReport, setSelectedFeeReport] = useState<string | null>(null);
+  const [selectedHomeworkReport, setSelectedHomeworkReport] = useState<string | null>(null);
   const [module, setModule] = useState<ReportModule | null>(null);
   const [moduleData, setModuleData] = useState<unknown>(null);
   const [loading, setLoading] = useState(false);
@@ -416,12 +432,19 @@ export function ReportsPage() {
     return map;
   }, [hub?.feeReports]);
 
+  const homeworkReportMap = useMemo(() => {
+    const map = new Map<string, { key: string; label: string; description: string }>();
+    for (const item of hub?.homeworkReports ?? []) map.set(item.key, item);
+    return map;
+  }, [hub?.homeworkReports]);
+
   async function runCore(reportKey = selectedCore) {
     setLoading(true);
     setModule(null);
     setModuleData(null);
     setSelectedStudentReport(null);
     setSelectedFeeReport(null);
+    setSelectedHomeworkReport(null);
     setSelectedCore(reportKey);
     setTab("core");
     try {
@@ -455,6 +478,7 @@ export function ReportsPage() {
     setModule(null);
     setModuleData(null);
     setSelectedFeeReport(null);
+    setSelectedHomeworkReport(null);
     setSelectedStudentReport(reportKey);
     setTab("students");
     try {
@@ -481,6 +505,7 @@ export function ReportsPage() {
     setModule(null);
     setModuleData(null);
     setSelectedStudentReport(null);
+    setSelectedHomeworkReport(null);
     setSelectedFeeReport(reportKey);
     setTab("fees");
     try {
@@ -502,11 +527,39 @@ export function ReportsPage() {
     }
   }
 
+  async function runHomeworkReport(reportKey: string) {
+    setLoading(true);
+    setModule(null);
+    setModuleData(null);
+    setSelectedStudentReport(null);
+    setSelectedFeeReport(null);
+    setSelectedHomeworkReport(reportKey);
+    setTab("homework");
+    try {
+      const query = new URLSearchParams({
+        from: filters.from,
+        to: filters.to,
+      });
+      if (hub?.currentSession) query.set("sessionId", hub.currentSession.id);
+      const data = await apiRequest<CoreReportResult>(
+        `/reports/homework/${reportKey}?${query}`,
+        accessToken,
+      );
+      setCoreData(data);
+      notifySuccess(`${data.title} ready`);
+    } catch (cause) {
+      notifyError(cause instanceof Error ? cause.message : "Unable to generate homework report");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function runModule(selected: ReportModule) {
     setLoading(true);
     setCoreData(null);
     setSelectedStudentReport(null);
     setSelectedFeeReport(null);
+    setSelectedHomeworkReport(null);
     setModule(selected);
     setTab("modules");
     try {
@@ -541,6 +594,14 @@ export function ReportsPage() {
       void runFeeReport(selectedFeeReport);
       return;
     }
+    if (tab === "homework") {
+      if (!selectedHomeworkReport) {
+        notifyError("Select a homework report first");
+        return;
+      }
+      void runHomeworkReport(selectedHomeworkReport);
+      return;
+    }
     if (tab === "modules") {
       if (!module) {
         notifyError("Select a module report first");
@@ -552,7 +613,7 @@ export function ReportsPage() {
     void runCore();
   }
 
-  type ReportsTab = "core" | "students" | "fees" | "modules";
+  type ReportsTab = "core" | "students" | "fees" | "homework" | "modules";
 
   const reportTabItems = useMemo((): Array<CmsIconTabItem<ReportsTab>> => {
     const items: Array<CmsIconTabItem<ReportsTab>> = [
@@ -590,6 +651,19 @@ export function ReportsPage() {
         badge: (
           <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-500">
             {hub?.feeReports?.length ?? 0}
+          </span>
+        ),
+      });
+    }
+    if ((hub?.homeworkReports?.length ?? 0) > 0) {
+      items.push({
+        key: "homework",
+        label: "Homework reports",
+        icon: MenuBookOutlined,
+        tone: "fuchsia",
+        badge: (
+          <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-500">
+            {hub?.homeworkReports?.length ?? 0}
           </span>
         ),
       });
@@ -641,7 +715,7 @@ export function ReportsPage() {
             setTab(key);
             setCatalogOpen(true);
           }}
-          columnsClass="grid-cols-2 sm:grid-cols-4"
+          columnsClass="grid-cols-2 sm:grid-cols-3 lg:grid-cols-5"
           items={reportTabItems}
         />
 
@@ -710,11 +784,13 @@ export function ReportsPage() {
             <CoreReportView
               data={coreData}
               metaLabel={
-                selectedFeeReport
-                  ? hub?.feeReports?.find((r) => r.key === selectedFeeReport)?.label
-                  : selectedStudentReport
-                    ? hub?.studentReports?.find((r) => r.key === selectedStudentReport)?.label
-                    : selectedMeta?.label
+                selectedHomeworkReport
+                  ? hub?.homeworkReports?.find((r) => r.key === selectedHomeworkReport)?.label
+                  : selectedFeeReport
+                    ? hub?.feeReports?.find((r) => r.key === selectedFeeReport)?.label
+                    : selectedStudentReport
+                      ? hub?.studentReports?.find((r) => r.key === selectedStudentReport)?.label
+                      : selectedMeta?.label
               }
             />
           </div>
@@ -733,7 +809,9 @@ export function ReportsPage() {
                     ? "Choose student report"
                     : tab === "fees"
                       ? "Choose fee report"
-                      : "Choose core report"}
+                      : tab === "homework"
+                        ? "Choose homework report"
+                        : "Choose core report"}
                 </p>
                 <p className="text-xs text-slate-500">
                   {coreData
@@ -924,6 +1002,44 @@ export function ReportsPage() {
                     })}
                   </div>
                 ) : null}
+
+                {tab === "homework" ? (
+                  <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">
+                    {(hub?.homeworkReports ?? []).map((item) => {
+                      const style = HOMEWORK_REPORT_STYLE[item.key] ?? {
+                        icon: AssessmentOutlined,
+                        tone: "bg-slate-100 text-slate-600",
+                      };
+                      const Icon = style.icon;
+                      const isSelected =
+                        selectedHomeworkReport === item.key && Boolean(coreData);
+                      return (
+                        <button
+                          key={item.key}
+                          type="button"
+                          onClick={() => void runHomeworkReport(item.key)}
+                          className={`rounded-2xl border bg-white p-4 text-left transition hover:border-slate-300 ${
+                            isSelected
+                              ? "border-indigo-400 ring-2 ring-indigo-100"
+                              : "border-slate-200"
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <span
+                              className={`inline-flex size-10 shrink-0 items-center justify-center rounded-xl ${style.tone}`}
+                            >
+                              <Icon sx={{ fontSize: 20 }} />
+                            </span>
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-slate-900">{item.label}</p>
+                              <p className="mt-0.5 text-xs text-slate-500">{item.description}</p>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
               </div>
             ) : null}
           </section>
@@ -963,7 +1079,16 @@ export function ReportsPage() {
                 );
               })}
             </div>
-            {module && moduleData ? <ModuleDump module={module} data={moduleData} /> : null}
+            {module && moduleData ? (
+              <ModuleDump
+                module={module}
+                data={moduleData}
+                accessToken={accessToken}
+                reportMonth={filters.from.slice(0, 7)}
+                attendanceFrom={filters.from}
+                attendanceTo={filters.to}
+              />
+            ) : null}
           </section>
         ) : null}
       </div>
@@ -975,9 +1100,15 @@ function CoreReportView({ data, metaLabel }: { data: CoreReportResult; metaLabel
   const coreStyle = REPORT_CARD_STYLE[data.reportKey as CoreReportKey];
   const studentStyle = STUDENT_REPORT_STYLE[data.reportKey];
   const feeStyle = FEE_REPORT_STYLE[data.reportKey];
-  const Icon = coreStyle?.icon ?? studentStyle?.icon ?? feeStyle?.icon ?? AssessmentOutlined;
+  const homeworkStyle = HOMEWORK_REPORT_STYLE[data.reportKey];
+  const Icon =
+    coreStyle?.icon ?? studentStyle?.icon ?? feeStyle?.icon ?? homeworkStyle?.icon ?? AssessmentOutlined;
   const iconWrap =
-    coreStyle?.iconWrap ?? studentStyle?.tone ?? feeStyle?.tone ?? "bg-slate-100 text-slate-700";
+    coreStyle?.iconWrap ??
+    studentStyle?.tone ??
+    feeStyle?.tone ??
+    homeworkStyle?.tone ??
+    "bg-slate-100 text-slate-700";
   const headerTone = coreStyle?.card ?? "border-slate-100 bg-slate-50";
   const summaryEntries = Object.entries(data.summary ?? {}).filter(
     ([, value]) => typeof value !== "object",
@@ -1083,7 +1214,21 @@ function renderCell(key: string, value: unknown): ReactNode {
   return String(value);
 }
 
-function ModuleDump({ module, data }: { module: ReportModule; data: unknown }) {
+function ModuleDump({
+  module,
+  data,
+  accessToken,
+  reportMonth,
+  attendanceFrom,
+  attendanceTo,
+}: {
+  module: ReportModule;
+  data: unknown;
+  accessToken: string;
+  reportMonth: string;
+  attendanceFrom: string;
+  attendanceTo: string;
+}) {
   const style = MODULE_CARD_STYLE[module];
   const Icon = style.icon;
   return (
@@ -1094,9 +1239,229 @@ function ModuleDump({ module, data }: { module: ReportModule; data: unknown }) {
         </span>
         <p className="font-semibold capitalize text-slate-900">{module} module report</p>
       </div>
+      {module === "hr" ? (
+        <HrModuleQuickReports
+          accessToken={accessToken}
+          reportMonth={reportMonth}
+          attendanceFrom={attendanceFrom}
+          attendanceTo={attendanceTo}
+        />
+      ) : null}
       <pre className="max-h-[420px] overflow-auto rounded-xl bg-slate-950 p-4 text-xs text-slate-100">
         {JSON.stringify(data, null, 2)}
       </pre>
+    </div>
+  );
+}
+
+interface HrStaffRow {
+  user: { firstName: string; lastName: string; email: string; phone?: string | null };
+  employeeNumber: string;
+  designation?: { name: string } | null;
+  department?: { name: string } | null;
+  status: string;
+  joiningDate?: string;
+  basicSalary?: string;
+}
+
+function hrStaffCsvRow(member: HrStaffRow) {
+  return [
+    `${member.user.firstName} ${member.user.lastName}`.trim(),
+    member.employeeNumber,
+    member.user.email,
+    member.user.phone ?? "",
+    member.designation?.name ?? "",
+    member.department?.name ?? "",
+    member.status,
+    member.joiningDate ? member.joiningDate.slice(0, 10) : "",
+  ];
+}
+
+function HrModuleQuickReports({
+  accessToken,
+  reportMonth,
+  attendanceFrom,
+  attendanceTo,
+}: {
+  accessToken: string;
+  reportMonth: string;
+  attendanceFrom: string;
+  attendanceTo: string;
+}) {
+  const [busy, setBusy] = useState<string | null>(null);
+
+  async function downloadStaffList() {
+    setBusy("staff");
+    try {
+      const setup = await apiRequest<{ staff: HrStaffRow[] }>(
+        `/hr/setup?month=${reportMonth}-01`,
+        accessToken,
+      );
+      if (!setup.staff.length) {
+        notifyError("No staff records to export");
+        return;
+      }
+      const header = [
+        "Name",
+        "Employee No",
+        "Email",
+        "Phone",
+        "Role",
+        "Department",
+        "Status",
+        "Joining Date",
+      ];
+      const lines = [header, ...setup.staff.map(hrStaffCsvRow)].map((row) =>
+        row.map((value) => `"${String(value).replaceAll('"', '""')}"`).join(","),
+      );
+      const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "staff-list-report.csv";
+      link.click();
+      URL.revokeObjectURL(url);
+      notifySuccess("Staff list downloaded");
+    } catch (cause) {
+      notifyError(cause instanceof Error ? cause.message : "Unable to export staff list");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function downloadDisabled() {
+    setBusy("disabled");
+    try {
+      const staff = await apiRequest<HrStaffRow[]>("/hr/staff/disabled", accessToken);
+      if (!staff.length) {
+        notifyError("No disabled staff to export");
+        return;
+      }
+      const header = [
+        "Name",
+        "Employee No",
+        "Email",
+        "Phone",
+        "Role",
+        "Department",
+        "Status",
+        "Joining Date",
+      ];
+      const lines = [header, ...staff.map(hrStaffCsvRow)].map((row) =>
+        row.map((value) => `"${String(value).replaceAll('"', '""')}"`).join(","),
+      );
+      const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "disabled-staff-report.csv";
+      link.click();
+      URL.revokeObjectURL(url);
+      notifySuccess("Disabled staff report downloaded");
+    } catch (cause) {
+      notifyError(cause instanceof Error ? cause.message : "Unable to export disabled staff");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function downloadPayroll() {
+    setBusy("payroll");
+    try {
+      const setup = await apiRequest<{
+        payrolls: Array<{
+          staff: HrStaffRow;
+          basicSalary?: string;
+          grossAmount: string;
+          attendanceDeduction: string;
+          netAmount: string;
+          status: string;
+        }>;
+      }>(`/hr/setup?month=${reportMonth}-01`, accessToken);
+      if (!setup.payrolls.length) {
+        notifyError(`No payroll for ${reportMonth}`);
+        return;
+      }
+      const header = [
+        "Name",
+        "Employee No",
+        "Month",
+        "Basic Salary",
+        "Gross Amount",
+        "Attendance Deduction",
+        "Net Amount",
+        "Status",
+      ];
+      const rows = setup.payrolls.map((payroll) => [
+        `${payroll.staff.user.firstName} ${payroll.staff.user.lastName}`.trim(),
+        payroll.staff.employeeNumber,
+        reportMonth,
+        payroll.basicSalary ?? payroll.staff.basicSalary ?? "",
+        payroll.grossAmount,
+        payroll.attendanceDeduction,
+        payroll.netAmount,
+        payroll.status,
+      ]);
+      const lines = [header, ...rows].map((row) =>
+        row.map((value) => `"${String(value).replaceAll('"', '""')}"`).join(","),
+      );
+      const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `staff-payroll-report-${reportMonth}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+      notifySuccess("Payroll report downloaded");
+    } catch (cause) {
+      notifyError(cause instanceof Error ? cause.message : "Unable to export payroll");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div className="mb-4 rounded-xl border border-indigo-100 bg-indigo-50/40 p-4">
+      <p className="text-sm text-slate-700">
+        For full HR CSV exports (birthdays, leave requests, attendance summaries), use{" "}
+        <Link to="/hr" className="font-semibold text-indigo-600 hover:underline">
+          HR → Reports
+        </Link>
+        .
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          type="button"
+          className="nx-btn-secondary !py-1.5 text-[12px]"
+          disabled={busy !== null}
+          onClick={() => void downloadStaffList()}
+        >
+          <GroupsOutlined sx={{ fontSize: 14 }} />
+          {busy === "staff" ? "Exporting…" : "Staff list CSV"}
+        </button>
+        <button
+          type="button"
+          className="nx-btn-secondary !py-1.5 text-[12px]"
+          disabled={busy !== null}
+          onClick={() => void downloadDisabled()}
+        >
+          <PersonOffOutlined sx={{ fontSize: 14 }} />
+          {busy === "disabled" ? "Exporting…" : "Disabled staff CSV"}
+        </button>
+        <button
+          type="button"
+          className="nx-btn-secondary !py-1.5 text-[12px]"
+          disabled={busy !== null}
+          onClick={() => void downloadPayroll()}
+        >
+          <PaymentsOutlined sx={{ fontSize: 14 }} />
+          {busy === "payroll" ? "Exporting…" : `Payroll CSV (${reportMonth})`}
+        </button>
+      </div>
+      <p className="mt-2 text-[11.5px] text-slate-500">
+        Attendance range on this page: {attendanceFrom} to {attendanceTo} — use HR Reports for
+        attendance CSV by date range.
+      </p>
     </div>
   );
 }

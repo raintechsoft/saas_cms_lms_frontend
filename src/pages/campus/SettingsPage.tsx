@@ -128,6 +128,10 @@ export function SettingsPage() {
               <option value="COLLEGE_GRADING">College grading</option>
               <option value="GPA">GPA grading</option>
             </select>
+            <p className="mt-1.5 text-xs leading-relaxed text-slate-500">
+              Default for new exam groups. General = pass/fail only; School = grade bands within a
+              session; College = linked exams across sessions; GPA = credit-hour weighted average.
+            </p>
           </Field>
           <Field label="Address" wide>
             <textarea className="input min-h-24" value={settings.address ?? ""}

@@ -64,6 +64,7 @@ export function ExamsPage() {
   const [marksImportKey, setMarksImportKey] = useState(0);
   const [gradesAddOpen, setGradesAddOpen] = useState(false);
   const [resultsSelection, setResultsSelection] = useState("");
+  const [defaultResultType, setDefaultResultType] = useState<string>("SCHOOL_GRADING");
 
   const exams = useMemo(
     () => setup?.groups.flatMap((group) => group.exams.map((exam) => ({ ...exam, group }))) ?? [],
@@ -73,6 +74,17 @@ export function ExamsPage() {
     () => exams.flatMap((exam) => exam.schedules.map((schedule) => ({ ...schedule, exam }))),
     [exams],
   );
+
+  useEffect(() => {
+    if (!accessToken) return;
+    apiRequest<{ examResultType?: string }>("/settings", accessToken)
+      .then((data) => {
+        if (data.examResultType) setDefaultResultType(data.examResultType);
+      })
+      .catch(() => {
+        /* keep SCHOOL_GRADING fallback */
+      });
+  }, [accessToken]);
 
   async function load() {
     setLoading(true);
@@ -166,9 +178,10 @@ export function ExamsPage() {
                 onCloseCreateGroup={() => setCreateGroupOpen(false)}
                 onSaved={load}
                 onError={notifyError}
+                defaultResultType={defaultResultType}
                 onOpenSchedule={(examId, classSectionId) => {
                   setScheduleExamId(examId);
-                  setScheduleClassSectionId(classSectionId ?? "");
+                  setScheduleClassSectionId(classSectionId || "");
                   setTab("schedule");
                 }}
                 onOpenMarks={(scheduleId) => {

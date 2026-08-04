@@ -34,7 +34,10 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 function readStoredAuth(): AuthState | null {
   try {
-    const value = sessionStorage.getItem(STORAGE_KEY);
+    // localStorage so print/report tabs opened via window.open keep the session
+    // (sessionStorage is not shared across tabs/windows).
+    const value =
+      localStorage.getItem(STORAGE_KEY) ?? sessionStorage.getItem(STORAGE_KEY);
     if (!value) return null;
     const parsed = JSON.parse(value) as AuthState;
     if (!parsed.accessToken || !parsed.user) return null;
@@ -48,19 +51,23 @@ function readStoredAuth(): AuthState | null {
       },
     };
   } catch {
+    localStorage.removeItem(STORAGE_KEY);
     sessionStorage.removeItem(STORAGE_KEY);
     return null;
   }
 }
 
 function storeAuth(next: AuthState) {
-  sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  const raw = JSON.stringify(next);
+  localStorage.setItem(STORAGE_KEY, raw);
+  sessionStorage.removeItem(STORAGE_KEY);
 }
 
 export function AuthProvider({ children }: PropsWithChildren) {
   const [auth, setAuth] = useState<AuthState | null>(readStoredAuth);
 
   const logout = useCallback(() => {
+    localStorage.removeItem(STORAGE_KEY);
     sessionStorage.removeItem(STORAGE_KEY);
     setAuth(null);
   }, []);

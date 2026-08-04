@@ -21,11 +21,14 @@ function getNavItems(basePath: string, productMode: PortalOverview["productMode"
   ];
   if (isProductBucketAllowed(productMode, "LMS")) {
     items.push({ to: `${basePath}/timetable`, label: "Timetable", icon: "TT", end: false });
+  }
+  if (isProductBucketAllowed(productMode, "SHARED")) {
     items.push({ to: `${basePath}/homework`, label: "Homework", icon: "HW", end: false });
   }
   if (isProductBucketAllowed(productMode, "CMS")) {
     items.push({ to: `${basePath}/fees`, label: "Fees", icon: "FE", end: false });
     items.push({ to: `${basePath}/documents`, label: "Documents", icon: "DC", end: false });
+    items.push({ to: `${basePath}/rate-teachers`, label: "Rate Teachers", icon: "RT", end: false });
   }
   return items;
 }

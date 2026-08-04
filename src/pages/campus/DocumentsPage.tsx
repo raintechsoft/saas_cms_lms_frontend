@@ -32,6 +32,7 @@ import { CmsIconTabs, type CmsIconTabItem } from "../../components/cms/CmsIconTa
 import { apiRequest } from "../../lib/api";
 import { confirmDelete } from "../../lib/confirm";
 import { notifyError, notifySuccess } from "../../lib/notify";
+import { printDocumentsHref } from "../../lib/print";
 
 type TemplateType = "ADMIT_CARD" | "MARKSHEET" | "CERTIFICATE" | "ID_CARD";
 type DesignType = "CERTIFICATE" | "ID_CARD";
@@ -1463,7 +1464,7 @@ function HistoryPanel({ documents, templates }: { documents: Generated[]; templa
 
   function openPrintView(id: string, autoprint: boolean) {
     markPrinted(id);
-    window.location.assign(`/print/documents/${id}${autoprint ? "?autoprint=1" : ""}`);
+    window.location.assign(printDocumentsHref(id, { autoprint }));
   }
 
   function exportCsv() {

@@ -5,6 +5,7 @@ import {
   EventBusyOutlined,
   GroupsOutlined,
   PaymentsOutlined,
+  PersonOffOutlined,
   SettingsOutlined,
   StarOutline,
   TodayOutlined,
@@ -20,17 +21,21 @@ import { CmsIconTabs, type CmsIconTabItem } from "../../components/cms/CmsIconTa
 import { apiRequest } from "../../lib/api";
 import { notifyError } from "../../lib/notify";
 import { AddStaffPanel } from "./hr/AddStaffPanel";
+import { DisableStaffModal } from "./hr/DisableStaffModal";
+import { DisabledStaffPanel } from "./hr/DisabledStaffPanel";
 import { HrReportsPanel } from "./hr/HrReportsPanel";
 import { HrSetupPanel } from "./hr/HrSetupPanel";
 import { LeavePanel } from "./hr/LeavePanel";
 import { PayrollPanel } from "./hr/PayrollPanel";
+import { Staff360Panel } from "./hr/Staff360Panel";
 import { StaffAttendancePanel } from "./hr/StaffAttendancePanel";
 import { StaffListPanel } from "./hr/StaffListPanel";
 import { TeacherRatingsPanel } from "./hr/TeacherRatingsPanel";
-import type { HrSetup, HrTab } from "./hr/types";
+import type { HrSetup, HrTab, Staff } from "./hr/types";
 
 const TABS: Array<CmsIconTabItem<HrTab>> = [
   { key: "staff", label: "Staff List", icon: GroupsOutlined, tone: "indigo" },
+  { key: "disabled", label: "Disabled Staff", icon: PersonOffOutlined, tone: "rose" },
   { key: "setup", label: "Setup", icon: SettingsOutlined, tone: "slate" },
   { key: "attendance", label: "Staff Attendance", icon: TodayOutlined, tone: "amber" },
   { key: "leave", label: "Leave Management", icon: EventBusyOutlined, tone: "rose" },
@@ -48,6 +53,9 @@ export function HrPage() {
   const [setup, setSetup] = useState<HrSetup | null>(null);
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState<"list" | "add">("list");
+  const [staff360Id, setStaff360Id] = useState<string | null>(null);
+  const [disableTarget, setDisableTarget] = useState<Staff | null>(null);
+  const [pendingEdit, setPendingEdit] = useState<Staff | null>(null);
 
   async function load(selectedMonth = month) {
     setLoading(true);
@@ -112,7 +120,7 @@ export function HrPage() {
         ariaLabel="HR sections"
         value={tab}
         onChange={setTab}
-        columnsClass="grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-7"
+        columnsClass="grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-8"
         items={TABS}
       />
 
@@ -127,6 +135,17 @@ export function HrPage() {
               <StaffListPanel
                 setup={setup}
                 token={accessToken}
+                onSaved={load}
+                onError={notifyError}
+                onViewStaff={setStaff360Id}
+                pendingEdit={pendingEdit}
+                onPendingEditHandled={() => setPendingEdit(null)}
+              />
+            ) : null}
+            {tab === "disabled" ? (
+              <DisabledStaffPanel
+                token={accessToken}
+                onViewStaff={setStaff360Id}
                 onSaved={load}
                 onError={notifyError}
               />
@@ -182,6 +201,36 @@ export function HrPage() {
           </>
         )}
       </CmsScrollBody>
+
+      {staff360Id && setup ? (
+        <Staff360Panel
+          staffId={staff360Id}
+          setup={setup}
+          token={accessToken}
+          onClose={() => setStaff360Id(null)}
+          onSaved={load}
+          onError={notifyError}
+          onEditProfile={(member) => {
+            setStaff360Id(null);
+            setTab("staff");
+            setPendingEdit(member);
+          }}
+          onDisable={(member) => setDisableTarget(member)}
+        />
+      ) : null}
+
+      {disableTarget ? (
+        <DisableStaffModal
+          member={disableTarget}
+          token={accessToken}
+          onClose={() => setDisableTarget(null)}
+          onSaved={async () => {
+            await load();
+            setStaff360Id(null);
+          }}
+          onError={notifyError}
+        />
+      ) : null}
 
       <CmsFooter />
     </CmsPage>

@@ -67,7 +67,9 @@ import { PortalTimetablePage } from "./pages/student-parent/PortalTimetablePage"
 import { PortalHomeworkPage } from "./pages/student-parent/PortalHomeworkPage";
 import { PortalExamsPage } from "./pages/student-parent/PortalExamsPage";
 import { PortalProfilePage } from "./pages/student-parent/PortalProfilePage";
+import { PortalTeacherRatingsPage } from "./pages/student-parent/PortalTeacherRatingsPage";
 import { StaffProfilePage } from "./pages/campus/StaffProfilePage";
+import { PayslipPrintPage } from "./pages/campus/PayslipPrintPage";
 
 function portalRoutes() {
   return (
@@ -83,6 +85,7 @@ function portalRoutes() {
       <Route path="homework" element={<PortalHomeworkPage />} />
       <Route path="fees" element={<PortalFeesPage />} />
       <Route path="documents" element={<PortalDocumentsPage />} />
+      <Route path="rate-teachers" element={<PortalTeacherRatingsPage />} />
     </>
   );
 }
@@ -96,8 +99,10 @@ export function App() {
       <Route path="/admin/login" element={<SuperAdminLoginPage />} />
       <Route path="/student/login" element={<Navigate to="/login" replace />} />
       <Route path="/parent/login" element={<Navigate to="/login" replace />} />
+      <Route path="/print/documents" element={<DocumentPrintPage />} />
       <Route path="/print/documents/:id" element={<DocumentPrintPage />} />
       <Route path="/print/fees/:id" element={<FeeReceiptPrintPage />} />
+      <Route path="/print/payslips/:id" element={<PayslipPrintPage />} />
       <Route path="/print/fee-invoices/:id" element={<FeeInvoicePrintPage />} />
       <Route path="/admit/:tenantSlug" element={<OnlineAdmissionPage />} />
       <Route path="/portal" element={<PortalRedirect />} />

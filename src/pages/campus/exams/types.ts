@@ -18,6 +18,7 @@ export interface Schedule {
   room?: string | null;
   maximumMarks: string;
   minimumMarks: string;
+  creditHours?: string | number | null;
   classSection: ClassSection;
   classSubject: { id: string; subject: Named };
   components?: Array<{ id: string; name: string; maximumMarks: string; sortOrder?: number }>;
@@ -30,6 +31,7 @@ export type ExamResultType = "GENERAL" | "SCHOOL_GRADING" | "COLLEGE_GRADING" | 
 export interface Exam {
   id: string;
   name: string;
+  description?: string | null;
   startDate: string;
   endDate: string;
   status: ExamStatus;
@@ -39,6 +41,7 @@ export interface Exam {
 }
 
 export interface ExamGroup extends Named {
+  description?: string | null;
   resultType: ExamResultType | string;
   academicSession: Named;
   exams: Exam[];
@@ -48,6 +51,14 @@ export interface ExamTemplate {
   id: string;
   name: string;
   type: string;
+}
+
+export interface ExamLink {
+  id: string;
+  name: string;
+  resultType: ExamResultType | string;
+  finalExamId: string;
+  examIds: string[];
 }
 
 export interface Setup {
@@ -72,6 +83,7 @@ export interface Setup {
     mergeType: "MERGE" | "AVERAGE" | string;
     bifurcationColumns: number;
   }>;
+  links?: ExamLink[];
 }
 
 export interface Roster {
@@ -101,6 +113,7 @@ export interface Result {
   examStudentId: string;
   rank: number;
   rollNumber?: string | null;
+  showOnPortal?: boolean;
   student: { id?: string; firstName: string; lastName: string | null; admissionNumber: string };
   classSection?: {
     id: string;
@@ -112,12 +125,34 @@ export interface Result {
   percentage: number;
   grade: string | null;
   gradePoint?: number | null;
+  gpa?: number | null;
   passStatus: "PASS" | "FAIL";
+  subjects?: Array<{
+    name: string;
+    subjectIds?: string[];
+    obtainedMarks: number;
+    maximumMarks: number;
+    percentage?: number;
+    isAbsent?: boolean;
+    creditHours?: number | null;
+    gradePoint?: number | null;
+    linked?: boolean;
+    mergeType?: string;
+    bifurcationColumns?: number;
+    parts?: Array<{
+      name: string;
+      subjectId?: string;
+      obtainedMarks: number;
+      maximumMarks: number;
+      isAbsent?: boolean;
+    }>;
+  }>;
   marks?: Array<{
     marksObtained: string | number;
     isAbsent?: boolean;
     schedule?: {
       maximumMarks?: string | number;
+      creditHours?: string | number | null;
       classSubject?: { subject?: Named };
     };
   }>;
@@ -127,6 +162,7 @@ export interface Result {
     maximumMarks: number;
     obtainedMarks: number;
     percentage: number;
+    gpa?: number | null;
     passStatus: "PASS" | "FAIL";
   }>;
 }

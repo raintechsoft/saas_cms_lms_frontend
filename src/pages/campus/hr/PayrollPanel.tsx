@@ -10,6 +10,7 @@ import {
 } from "@mui/icons-material";
 import { InitialsAvatar } from "../../../components/InitialsAvatar";
 import { apiRequest } from "../../../lib/api";
+import { openPrintPayslip } from "../../../lib/print";
 import { notifyError, notifySuccess } from "../../../lib/notify";
 import { staffName, type HrSetup, type Payroll, type Staff } from "./types";
 
@@ -355,23 +356,41 @@ export function PayrollPanel({
                         </button>
                       ) : null}
                       {status === "GENERATED" && payroll ? (
-                        <button
-                          type="button"
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 px-3 py-1.5 text-[12px] font-semibold text-indigo-600 transition hover:bg-indigo-50"
-                          disabled={busyId === payroll.id}
-                          onClick={() => void pay(payroll.id)}
-                        >
-                          <PaymentsOutlined sx={{ fontSize: 14 }} /> Proceed to Pay
-                        </button>
+                        <>
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 px-3 py-1.5 text-[12px] font-semibold text-indigo-600 transition hover:bg-indigo-50"
+                            disabled={busyId === payroll.id}
+                            onClick={() => void pay(payroll.id)}
+                          >
+                            <PaymentsOutlined sx={{ fontSize: 14 }} /> Proceed to Pay
+                          </button>
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-[12px] font-semibold text-slate-600 transition hover:bg-slate-50"
+                            onClick={() => openPrintPayslip(payroll.id)}
+                          >
+                            <DescriptionOutlined sx={{ fontSize: 14 }} /> Print payslip
+                          </button>
+                        </>
                       ) : null}
                       {status === "PAID" && payroll ? (
-                        <button
-                          type="button"
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-[12px] font-semibold text-slate-600 transition hover:bg-slate-50"
-                          onClick={() => setPayslip({ payroll, member })}
-                        >
-                          <VisibilityOutlined sx={{ fontSize: 14 }} /> View Payslip
-                        </button>
+                        <>
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-[12px] font-semibold text-slate-600 transition hover:bg-slate-50"
+                            onClick={() => setPayslip({ payroll, member })}
+                          >
+                            <VisibilityOutlined sx={{ fontSize: 14 }} /> View Payslip
+                          </button>
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 px-3 py-1.5 text-[12px] font-semibold text-indigo-600 transition hover:bg-indigo-50"
+                            onClick={() => openPrintPayslip(payroll.id)}
+                          >
+                            <DescriptionOutlined sx={{ fontSize: 14 }} /> Print payslip
+                          </button>
+                        </>
                       ) : null}
                       {payroll ? (
                         <button

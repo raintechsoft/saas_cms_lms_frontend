@@ -3,6 +3,8 @@ import Chart from "react-apexcharts";
 import type { ApexOptions } from "apexcharts";
 import {
   AccessTimeOutlined,
+  CloseOutlined,
+  DownloadOutlined,
   EqualizerOutlined,
   DirectionsRunOutlined,
   ScheduleOutlined,
@@ -10,6 +12,7 @@ import {
 } from "@mui/icons-material";
 import { InitialsAvatar } from "../../../components/InitialsAvatar";
 import { apiRequest } from "../../../lib/api";
+import { notifySuccess } from "../../../lib/notify";
 import { staffName, type HrSetup, type Staff } from "./types";
 
 const today = new Date().toISOString().slice(0, 10);
@@ -109,6 +112,7 @@ export function InOutReportPanel({
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [grouping, setGrouping] = useState<"daily" | "weekly">("daily");
+  const [detailStaff, setDetailStaff] = useState<Staff | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -234,6 +238,38 @@ export function InOutReportPanel({
       }));
   }, [filtered, grouping]);
 
+  const detailRecords = useMemo(() => {
+    if (!detailStaff) return [];
+    return filtered
+      .filter((record) => record.staff.id === detailStaff.id)
+      .sort((a, b) => b.attendanceDate.localeCompare(a.attendanceDate));
+  }, [filtered, detailStaff]);
+
+  function exportCsv() {
+    if (!filtered.length) return;
+    const header = ["Name", "Emp No", "Date", "Status", "In", "Out", "Note"];
+    const rows = filtered.map((record) => [
+      staffName(record.staff),
+      record.staff.employeeNumber,
+      record.attendanceDate.slice(0, 10),
+      record.status,
+      record.inTime ?? "",
+      record.outTime ?? "",
+      record.note ?? "",
+    ]);
+    const lines = [header, ...rows].map((row) =>
+      row.map((value) => `"${String(value).replaceAll('"', '""')}"`).join(","),
+    );
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `in-out-report-${applied.from}-to-${applied.to}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    notifySuccess("In/out report exported");
+  }
+
   const chartOptions: ApexOptions = {
     chart: { toolbar: { show: false }, zoom: { enabled: false }, fontFamily: "inherit" },
     stroke: { curve: "straight", width: 2.5 },
@@ -335,6 +371,14 @@ export function InOutReportPanel({
         >
           <SearchOutlined sx={{ fontSize: 16 }} /> Search
         </button>
+        <button
+          type="button"
+          className="nx-btn-secondary"
+          disabled={!filtered.length || loading}
+          onClick={exportCsv}
+        >
+          <DownloadOutlined sx={{ fontSize: 16 }} /> Export CSV
+        </button>
       </div>
 
       <div className="grid gap-3 px-4 py-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -383,7 +427,11 @@ export function InOutReportPanel({
           </thead>
           <tbody className="divide-y divide-slate-100">
             {pageItems.map((row) => (
-              <tr key={row.staff.id} className="transition hover:bg-indigo-50/30">
+              <tr
+                key={row.staff.id}
+                className="cursor-pointer transition hover:bg-indigo-50/30"
+                onClick={() => setDetailStaff(row.staff)}
+              >
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2.5">
                     <InitialsAvatar
@@ -483,6 +531,68 @@ export function InOutReportPanel({
             >
               Next
             </button>
+          </div>
+        </div>
+      ) : null}
+
+      {detailStaff ? (
+        <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/40">
+          <div className="flex h-full w-full max-w-md flex-col bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+              <div>
+                <h3 className="font-bold text-slate-900">{staffName(detailStaff)}</h3>
+                <p className="text-[12px] text-slate-500">
+                  Daily in/out · {applied.from} to {applied.to}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="rounded p-1 text-slate-400 hover:bg-slate-100"
+                onClick={() => setDetailStaff(null)}
+              >
+                <CloseOutlined sx={{ fontSize: 20 }} />
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {detailRecords.map((record) => (
+                <div
+                  key={record.id}
+                  className="border-b border-slate-100 px-5 py-3 hover:bg-slate-50"
+                >
+                  <div className="flex items-center justify-between">
+                    <p className="font-semibold text-slate-900">
+                      {new Date(record.attendanceDate).toLocaleDateString(undefined, {
+                        weekday: "short",
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                      })}
+                    </p>
+                    <span className="nx-pill nx-pill-neutral">
+                      {record.status.replaceAll("_", " ")}
+                    </span>
+                  </div>
+                  <dl className="mt-2 grid grid-cols-2 gap-2 text-[12.5px]">
+                    <div>
+                      <dt className="text-slate-400">Check in</dt>
+                      <dd className="font-medium text-slate-700">{record.inTime ?? "—"}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-slate-400">Check out</dt>
+                      <dd className="font-medium text-slate-700">{record.outTime ?? "—"}</dd>
+                    </div>
+                  </dl>
+                  {record.note ? (
+                    <p className="mt-1.5 text-[12px] text-slate-500">Note: {record.note}</p>
+                  ) : null}
+                </div>
+              ))}
+              {!detailRecords.length ? (
+                <p className="px-5 py-10 text-center text-sm text-slate-500">
+                  No daily records in this range.
+                </p>
+              ) : null}
+            </div>
           </div>
         </div>
       ) : null}

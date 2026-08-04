@@ -61,6 +61,7 @@ export function PortalHomePage() {
   const { child, overview, role, productMode, basePath } = usePortal();
   const showCms = isProductBucketAllowed(productMode, "CMS");
   const showLms = isProductBucketAllowed(productMode, "LMS");
+  const showHomework = isProductBucketAllowed(productMode, "SHARED");
 
   if (!child || !overview) {
     return (
@@ -237,7 +238,7 @@ export function PortalHomePage() {
               </div>
             )}
           </PanelCard>
-        ) : showLms ? (
+        ) : showHomework ? (
           <PanelCard
             title="Upcoming homework"
             action={

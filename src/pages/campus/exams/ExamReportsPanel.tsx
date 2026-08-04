@@ -9,12 +9,12 @@ import {
   PlayArrowOutlined,
   ScheduleOutlined,
   TrendingUpOutlined,
-  VisibilityOutlined,
   FactCheckOutlined,
 } from "@mui/icons-material";
 import { useAuth } from "../../../auth/AuthContext";
 import { apiRequest } from "../../../lib/api";
 import { notifyInfo, notifySuccess } from "../../../lib/notify";
+import { openPrintDocuments } from "../../../lib/print";
 import type { ExamWithGroup, Result, Setup } from "./types";
 
 type ReportKind = "rank" | "result" | "marksheet" | "admit";
@@ -26,19 +26,23 @@ type RecentReport = {
   generatedBy: string;
   date: string;
   at: number;
-  status: "Completed" | "Processing";
+  status: "Completed";
   examId?: string;
   examName?: string;
+  documentIds?: string[];
   rows?: Array<Record<string, string | number>>;
 };
 
 type ResultsPayload = {
   results: Result[];
   published?: boolean;
-  exam?: { id: string; name: string };
+  exam?: { id: string; name: string; status?: string };
 };
 
-const HISTORY_KEY = "exam-reports-history-v1";
+type DocTemplate = { id: string; name: string; type: string; isActive?: boolean };
+
+const HISTORY_KEY = "exam-reports-history-v2";
+const BULK_CAP = 150;
 
 const REPORT_CARDS: Array<{
   kind: ReportKind;
@@ -96,11 +100,7 @@ function downloadCsv(filename: string, headers: string[], rows: string[][]) {
   URL.revokeObjectURL(url);
 }
 
-function printPdf(
-  title: string,
-  headers: string[],
-  rows: Array<Array<string | number>>,
-) {
+function printPdf(title: string, headers: string[], rows: Array<Array<string | number>>) {
   const html = `<!doctype html><html><head><title>${title}</title>
     <style>
       body{font-family:Segoe UI,Arial,sans-serif;padding:24px;color:#0f172a}
@@ -128,7 +128,9 @@ function loadHistory(): RecentReport[] {
     const raw = localStorage.getItem(HISTORY_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as RecentReport[];
-    return Array.isArray(parsed) ? parsed.slice(0, 20) : [];
+    return Array.isArray(parsed)
+      ? parsed.filter((item) => item.status === "Completed").slice(0, 20)
+      : [];
   } catch {
     return [];
   }
@@ -140,6 +142,14 @@ function saveHistory(items: RecentReport[]) {
 
 function cardMeta(kind: ReportKind) {
   return REPORT_CARDS.find((item) => item.kind === kind)!;
+}
+
+function todayLabel() {
+  return new Date().toLocaleDateString(undefined, {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
 }
 
 export function ExamReportsPanel({
@@ -169,8 +179,12 @@ export function ExamReportsPanel({
   const [history, setHistory] = useState<RecentReport[]>([]);
   const [modalKind, setModalKind] = useState<ReportKind | null>(null);
   const [examId, setExamId] = useState(exams[0]?.id ?? "");
-  const [groupId, setGroupId] = useState(setup.groups[0]?.id ?? "");
+  const [groupId, setGroupId] = useState("");
+  const [classSectionId, setClassSectionId] = useState("");
+  const [templateId, setTemplateId] = useState("");
+  const [templates, setTemplates] = useState<DocTemplate[]>([]);
   const [busy, setBusy] = useState(false);
+  const [publishWarn, setPublishWarn] = useState("");
 
   useEffect(() => {
     setHistory(loadHistory());
@@ -180,6 +194,14 @@ export function ExamReportsPanel({
     if (!examId && exams[0]) setExamId(exams[0].id);
   }, [examId, exams]);
 
+  const selectedExam = exams.find((exam) => exam.id === examId);
+  const sectionOptions = useMemo(() => {
+    if (!selectedExam) return setup.classSections;
+    const ids = new Set(selectedExam.schedules.map((schedule) => schedule.classSection.id));
+    if (!ids.size) return setup.classSections;
+    return setup.classSections.filter((section) => ids.has(section.id));
+  }, [selectedExam, setup.classSections]);
+
   const publishedCount = useMemo(
     () => exams.filter((exam) => exam.status === "PUBLISHED").length,
     [exams],
@@ -188,8 +210,8 @@ export function ExamReportsPanel({
     () => exams.filter((exam) => exam.status === "DRAFT").length,
     [exams],
   );
-  const templateCount = setup.templates?.length ?? 0;
-  const pendingReports = history.filter((item) => item.status === "Processing").length || draftCount;
+  const templateCount = setup.templates?.length ?? templates.length;
+  const completedCount = history.filter((item) => item.status === "Completed").length;
 
   const summary = [
     {
@@ -205,14 +227,14 @@ export function ExamReportsPanel({
       tone: "bg-emerald-50 text-emerald-600",
     },
     {
-      label: "Pending Reports",
-      value: pendingReports,
+      label: "Draft Exams",
+      value: draftCount,
       icon: <ScheduleOutlined sx={{ fontSize: 18 }} />,
       tone: "bg-amber-50 text-amber-600",
     },
     {
-      label: "Templates Available",
-      value: templateCount,
+      label: "Reports Completed",
+      value: completedCount,
       icon: <DescriptionOutlined sx={{ fontSize: 18 }} />,
       tone: "bg-sky-50 text-sky-600",
     },
@@ -226,44 +248,31 @@ export function ExamReportsPanel({
     });
   }
 
-  function openGenerate(kind: ReportKind) {
-    if (kind === "marksheet") {
-      onOpenMarksheet?.();
-      notifyInfo("Open Print on Marksheet to generate documents.");
-      pushHistory({
-        id: `${Date.now()}-marksheet`,
-        kind: "marksheet",
-        name: "Marksheet Generate",
-        generatedBy: actorName,
-        date: new Date().toLocaleDateString(undefined, {
-          day: "2-digit",
-          month: "short",
-          year: "numeric",
-        }),
-        at: Date.now(),
-        status: "Processing",
-      });
-      return;
-    }
-    if (kind === "admit") {
-      onOpenAdmitCard?.();
-      notifyInfo("Open Print on Admit Card to generate documents.");
-      pushHistory({
-        id: `${Date.now()}-admit`,
-        kind: "admit",
-        name: "Admit Card",
-        generatedBy: actorName,
-        date: new Date().toLocaleDateString(undefined, {
-          day: "2-digit",
-          month: "short",
-          year: "numeric",
-        }),
-        at: Date.now(),
-        status: "Processing",
-      });
-      return;
+  async function openGenerate(kind: ReportKind) {
+    setPublishWarn("");
+    setClassSectionId("");
+    setGroupId("");
+    setTemplateId("");
+    if (kind === "marksheet" || kind === "admit") {
+      const type = kind === "marksheet" ? "MARKSHEET" : "ADMIT_CARD";
+      try {
+        const rows = await apiRequest<DocTemplate[]>(
+          `/documents/templates?type=${type}`,
+          token,
+        );
+        const active = rows.filter((row) => row.isActive !== false);
+        setTemplates(active);
+        setTemplateId(active[0]?.id ?? "");
+      } catch {
+        setTemplates([]);
+      }
     }
     setModalKind(kind);
+  }
+
+  function filterResults(results: Result[]) {
+    if (!classSectionId) return results;
+    return results.filter((row) => row.classSection?.id === classSectionId);
   }
 
   async function runExamReport() {
@@ -273,47 +282,71 @@ export function ExamReportsPanel({
       return;
     }
     setBusy(true);
+    setPublishWarn("");
     try {
       const selection = examId
         ? `/exams/${examId}/results`
-        : groupId
-          ? `/exams/groups/${groupId}/results`
-          : "";
-      if (!selection) {
-        onError("Select an exam or exam group");
+        : `/exams/groups/${groupId}/results`;
+      const data = await apiRequest<ResultsPayload>(selection, token);
+      if (examId && data.published === false) {
+        setPublishWarn(
+          "This exam is not published yet. You can still export a draft report for review.",
+        );
+      }
+      const filtered = filterResults(data.results);
+      if (!filtered.length) {
+        onError("No results found for the selected filters.");
         return;
       }
-      const data = await apiRequest<ResultsPayload>(selection, token);
       const examLabel =
         data.exam?.name ??
         exams.find((item) => item.id === examId)?.name ??
         setup.groups.find((item) => item.id === groupId)?.name ??
         "Exam";
+      const hasGpa = filtered.some((row) => row.gpa != null);
       const title =
         modalKind === "rank" ? `Rank-wise Report · ${examLabel}` : `Result Report · ${examLabel}`;
       const headers =
         modalKind === "rank"
-          ? ["Rank", "Student", "Admission No", "Obtained", "Total", "Percentage", "Grade", "Status"]
-          : [
+          ? [
+              "Rank",
               "Student",
               "Admission No",
+              "Class",
               "Obtained",
               "Total",
               "Percentage",
+              ...(hasGpa ? ["GPA"] : []),
+              "Grade",
+              "Status",
+            ]
+          : [
+              "Student",
+              "Admission No",
+              "Class",
+              "Obtained",
+              "Total",
+              "Percentage",
+              ...(hasGpa ? ["GPA"] : []),
               "Grade",
               "Pass Status",
               "Rank",
             ];
-      const tableRows = data.results.map((row) => {
+      const tableRows = filtered.map((row) => {
         const name = `${row.student.firstName} ${row.student.lastName ?? ""}`.trim();
+        const classLabel = row.classSection
+          ? `${row.classSection.academicClass.name}-${row.classSection.section.name}`
+          : "—";
         if (modalKind === "rank") {
           return [
             row.rank,
             name,
             row.student.admissionNumber,
+            classLabel,
             row.obtainedMarks,
             row.maximumMarks,
             `${row.percentage}%`,
+            ...(hasGpa ? [row.gpa ?? "—"] : []),
             row.grade ?? "—",
             row.passStatus,
           ];
@@ -321,9 +354,11 @@ export function ExamReportsPanel({
         return [
           name,
           row.student.admissionNumber,
+          classLabel,
           row.obtainedMarks,
           row.maximumMarks,
           `${row.percentage}%`,
+          ...(hasGpa ? [row.gpa ?? "—"] : []),
           row.grade ?? "—",
           row.passStatus,
           row.rank,
@@ -337,21 +372,17 @@ export function ExamReportsPanel({
       );
       printPdf(title, headers, tableRows);
 
-      const entry: RecentReport = {
+      pushHistory({
         id: `${Date.now()}-${modalKind}`,
         kind: modalKind,
         name: modalKind === "rank" ? "Rank-wise Report" : "Result Report",
         generatedBy: actorName,
-        date: new Date().toLocaleDateString(undefined, {
-          day: "2-digit",
-          month: "short",
-          year: "numeric",
-        }),
+        date: todayLabel(),
         at: Date.now(),
         status: "Completed",
         examId: examId || undefined,
         examName: examLabel,
-        rows: data.results.map((row) => ({
+        rows: filtered.map((row) => ({
           rank: row.rank,
           student: `${row.student.firstName} ${row.student.lastName ?? ""}`.trim(),
           admissionNumber: row.student.admissionNumber,
@@ -359,10 +390,10 @@ export function ExamReportsPanel({
           maximumMarks: row.maximumMarks,
           percentage: row.percentage,
           grade: row.grade ?? "",
+          gpa: row.gpa ?? "",
           passStatus: row.passStatus,
         })),
-      };
-      pushHistory(entry);
+      });
       notifySuccess(`${title} generated`);
       setModalKind(null);
       onOpenResults?.(examId ? examId : groupId ? `group:${groupId}` : undefined);
@@ -373,21 +404,75 @@ export function ExamReportsPanel({
     }
   }
 
+  async function runDocumentBulk() {
+    if (!modalKind || (modalKind !== "marksheet" && modalKind !== "admit")) return;
+    if (!templateId || !examId) {
+      onError("Select a template and exam");
+      return;
+    }
+    setBusy(true);
+    try {
+      const payload: {
+        templateId: string;
+        examId: string;
+        classSectionId?: string;
+      } = { templateId, examId };
+      if (classSectionId) payload.classSectionId = classSectionId;
+      const data = await apiRequest<{
+        documents: Array<{ id: string; studentId: string | null; serialNumber: string }>;
+      }>("/documents/generated/bulk", token, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      const ids = data.documents.map((doc) => doc.id);
+      if (!ids.length) {
+        onError("No documents were generated");
+        return;
+      }
+      if (ids.length > BULK_CAP) {
+        notifyInfo(`Generated ${ids.length} documents (cap ${BULK_CAP} recommended).`);
+      }
+      openPrintDocuments(ids);
+      const examLabel = exams.find((item) => item.id === examId)?.name ?? "Exam";
+      pushHistory({
+        id: `${Date.now()}-${modalKind}`,
+        kind: modalKind,
+        name: modalKind === "marksheet" ? "Marksheet Generate" : "Admit Card Generate",
+        generatedBy: actorName,
+        date: todayLabel(),
+        at: Date.now(),
+        status: "Completed",
+        examId,
+        examName: examLabel,
+        documentIds: ids,
+      });
+      notifySuccess(`${ids.length} ${modalKind === "marksheet" ? "marksheets" : "admit cards"} generated`);
+      setModalKind(null);
+    } catch (cause) {
+      onError(cause instanceof Error ? cause.message : "Unable to generate documents");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function redownload(item: RecentReport) {
-    if (item.status === "Processing") {
-      if (item.kind === "marksheet") onOpenMarksheet?.();
-      else if (item.kind === "admit") onOpenAdmitCard?.();
+    if (item.documentIds?.length) {
+      openPrintDocuments(item.documentIds);
       return;
     }
     if (!item.rows?.length) {
-      if (item.examId) {
-        setExamId(item.examId);
-        setModalKind(item.kind === "result" ? "result" : "rank");
-      } else {
-        notifyInfo("No cached rows. Generate the report again.");
+      if (item.kind === "marksheet") {
+        onOpenMarksheet?.();
+        return;
       }
+      if (item.kind === "admit") {
+        onOpenAdmitCard?.();
+        return;
+      }
+      notifyInfo("No cached rows. Generate the report again.");
       return;
     }
+    const hasGpa = item.rows.some((row) => row.gpa !== "" && row.gpa != null);
     const headers = [
       "Rank",
       "Student",
@@ -395,6 +480,7 @@ export function ExamReportsPanel({
       "Obtained",
       "Total",
       "Percentage",
+      ...(hasGpa ? ["GPA"] : []),
       "Grade",
       "Status",
     ];
@@ -405,6 +491,7 @@ export function ExamReportsPanel({
       row.obtainedMarks,
       row.maximumMarks,
       `${row.percentage}%`,
+      ...(hasGpa ? [row.gpa || "—"] : []),
       row.grade || "—",
       row.passStatus,
     ]);
@@ -428,11 +515,10 @@ export function ExamReportsPanel({
         <div className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
             {REPORT_CARDS.map((card) => (
-              <article
-                key={card.kind}
-                className={`nx-card flex gap-4 border p-5 ${card.tone}`}
-              >
-                <span className={`grid size-12 shrink-0 place-items-center rounded-full ${card.iconTone}`}>
+              <article key={card.kind} className={`nx-card flex gap-4 border p-5 ${card.tone}`}>
+                <span
+                  className={`grid size-12 shrink-0 place-items-center rounded-full ${card.iconTone}`}
+                >
                   {card.icon}
                 </span>
                 <div className="min-w-0 flex-1">
@@ -443,7 +529,7 @@ export function ExamReportsPanel({
                   <button
                     type="button"
                     className="nx-btn-primary mt-4"
-                    onClick={() => openGenerate(card.kind)}
+                    onClick={() => void openGenerate(card.kind)}
                   >
                     <PlayArrowOutlined sx={{ fontSize: 16 }} /> Generate
                   </button>
@@ -486,20 +572,19 @@ export function ExamReportsPanel({
                               >
                                 {meta.icon}
                               </span>
-                              <span className="font-medium text-slate-900">{item.name}</span>
+                              <div>
+                                <p className="font-medium text-slate-900">{item.name}</p>
+                                {item.examName ? (
+                                  <p className="text-[11px] text-slate-500">{item.examName}</p>
+                                ) : null}
+                              </div>
                             </div>
                           </td>
                           <td>{item.generatedBy}</td>
                           <td>{item.date}</td>
                           <td>
-                            <span
-                              className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
-                                item.status === "Completed"
-                                  ? "bg-emerald-50 text-emerald-700"
-                                  : "bg-amber-50 text-amber-700"
-                              }`}
-                            >
-                              {item.status}
+                            <span className="inline-flex rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700">
+                              Completed
                             </span>
                           </td>
                           <td>
@@ -508,15 +593,8 @@ export function ExamReportsPanel({
                               className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-indigo-600 hover:underline"
                               onClick={() => redownload(item)}
                             >
-                              {item.status === "Processing" ? (
-                                <>
-                                  <VisibilityOutlined sx={{ fontSize: 15 }} /> View Progress
-                                </>
-                              ) : (
-                                <>
-                                  <DownloadOutlined sx={{ fontSize: 15 }} /> Download PDF
-                                </>
-                              )}
+                              <DownloadOutlined sx={{ fontSize: 15 }} />{" "}
+                              {item.documentIds?.length ? "Open print" : "Download"}
                             </button>
                           </td>
                         </tr>
@@ -549,28 +627,59 @@ export function ExamReportsPanel({
               <PendingActionsOutlined sx={{ fontSize: 14 }} /> Tip
             </span>
             <p className="mt-1">
-              Rank and Result reports export CSV and open a print dialog for PDF. Marksheet and Admit
-              Card open their Print tabs.
+              Rank/Result export CSV + print. Admit/Marksheet run bulk generate and open a combined
+              print window. Templates available: {templateCount}.
             </p>
           </div>
         </aside>
       </div>
 
-      {modalKind === "rank" || modalKind === "result" ? (
+      {modalKind ? (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40 p-4">
           <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
             <h3 className="text-lg font-bold text-slate-900">
-              {modalKind === "rank" ? "Generate Rank-wise Report" : "Generate Result Report"}
+              {modalKind === "rank"
+                ? "Generate Rank-wise Report"
+                : modalKind === "result"
+                  ? "Generate Result Report"
+                  : modalKind === "marksheet"
+                    ? "Generate Marksheets"
+                    : "Generate Admit Cards"}
             </h3>
             <p className="mt-1 text-[13px] text-slate-500">
-              Choose an exam to build the report from live marks and grades.
+              {modalKind === "rank" || modalKind === "result"
+                ? "Choose an exam and optional class/section filter."
+                : "Choose template, exam, and optional section, then bulk-generate printable documents."}
             </p>
+
+            {(modalKind === "marksheet" || modalKind === "admit") && (
+              <label className="mt-4 block">
+                <span className="nx-label !normal-case !tracking-normal">Template</span>
+                <select
+                  className="nx-input bg-white"
+                  value={templateId}
+                  onChange={(event) => setTemplateId(event.target.value)}
+                >
+                  <option value="">Select template</option>
+                  {templates.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+
             <label className="mt-4 block">
               <span className="nx-label !normal-case !tracking-normal">Exam</span>
               <select
                 className="nx-input bg-white"
                 value={examId}
-                onChange={(event) => setExamId(event.target.value)}
+                onChange={(event) => {
+                  setExamId(event.target.value);
+                  setGroupId("");
+                  setClassSectionId("");
+                }}
               >
                 <option value="">Select exam</option>
                 {exams.map((exam) => (
@@ -580,26 +689,54 @@ export function ExamReportsPanel({
                 ))}
               </select>
             </label>
+
+            {(modalKind === "rank" || modalKind === "result") && (
+              <label className="mt-3 block">
+                <span className="nx-label !normal-case !tracking-normal">
+                  Or exam group (consolidated)
+                </span>
+                <select
+                  className="nx-input bg-white"
+                  value={groupId}
+                  onChange={(event) => {
+                    setGroupId(event.target.value);
+                    if (event.target.value) setExamId("");
+                  }}
+                >
+                  <option value="">Select group</option>
+                  {setup.groups.map((group) => (
+                    <option key={group.id} value={group.id}>
+                      {group.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+
             <label className="mt-3 block">
               <span className="nx-label !normal-case !tracking-normal">
-                Or exam group (consolidated)
+                Class / section (optional)
               </span>
               <select
                 className="nx-input bg-white"
-                value={groupId}
-                onChange={(event) => {
-                  setGroupId(event.target.value);
-                  if (event.target.value) setExamId("");
-                }}
+                value={classSectionId}
+                onChange={(event) => setClassSectionId(event.target.value)}
               >
-                <option value="">Select group</option>
-                {setup.groups.map((group) => (
-                  <option key={group.id} value={group.id}>
-                    {group.name}
+                <option value="">All sections</option>
+                {sectionOptions.map((section) => (
+                  <option key={section.id} value={section.id}>
+                    {section.academicClass.name} - {section.section.name}
                   </option>
                 ))}
               </select>
             </label>
+
+            {publishWarn ? (
+              <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-800">
+                {publishWarn}
+              </p>
+            ) : null}
+
             <div className="mt-5 flex justify-end gap-2">
               <button type="button" className="nx-btn-secondary" onClick={() => setModalKind(null)}>
                 Cancel
@@ -607,8 +744,17 @@ export function ExamReportsPanel({
               <button
                 type="button"
                 className="nx-btn-primary"
-                disabled={busy || (!examId && !groupId)}
-                onClick={() => void runExamReport()}
+                disabled={
+                  busy ||
+                  (modalKind === "rank" || modalKind === "result"
+                    ? !examId && !groupId
+                    : !templateId || !examId)
+                }
+                onClick={() =>
+                  void (modalKind === "rank" || modalKind === "result"
+                    ? runExamReport()
+                    : runDocumentBulk())
+                }
               >
                 {busy ? "Generating…" : "Generate"}
               </button>
