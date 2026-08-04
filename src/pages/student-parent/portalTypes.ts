@@ -31,11 +31,19 @@ export interface PortalExamItem {
   examId: string;
   examName: string;
   groupName: string;
+  examDate?: string | null;
+  publishedAt?: string | null;
   maximumMarks: number;
   obtainedMarks: number;
   percentage: number;
   passStatus: "PASS" | "FAIL";
-  subjects: Array<{ subject: string; marksObtained: number; maximumMarks: number; isAbsent: boolean }>;
+  subjects: Array<{
+    subject: string;
+    marksObtained: number;
+    maximumMarks: number;
+    isAbsent: boolean;
+    examDate?: string | null;
+  }>;
 }
 
 export interface PortalChild {
@@ -49,8 +57,35 @@ export interface PortalChild {
     mobile?: string | null;
     email?: string | null;
     currentAddress?: string | null;
+    permanentAddress?: string | null;
+    gender?: string | null;
+    dateOfBirth?: string | null;
+    admissionDate?: string | null;
+    bloodGroup?: string | null;
+    nationality?: string | null;
+    religion?: string | null;
+    caste?: string | null;
     category?: string | null;
     house?: string | null;
+    fatherName?: string | null;
+    fatherPhone?: string | null;
+    fatherEmail?: string | null;
+    fatherOccupation?: string | null;
+    motherName?: string | null;
+    motherPhone?: string | null;
+    motherEmail?: string | null;
+    motherOccupation?: string | null;
+    guardianName?: string | null;
+    guardianRelation?: string | null;
+    guardianPhone?: string | null;
+    guardianEmail?: string | null;
+    guardianOccupation?: string | null;
+    admissionType?: string | null;
+    transportOptIn?: boolean;
+    transportRoute?: string | null;
+    hostelOptIn?: boolean;
+    hostelRoom?: string | null;
+    additionalNotes?: string | null;
   };
   relation: string | null;
   isPrimary: boolean;
@@ -129,6 +164,8 @@ export interface PortalAttendanceRecord {
   status: string;
   periodKey: string;
   note: string | null;
+  inTime?: string | null;
+  outTime?: string | null;
 }
 
 export const PORTAL_CHILD_STORAGE_KEY = "saas-cms-lms.portal.child";

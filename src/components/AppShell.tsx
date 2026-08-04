@@ -509,7 +509,7 @@ export function AppShell() {
           {branding.logoUrl ? (
             <img src={branding.logoUrl} alt="" className="size-9 rounded-lg object-cover" />
           ) : (
-            <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-[#6366f1] text-white shadow-sm shadow-indigo-200">
+            <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-primary text-white shadow-sm shadow-indigo-200">
               <GridViewRounded sx={{ fontSize: 20 }} />
             </div>
           )}
@@ -531,7 +531,7 @@ export function AppShell() {
                   className={({ isActive }) =>
                     `relative flex items-center gap-2.5 rounded-xl px-2 py-2 text-[13px] font-semibold transition ${
                       isActive
-                        ? "bg-[#6366f1] text-white shadow-sm shadow-indigo-200"
+                        ? "bg-primary text-white shadow-sm shadow-indigo-200"
                         : "text-slate-700 hover:bg-white/70"
                     }`
                   }

@@ -68,6 +68,19 @@ import { PortalHomeworkPage } from "./pages/student-parent/PortalHomeworkPage";
 import { PortalExamsPage } from "./pages/student-parent/PortalExamsPage";
 import { PortalProfilePage } from "./pages/student-parent/PortalProfilePage";
 import { PortalTeacherRatingsPage } from "./pages/student-parent/PortalTeacherRatingsPage";
+import {
+  PortalAcademicsPage,
+  PortalAiTutorPage,
+  PortalCalendarPage,
+  PortalHelpPage,
+  PortalLessonsPage,
+  PortalMessagesPage,
+  PortalNcertPage,
+  PortalQuestionBankPage,
+  PortalSettingsPage,
+} from "./pages/student-parent/PortalComingSoonPages";
+import { PortalLiveClassesPage } from "./pages/student-parent/PortalLiveClassesPage";
+import { PortalTestSeriesPage } from "./pages/student-parent/PortalTestSeriesPage";
 import { StaffProfilePage } from "./pages/campus/StaffProfilePage";
 import { PayslipPrintPage } from "./pages/campus/PayslipPrintPage";
 
@@ -86,6 +99,18 @@ function portalRoutes() {
       <Route path="fees" element={<PortalFeesPage />} />
       <Route path="documents" element={<PortalDocumentsPage />} />
       <Route path="rate-teachers" element={<PortalTeacherRatingsPage />} />
+      {/* LMS + supporting modules — UI stubs until page designs are shared */}
+      <Route path="ai-tutor" element={<PortalAiTutorPage />} />
+      <Route path="live-classes" element={<PortalLiveClassesPage />} />
+      <Route path="calendar" element={<PortalCalendarPage />} />
+      <Route path="question-bank" element={<PortalQuestionBankPage />} />
+      <Route path="test-series" element={<PortalTestSeriesPage />} />
+      <Route path="ncert" element={<PortalNcertPage />} />
+      <Route path="lessons" element={<PortalLessonsPage />} />
+      <Route path="messages" element={<PortalMessagesPage />} />
+      <Route path="help" element={<PortalHelpPage />} />
+      <Route path="settings" element={<PortalSettingsPage />} />
+      <Route path="academics" element={<PortalAcademicsPage />} />
     </>
   );
 }

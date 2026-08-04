@@ -201,7 +201,7 @@ export function HomeworkPage() {
     if (hasAttachment(item) && !item.attachmentUrl) {
       try {
         full = await apiRequest<Homework>(`/homework/${item.id}`, accessToken);
-      } catch (cause) {
+    } catch (cause) {
         notifyError(cause instanceof Error ? cause.message : "Unable to load homework");
         return;
       }
@@ -503,8 +503,8 @@ function ListPanel({
             sx={{ fontSize: 18 }}
             className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
           />
-        </div>
       </div>
+            </div>
 
       <div className="nx-card overflow-visible">
         <div className="overflow-x-auto">
@@ -699,7 +699,7 @@ function ListPanel({
           ) : null}
         </div>
       </div>
-    </section>
+        </section>
   );
 }
 

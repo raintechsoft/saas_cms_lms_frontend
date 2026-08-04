@@ -137,14 +137,14 @@ export function ExamsPage() {
           <p className="mt-1 text-[10px] text-slate-500">
             Use 0 for present, 1 for absent when importing.
           </p>
-        </div>
+      </div>
       ) : null}
       {tab === "grades" ? (
         <button type="button" className="nx-btn-primary" onClick={() => setGradesAddOpen(true)}>
           <AddOutlined sx={{ fontSize: 16 }} /> Add grade
         </button>
       ) : null}
-    </div>
+      </div>
   );
 
   return (

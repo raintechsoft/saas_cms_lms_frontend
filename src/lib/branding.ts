@@ -5,7 +5,7 @@ export interface TenantBranding {
   customDomain?: string;
 }
 
-const DEFAULT_PRIMARY = "#4f46e5";
+const DEFAULT_PRIMARY = "#534AB7";
 
 export function parseBranding(value: Record<string, unknown> | null | undefined): TenantBranding {
   if (!value || typeof value !== "object") {

@@ -1,0 +1,55 @@
+/**
+ * Design tokens — single source of truth for campus / CMS UI.
+ * Locked palette (override Figma when they diverge until the design file is synced).
+ *
+ * Colors
+ *   primary     #534AB7
+ *   background  #F6F7F9
+ *   border      #E5E7EB
+ *   text        #1A1A1A / #6B7280 / #9CA3AF
+ *
+ * Spacing
+ *   8px base scale: 1=8, 2=16, 3=24, 4=32, 5=40, 6=48, 8=64, 10=80, 12=96
+ */
+
+:root {
+  /* ---- Color ---- */
+  --nx-color-primary: #534ab7;
+  --nx-color-primary-hover: #4539a0;
+  --nx-color-primary-soft: color-mix(in srgb, #534ab7 12%, white);
+  --nx-color-primary-muted: color-mix(in srgb, #534ab7 18%, transparent);
+
+  --nx-color-background: #f6f7f9;
+  --nx-color-surface: #ffffff;
+  --nx-color-border: #e5e7eb;
+
+  --nx-color-ink: #1a1a1a;
+  --nx-color-ink-muted: #6b7280;
+  --nx-color-ink-subtle: #9ca3af;
+
+  --nx-color-success: #059669;
+  --nx-color-warning: #d97706;
+  --nx-color-danger: #e11d48;
+
+  /* Brand alias (tenant branding may override --brand-primary at runtime) */
+  --brand-primary: var(--nx-color-primary);
+
+  /* ---- Spacing (8px scale) ---- */
+  --nx-space-0: 0;
+  --nx-space-0-5: 4px; /* half-step for icons / tight gaps */
+  --nx-space-1: 8px;
+  --nx-space-2: 16px;
+  --nx-space-3: 24px;
+  --nx-space-4: 32px;
+  --nx-space-5: 40px;
+  --nx-space-6: 48px;
+  --nx-space-8: 64px;
+  --nx-space-10: 80px;
+  --nx-space-12: 96px;
+
+  /* ---- Radius ---- */
+  --nx-radius-sm: 6px;
+  --nx-radius-md: 8px;
+  --nx-radius-lg: 12px;
+  --nx-radius-xl: 16px;
+}
