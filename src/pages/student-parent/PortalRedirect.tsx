@@ -9,5 +9,5 @@ export function PortalRedirect() {
   if (!isPortalUser(user.roles)) return <Navigate to="/dashboard" replace />;
 
   const isParent = user.roles.includes("PARENT");
-  return <Navigate to={isParent ? "/portal/parent" : "/portal/student"} replace />;
+  return <Navigate to={isParent ? "/parent/dashboard" : "/portal/student"} replace />;
 }

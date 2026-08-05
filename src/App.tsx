@@ -83,6 +83,63 @@ import { PortalLiveClassesPage } from "./pages/student-parent/PortalLiveClassesP
 import { PortalTestSeriesPage } from "./pages/student-parent/PortalTestSeriesPage";
 import { StaffProfilePage } from "./pages/campus/StaffProfilePage";
 import { PayslipPrintPage } from "./pages/campus/PayslipPrintPage";
+import { ParentPortalLayout } from "./pages/parent-portal/ParentPortalLayout";
+import { ParentDashboardPage } from "./pages/parent-portal/ParentDashboardPage";
+import { ParentComingSoonPage } from "./pages/parent-portal/ParentComingSoonPage";
+import { ParentFeesPage } from "./pages/parent-portal/ParentFeesPage";
+import { ParentAttendancePage } from "./pages/parent-portal/ParentAttendancePage";
+import { ParentAcademicCalendarPage } from "./pages/parent-portal/ParentAcademicCalendarPage";
+import { ParentSubjectsTimetablePage } from "./pages/parent-portal/ParentSubjectsTimetablePage";
+import { ParentHomeworkPage } from "./pages/parent-portal/ParentHomeworkPage";
+import { ParentExaminationPage } from "./pages/parent-portal/ParentExaminationPage";
+import { ParentTestSeriesPage } from "./pages/parent-portal/ParentTestSeriesPage";
+import { ParentLiveClassesPage } from "./pages/parent-portal/ParentLiveClassesPage";
+import { ParentAnnouncementsPage } from "./pages/parent-portal/ParentAnnouncementsPage";
+import { ParentMessagingPage } from "./pages/parent-portal/ParentMessagingPage";
+import { ParentPtmPage } from "./pages/parent-portal/ParentPtmPage";
+import { ParentCertificatesPage } from "./pages/parent-portal/ParentCertificatesPage";
+import { ParentTransportPage } from "./pages/parent-portal/ParentTransportPage";
+import { ParentSettingsPage } from "./pages/parent-portal/ParentSettingsPage";
+import { ParentHelpPage } from "./pages/parent-portal/ParentHelpPage";
+import { PARENT_NAV } from "./pages/parent-portal/parentPortalNav";
+import type { ReactElement } from "react";
+
+const PARENT_PAGE_BY_PATH: Record<string, ReactElement> = {
+  "/parent/dashboard": <ParentDashboardPage />,
+  "/parent/fees": <ParentFeesPage />,
+  "/parent/attendance-calendar/attendance": <ParentAttendancePage />,
+  "/parent/attendance-calendar/academic-calendar": <ParentAcademicCalendarPage />,
+  "/parent/academics/timetable": <ParentSubjectsTimetablePage />,
+  "/parent/academics/homework": <ParentHomeworkPage />,
+  "/parent/academics/examination": <ParentExaminationPage />,
+  "/parent/academics/test-series": <ParentTestSeriesPage />,
+  "/parent/academics/live-classes": <ParentLiveClassesPage />,
+  "/parent/communication/announcements": <ParentAnnouncementsPage />,
+  "/parent/communication/messaging": <ParentMessagingPage />,
+  "/parent/communication/ptm": <ParentPtmPage />,
+  "/parent/certificates": <ParentCertificatesPage />,
+  "/parent/transport": <ParentTransportPage />,
+  "/parent/settings": <ParentSettingsPage />,
+  "/parent/help": <ParentHelpPage />,
+};
+
+function parentPortalRoutes() {
+  const leaves = PARENT_NAV.flatMap((item) => item.children ?? (item.to ? [{ label: item.label, to: item.to }] : []));
+  return (
+    <>
+      <Route index element={<Navigate to="dashboard" replace />} />
+      {leaves.map((leaf) => (
+        <Route
+          key={leaf.to}
+          path={leaf.to.replace("/parent/", "")}
+          element={PARENT_PAGE_BY_PATH[leaf.to] ?? <ParentComingSoonPage />}
+        />
+      ))}
+      <Route path="notifications" element={<ParentComingSoonPage />} />
+      <Route path="activity" element={<ParentComingSoonPage />} />
+    </>
+  );
+}
 
 function portalRoutes() {
   return (
@@ -134,8 +191,11 @@ export function App() {
       <Route path="/portal/student" element={<PortalShell />}>
         {portalRoutes()}
       </Route>
-      <Route path="/portal/parent" element={<PortalShell />}>
-        {portalRoutes()}
+      {/* Legacy parent portal shell → new Parent Portal */}
+      <Route path="/portal/parent/*" element={<Navigate to="/parent/dashboard" replace />} />
+
+      <Route path="/parent" element={<ParentPortalLayout />}>
+        {parentPortalRoutes()}
       </Route>
 
       <Route path="/admin" element={<PlatformShell />}>

@@ -15,7 +15,8 @@ import "./styles.css";
   const hashAuthPaths = new Set(["/reset-password", "/forgot-password", "/login", "/admin/login"]);
   const isPrintPath =
     path === "/print/documents" || path.startsWith("/print/documents/");
-  if (!window.location.hash && (hashAuthPaths.has(path) || isPrintPath)) {
+  const isParentPortalPath = path === "/parent" || path.startsWith("/parent/");
+  if (!window.location.hash && (hashAuthPaths.has(path) || isPrintPath || isParentPortalPath)) {
     window.location.replace(`${window.location.origin}/#${path}${search}`);
   }
 }
