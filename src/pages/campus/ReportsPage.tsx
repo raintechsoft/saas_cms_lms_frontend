@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import {
   AccountBalanceWalletOutlined,
   AssessmentOutlined,
+  AutoStoriesOutlined,
   BadgeOutlined,
   BookOutlined,
   CakeOutlined,
@@ -10,6 +11,7 @@ import {
   CheckCircleOutline,
   CancelOutlined,
   Diversity3Outlined,
+  DirectionsBusOutlined,
   DownloadOutlined,
   EmojiEventsOutlined,
   AssignmentTurnedInOutlined,
@@ -22,7 +24,9 @@ import {
   FilterAltOutlined,
   GroupsOutlined,
   HistoryOutlined,
+  HomeWorkOutlined,
   HowToRegOutlined,
+  InventoryOutlined,
   LocalAtmOutlined,
   LoginOutlined,
   MenuBookOutlined,
@@ -31,6 +35,7 @@ import {
   PersonSearchOutlined,
   PersonOffOutlined,
   PlayArrowOutlined,
+  QuizOutlined,
   ReceiptLongOutlined,
   SchoolOutlined,
   SummarizeOutlined,
@@ -89,8 +94,70 @@ interface Hub {
     label: string;
     description: string;
   }>;
+  attendanceReports?: Array<{
+    key: string;
+    label: string;
+    description: string;
+  }>;
+  hrReports?: Array<{
+    section: string;
+    key: string;
+    label: string;
+    description: string;
+    available: boolean;
+  }>;
+  examReports?: Array<{
+    section: string;
+    key: string;
+    label: string;
+    description: string;
+    available: boolean;
+  }>;
+  opsReports?: Array<{
+    section: string;
+    key: string;
+    label: string;
+    description: string;
+    available: boolean;
+  }>;
+  extraReports?: Array<{
+    section: string;
+    key: string;
+    label: string;
+    description: string;
+    available: boolean;
+  }>;
+  unavailableReports?: Record<
+    string,
+    Array<{
+      section: string;
+      key: string;
+      label: string;
+      description: string;
+      available: false;
+    }>
+  >;
   modules: Array<{ key: ReportModule; label: string; metrics: Record<string, string | number | null> }>;
 }
+
+type ReportsTab =
+  | "core"
+  | "students"
+  | "fees"
+  | "homework"
+  | "attendance"
+  | "hr"
+  | "exams"
+  | "ops"
+  | "more"
+  | "modules";
+
+type CatalogReportItem = {
+  key: string;
+  label: string;
+  description: string;
+  available?: boolean;
+};
 
 interface CoreReportResult {
   reportKey: string;
@@ -243,6 +310,8 @@ const STUDENT_REPORT_STYLE: Record<
   student_teacher: { icon: SupervisorAccountOutlined, tone: "bg-lime-100 text-lime-800" },
   online_admissions: { icon: PersonSearchOutlined, tone: "bg-blue-100 text-blue-700" },
   at_school_admissions: { icon: SchoolOutlined, tone: "bg-emerald-100 text-emerald-800" },
+  student_headcounts: { icon: GroupsOutlined, tone: "bg-cyan-100 text-cyan-800" },
+  class_subject: { icon: MenuBookOutlined, tone: "bg-indigo-100 text-indigo-700" },
 };
 
 const STUDENT_REPORT_GROUPS: Array<{ title: string; keys: string[] }> = [
@@ -256,7 +325,11 @@ const STUDENT_REPORT_GROUPS: Array<{ title: string; keys: string[] }> = [
   },
   {
     title: "Profile & analytics",
-    keys: ["student_profile", "student_history", "student_gender", "student_birthday"],
+    keys: ["student_profile", "student_history", "student_gender", "student_birthday", "student_headcounts"],
+  },
+  {
+    title: "Class & subjects",
+    keys: ["class_subject"],
   },
   {
     title: "Family & teachers",
@@ -279,12 +352,14 @@ const FEE_REPORT_STYLE: Record<string, { icon: ComponentType<{ sx?: object }>; t
   discount_report: { icon: PercentOutlined, tone: "bg-fuchsia-100 text-fuchsia-700" },
   online_fee: { icon: ReceiptLongOutlined, tone: "bg-blue-100 text-blue-700" },
   daily_fees_collection: { icon: CalendarMonthOutlined, tone: "bg-emerald-100 text-emerald-800" },
+  fee_statement: { icon: ReceiptLongOutlined, tone: "bg-violet-100 text-violet-700" },
+  previous_session_fees: { icon: HistoryOutlined, tone: "bg-orange-100 text-orange-800" },
 };
 
 const FEE_REPORT_GROUPS: Array<{ title: string; keys: string[] }> = [
   {
     title: "Dues & balances",
-    keys: ["due_fees", "till_date_due", "balance_fee", "parents_wise_due"],
+    keys: ["due_fees", "till_date_due", "balance_fee", "parents_wise_due", "previous_session_fees"],
   },
   {
     title: "Collection",
@@ -292,7 +367,7 @@ const FEE_REPORT_GROUPS: Array<{ title: string; keys: string[] }> = [
   },
   {
     title: "Structure & assignment",
-    keys: ["fee_master", "fee_assigned", "fee_summary", "students_wise_fee"],
+    keys: ["fee_master", "fee_assigned", "fee_summary", "students_wise_fee", "fee_statement"],
   },
   {
     title: "Adjustments",
@@ -305,6 +380,70 @@ const HOMEWORK_REPORT_STYLE: Record<string, { icon: ComponentType<{ sx?: object 
   progress: { icon: TrendingUpOutlined, tone: "bg-emerald-100 text-emerald-700" },
   due: { icon: EventBusyOutlined, tone: "bg-orange-100 text-orange-700" },
 };
+
+const ATTENDANCE_REPORT_STYLE: Record<string, { icon: ComponentType<{ sx?: object }>; tone: string }> = {
+  daily_attendance: { icon: TodayOutlined, tone: "bg-amber-100 text-amber-700" },
+  custom_attendance: { icon: CalendarMonthOutlined, tone: "bg-sky-100 text-sky-700" },
+  remaining_class: { icon: EventBusyOutlined, tone: "bg-orange-100 text-orange-700" },
+  student_summary: { icon: SummarizeOutlined, tone: "bg-violet-100 text-violet-700" },
+  staff_summary: { icon: WorkOutline, tone: "bg-slate-200 text-slate-700" },
+  inout_time: { icon: LoginOutlined, tone: "bg-cyan-100 text-cyan-700" },
+  period_wise: { icon: TableViewOutlined, tone: "bg-indigo-100 text-indigo-700" },
+  class_wise: { icon: GroupsOutlined, tone: "bg-teal-100 text-teal-700" },
+  frequently_absent: { icon: PersonOffOutlined, tone: "bg-rose-100 text-rose-700" },
+  attendance_type: { icon: HowToRegOutlined, tone: "bg-emerald-100 text-emerald-700" },
+};
+
+const HR_REPORT_STYLE: Record<string, { icon: ComponentType<{ sx?: object }>; tone: string }> = {
+  staff: { icon: GroupsOutlined, tone: "bg-sky-100 text-sky-700" },
+  payroll: { icon: PaymentsOutlined, tone: "bg-emerald-100 text-emerald-700" },
+  staff_birthday: { icon: CakeOutlined, tone: "bg-pink-100 text-pink-700" },
+};
+
+const EXAM_REPORT_STYLE: Record<string, { icon: ComponentType<{ sx?: object }>; tone: string }> = {
+  exam_rank_session: { icon: EmojiEventsOutlined, tone: "bg-indigo-100 text-indigo-700" },
+  exam_cumulative: { icon: TrendingUpOutlined, tone: "bg-violet-100 text-violet-700" },
+};
+
+const OPS_REPORT_STYLE: Record<string, { icon: ComponentType<{ sx?: object }>; tone: string }> = {
+  user_log: { icon: LoginOutlined, tone: "bg-cyan-100 text-cyan-700" },
+  audit_trail: { icon: HistoryOutlined, tone: "bg-orange-100 text-orange-700" },
+  transport: { icon: DirectionsBusOutlined, tone: "bg-blue-100 text-blue-700" },
+  hostel: { icon: HomeWorkOutlined, tone: "bg-teal-100 text-teal-700" },
+  alumni: { icon: SchoolOutlined, tone: "bg-violet-100 text-violet-700" },
+};
+
+const MORE_REPORT_STYLE: Record<string, { icon: ComponentType<{ sx?: object }>; tone: string }> = {
+  book_issue: { icon: MenuBookOutlined, tone: "bg-slate-100 text-slate-600" },
+  book_due: { icon: MenuBookOutlined, tone: "bg-slate-100 text-slate-600" },
+  book_inventory: { icon: MenuBookOutlined, tone: "bg-slate-100 text-slate-600" },
+  book_return: { icon: MenuBookOutlined, tone: "bg-slate-100 text-slate-600" },
+  stock: { icon: InventoryOutlined, tone: "bg-slate-100 text-slate-600" },
+  add_item: { icon: InventoryOutlined, tone: "bg-slate-100 text-slate-600" },
+  issue_item: { icon: InventoryOutlined, tone: "bg-slate-100 text-slate-600" },
+  online_exam_wise: { icon: QuizOutlined, tone: "bg-slate-100 text-slate-600" },
+  online_exams: { icon: QuizOutlined, tone: "bg-slate-100 text-slate-600" },
+  online_attempt: { icon: QuizOutlined, tone: "bg-slate-100 text-slate-600" },
+  online_rank: { icon: QuizOutlined, tone: "bg-slate-100 text-slate-600" },
+  subjective_marks: { icon: QuizOutlined, tone: "bg-slate-100 text-slate-600" },
+  syllabus_status: { icon: AutoStoriesOutlined, tone: "bg-slate-100 text-slate-600" },
+  subject_lesson_plan: { icon: AutoStoriesOutlined, tone: "bg-slate-100 text-slate-600" },
+};
+
+const MORE_REPORT_GROUPS: Array<{ title: string; keys: string[] }> = [
+  { title: "Library", keys: ["book_issue", "book_due", "book_inventory", "book_return"] },
+  { title: "Inventory", keys: ["stock", "add_item", "issue_item"] },
+  {
+    title: "Online exam",
+    keys: ["online_exam_wise", "online_exams", "online_attempt", "online_rank", "subjective_marks"],
+  },
+  { title: "Lesson plan", keys: ["syllabus_status", "subject_lesson_plan"] },
+];
+
+function isDisabledStudentRow(row: Record<string, unknown>) {
+  const status = row.status ?? row.studentStatus;
+  return status === "DISABLED" || String(status).toUpperCase() === "DISABLED";
+}
 
 const MODULE_CARD_STYLE: Record<
   ReportModule,
@@ -377,7 +516,7 @@ function statusPill(value: string): ReactNode {
 export function ReportsPage() {
   const { accessToken } = useAuth();
   const [hub, setHub] = useState<Hub | null>(null);
-  const [tab, setTab] = useState<"core" | "students" | "fees" | "homework" | "modules">("core");
+  const [tab, setTab] = useState<ReportsTab>("core");
   const [selectedCore, setSelectedCore] = useState<CoreReportKey>("active_students");
   const [filters, setFilters] = useState({
     from: monthStart,
@@ -388,6 +527,11 @@ export function ReportsPage() {
   const [selectedStudentReport, setSelectedStudentReport] = useState<string | null>(null);
   const [selectedFeeReport, setSelectedFeeReport] = useState<string | null>(null);
   const [selectedHomeworkReport, setSelectedHomeworkReport] = useState<string | null>(null);
+  const [selectedAttendanceReport, setSelectedAttendanceReport] = useState<string | null>(null);
+  const [selectedHrReport, setSelectedHrReport] = useState<string | null>(null);
+  const [selectedExamReport, setSelectedExamReport] = useState<string | null>(null);
+  const [selectedOpsReport, setSelectedOpsReport] = useState<string | null>(null);
+  const [selectedMoreReport, setSelectedMoreReport] = useState<string | null>(null);
   const [module, setModule] = useState<ReportModule | null>(null);
   const [moduleData, setModuleData] = useState<unknown>(null);
   const [loading, setLoading] = useState(false);
@@ -438,21 +582,83 @@ export function ReportsPage() {
     return map;
   }, [hub?.homeworkReports]);
 
+  const attendanceReportMap = useMemo(() => {
+    const map = new Map<string, CatalogReportItem>();
+    for (const item of hub?.attendanceReports ?? []) map.set(item.key, item);
+    return map;
+  }, [hub?.attendanceReports]);
+
+  const hrReportMap = useMemo(() => {
+    const map = new Map<string, CatalogReportItem>();
+    for (const item of hub?.hrReports ?? []) map.set(item.key, item);
+    return map;
+  }, [hub?.hrReports]);
+
+  const examReportMap = useMemo(() => {
+    const map = new Map<string, CatalogReportItem>();
+    for (const item of hub?.examReports ?? []) map.set(item.key, item);
+    return map;
+  }, [hub?.examReports]);
+
+  const opsCatalog = useMemo(() => {
+    const map = new Map<string, CatalogReportItem>();
+    for (const item of hub?.opsReports ?? []) {
+      map.set(item.key, item);
+    }
+    for (const item of hub?.extraReports ?? []) {
+      if (item.section === "alumni" && item.available) {
+        map.set(item.key, item);
+      }
+    }
+    return [...map.values()];
+  }, [hub?.opsReports, hub?.extraReports]);
+
+  const moreCatalog = useMemo(() => {
+    const map = new Map<string, CatalogReportItem>();
+    for (const group of Object.values(hub?.unavailableReports ?? {})) {
+      for (const item of group) map.set(item.key, item);
+    }
+    for (const item of hub?.extraReports ?? []) {
+      if (!item.available) map.set(item.key, item);
+    }
+    return [...map.values()];
+  }, [hub?.unavailableReports, hub?.extraReports]);
+
+  const moreReportMap = useMemo(() => {
+    const map = new Map<string, CatalogReportItem>();
+    for (const item of moreCatalog) map.set(item.key, item);
+    return map;
+  }, [moreCatalog]);
+
+  function buildDateQuery() {
+    const query = new URLSearchParams({
+      from: filters.from,
+      to: filters.to,
+    });
+    if (hub?.currentSession) query.set("sessionId", hub.currentSession.id);
+    return query;
+  }
+
+  function clearOtherSelections(except?: ReportsTab) {
+    if (except !== "students") setSelectedStudentReport(null);
+    if (except !== "fees") setSelectedFeeReport(null);
+    if (except !== "homework") setSelectedHomeworkReport(null);
+    if (except !== "attendance") setSelectedAttendanceReport(null);
+    if (except !== "hr") setSelectedHrReport(null);
+    if (except !== "exams") setSelectedExamReport(null);
+    if (except !== "ops") setSelectedOpsReport(null);
+    if (except !== "more") setSelectedMoreReport(null);
+  }
+
   async function runCore(reportKey = selectedCore) {
     setLoading(true);
     setModule(null);
     setModuleData(null);
-    setSelectedStudentReport(null);
-    setSelectedFeeReport(null);
-    setSelectedHomeworkReport(null);
+    clearOtherSelections();
     setSelectedCore(reportKey);
     setTab("core");
     try {
-      const query = new URLSearchParams({
-        from: filters.from,
-        to: filters.to,
-      });
-      if (hub?.currentSession) query.set("sessionId", hub.currentSession.id);
+      const query = buildDateQuery();
       if (reportKey === "exam_rank") {
         if (!filters.examId) {
           notifyError("Select an exam for rank report");
@@ -477,18 +683,12 @@ export function ReportsPage() {
     setLoading(true);
     setModule(null);
     setModuleData(null);
-    setSelectedFeeReport(null);
-    setSelectedHomeworkReport(null);
+    clearOtherSelections("students");
     setSelectedStudentReport(reportKey);
     setTab("students");
     try {
-      const query = new URLSearchParams({
-        from: filters.from,
-        to: filters.to,
-      });
-      if (hub?.currentSession) query.set("sessionId", hub.currentSession.id);
       const data = await apiRequest<CoreReportResult>(
-        `/reports/student/${reportKey}?${query}`,
+        `/reports/student/${reportKey}?${buildDateQuery()}`,
         accessToken,
       );
       setCoreData(data);
@@ -504,18 +704,12 @@ export function ReportsPage() {
     setLoading(true);
     setModule(null);
     setModuleData(null);
-    setSelectedStudentReport(null);
-    setSelectedHomeworkReport(null);
+    clearOtherSelections("fees");
     setSelectedFeeReport(reportKey);
     setTab("fees");
     try {
-      const query = new URLSearchParams({
-        from: filters.from,
-        to: filters.to,
-      });
-      if (hub?.currentSession) query.set("sessionId", hub.currentSession.id);
       const data = await apiRequest<CoreReportResult>(
-        `/reports/fee/${reportKey}?${query}`,
+        `/reports/fee/${reportKey}?${buildDateQuery()}`,
         accessToken,
       );
       setCoreData(data);
@@ -531,18 +725,12 @@ export function ReportsPage() {
     setLoading(true);
     setModule(null);
     setModuleData(null);
-    setSelectedStudentReport(null);
-    setSelectedFeeReport(null);
+    clearOtherSelections("homework");
     setSelectedHomeworkReport(reportKey);
     setTab("homework");
     try {
-      const query = new URLSearchParams({
-        from: filters.from,
-        to: filters.to,
-      });
-      if (hub?.currentSession) query.set("sessionId", hub.currentSession.id);
       const data = await apiRequest<CoreReportResult>(
-        `/reports/homework/${reportKey}?${query}`,
+        `/reports/homework/${reportKey}?${buildDateQuery()}`,
         accessToken,
       );
       setCoreData(data);
@@ -554,12 +742,66 @@ export function ReportsPage() {
     }
   }
 
+  async function runAttendanceReport(reportKey: string) {
+    setLoading(true);
+    setModule(null);
+    setModuleData(null);
+    clearOtherSelections("attendance");
+    setSelectedAttendanceReport(reportKey);
+    setTab("attendance");
+    try {
+      const query = new URLSearchParams({ reportKey });
+      if (reportKey === "daily_attendance" || reportKey === "remaining_class") {
+        query.set("date", filters.from);
+      } else {
+        query.set("fromDate", filters.from);
+        query.set("toDate", filters.to);
+      }
+      const data = await apiRequest<CoreReportResult>(
+        `/attendance/reports/run?${query}`,
+        accessToken,
+      );
+      setCoreData(data);
+      notifySuccess(`${data.title} ready`);
+    } catch (cause) {
+      notifyError(cause instanceof Error ? cause.message : "Unable to generate attendance report");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function runExtraReport(reportKey: string, targetTab: "hr" | "exams" | "ops" | "more") {
+    setLoading(true);
+    setModule(null);
+    setModuleData(null);
+    clearOtherSelections(targetTab);
+    if (targetTab === "hr") setSelectedHrReport(reportKey);
+    if (targetTab === "exams") setSelectedExamReport(reportKey);
+    if (targetTab === "ops") setSelectedOpsReport(reportKey);
+    if (targetTab === "more") setSelectedMoreReport(reportKey);
+    setTab(targetTab);
+    try {
+      const data = await apiRequest<CoreReportResult>(
+        `/reports/extra/${reportKey}?${buildDateQuery()}`,
+        accessToken,
+      );
+      setCoreData(data);
+      if (data.summary?.available === false) {
+        notifySuccess(typeof data.summary.message === "string" ? data.summary.message : "Coming soon");
+      } else {
+        notifySuccess(`${data.title} ready`);
+      }
+    } catch (cause) {
+      notifyError(cause instanceof Error ? cause.message : "Unable to generate report");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function runModule(selected: ReportModule) {
     setLoading(true);
     setCoreData(null);
-    setSelectedStudentReport(null);
-    setSelectedFeeReport(null);
-    setSelectedHomeworkReport(null);
+    clearOtherSelections();
     setModule(selected);
     setTab("modules");
     try {
@@ -602,6 +844,46 @@ export function ReportsPage() {
       void runHomeworkReport(selectedHomeworkReport);
       return;
     }
+    if (tab === "attendance") {
+      if (!selectedAttendanceReport) {
+        notifyError("Select an attendance report first");
+        return;
+      }
+      void runAttendanceReport(selectedAttendanceReport);
+      return;
+    }
+    if (tab === "hr") {
+      if (!selectedHrReport) {
+        notifyError("Select an HR report first");
+        return;
+      }
+      void runExtraReport(selectedHrReport, "hr");
+      return;
+    }
+    if (tab === "exams") {
+      if (!selectedExamReport) {
+        notifyError("Select an exam report first");
+        return;
+      }
+      void runExtraReport(selectedExamReport, "exams");
+      return;
+    }
+    if (tab === "ops") {
+      if (!selectedOpsReport) {
+        notifyError("Select an operations report first");
+        return;
+      }
+      void runExtraReport(selectedOpsReport, "ops");
+      return;
+    }
+    if (tab === "more") {
+      if (!selectedMoreReport) {
+        notifyError("Select a report first");
+        return;
+      }
+      void runExtraReport(selectedMoreReport, "more");
+      return;
+    }
     if (tab === "modules") {
       if (!module) {
         notifyError("Select a module report first");
@@ -613,7 +895,49 @@ export function ReportsPage() {
     void runCore();
   }
 
-  type ReportsTab = "core" | "students" | "fees" | "homework" | "modules";
+  const activeMetaLabel = useMemo(() => {
+    if (selectedHomeworkReport) {
+      return hub?.homeworkReports?.find((r) => r.key === selectedHomeworkReport)?.label;
+    }
+    if (selectedFeeReport) {
+      return hub?.feeReports?.find((r) => r.key === selectedFeeReport)?.label;
+    }
+    if (selectedStudentReport) {
+      return hub?.studentReports?.find((r) => r.key === selectedStudentReport)?.label;
+    }
+    if (selectedAttendanceReport) {
+      return attendanceReportMap.get(selectedAttendanceReport)?.label;
+    }
+    if (selectedHrReport) {
+      return hrReportMap.get(selectedHrReport)?.label;
+    }
+    if (selectedExamReport) {
+      return examReportMap.get(selectedExamReport)?.label;
+    }
+    if (selectedOpsReport) {
+      return opsCatalog.find((r) => r.key === selectedOpsReport)?.label;
+    }
+    if (selectedMoreReport) {
+      return moreReportMap.get(selectedMoreReport)?.label;
+    }
+    return selectedMeta?.label;
+  }, [
+    selectedHomeworkReport,
+    selectedFeeReport,
+    selectedStudentReport,
+    selectedAttendanceReport,
+    selectedHrReport,
+    selectedExamReport,
+    selectedOpsReport,
+    selectedMoreReport,
+    hub,
+    attendanceReportMap,
+    hrReportMap,
+    examReportMap,
+    opsCatalog,
+    moreReportMap,
+    selectedMeta?.label,
+  ]);
 
   const reportTabItems = useMemo((): Array<CmsIconTabItem<ReportsTab>> => {
     const items: Array<CmsIconTabItem<ReportsTab>> = [
@@ -668,6 +992,71 @@ export function ReportsPage() {
         ),
       });
     }
+    if ((hub?.attendanceReports?.length ?? 0) > 0) {
+      items.push({
+        key: "attendance",
+        label: "Attendance",
+        icon: TodayOutlined,
+        tone: "amber",
+        badge: (
+          <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-500">
+            {hub?.attendanceReports?.length ?? 0}
+          </span>
+        ),
+      });
+    }
+    if ((hub?.hrReports?.length ?? 0) > 0) {
+      items.push({
+        key: "hr",
+        label: "HR reports",
+        icon: WorkOutline,
+        tone: "slate",
+        badge: (
+          <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-500">
+            {hub?.hrReports?.length ?? 0}
+          </span>
+        ),
+      });
+    }
+    if ((hub?.examReports?.length ?? 0) > 0) {
+      items.push({
+        key: "exams",
+        label: "Exam reports",
+        icon: EmojiEventsOutlined,
+        tone: "indigo",
+        badge: (
+          <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-500">
+            {hub?.examReports?.length ?? 0}
+          </span>
+        ),
+      });
+    }
+    if (opsCatalog.length > 0) {
+      items.push({
+        key: "ops",
+        label: "Operations",
+        icon: HistoryOutlined,
+        tone: "orange",
+        badge: (
+          <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-500">
+            {opsCatalog.length}
+          </span>
+        ),
+      });
+    }
+    if (moreCatalog.length > 0) {
+      items.push({
+        key: "more",
+        label: "More",
+        icon: AutoStoriesOutlined,
+        tone: "slate",
+        badge: (
+          <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-500">
+            {moreCatalog.length}
+          </span>
+        ),
+      });
+    }
     items.push({
       key: "modules",
       label: "Module dumps",
@@ -680,7 +1069,12 @@ export function ReportsPage() {
       ),
     });
     return items;
-  }, [hub]);
+  }, [hub, opsCatalog.length, moreCatalog.length]);
+
+  const reportReadyForDownload =
+    coreData &&
+    coreData.summary?.available !== false &&
+    (coreData.rows?.length || Object.keys(coreData.summary ?? {}).length);
 
   return (
     <main className="page-main">
@@ -690,7 +1084,7 @@ export function ReportsPage() {
         description="Pick a report, set filters, then run. Results open above the list with download."
         action={
           <div className="flex flex-wrap items-center gap-2">
-            {coreData && (coreData.rows?.length || Object.keys(coreData.summary ?? {}).length) ? (
+            {reportReadyForDownload ? (
               <button
                 className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-500"
                 type="button"
@@ -715,7 +1109,7 @@ export function ReportsPage() {
             setTab(key);
             setCatalogOpen(true);
           }}
-          columnsClass="grid-cols-2 sm:grid-cols-3 lg:grid-cols-5"
+          columnsClass="grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
           items={reportTabItems}
         />
 
@@ -781,18 +1175,7 @@ export function ReportsPage() {
 
         {coreData && tab !== "modules" ? (
           <div ref={resultsRef} className="scroll-mt-4">
-            <CoreReportView
-              data={coreData}
-              metaLabel={
-                selectedHomeworkReport
-                  ? hub?.homeworkReports?.find((r) => r.key === selectedHomeworkReport)?.label
-                  : selectedFeeReport
-                    ? hub?.feeReports?.find((r) => r.key === selectedFeeReport)?.label
-                    : selectedStudentReport
-                      ? hub?.studentReports?.find((r) => r.key === selectedStudentReport)?.label
-                      : selectedMeta?.label
-              }
-            />
+            <CoreReportView data={coreData} metaLabel={activeMetaLabel} />
           </div>
         ) : null}
 
@@ -811,7 +1194,17 @@ export function ReportsPage() {
                       ? "Choose fee report"
                       : tab === "homework"
                         ? "Choose homework report"
-                        : "Choose core report"}
+                        : tab === "attendance"
+                          ? "Choose attendance report"
+                          : tab === "hr"
+                            ? "Choose HR report"
+                            : tab === "exams"
+                              ? "Choose exam report"
+                              : tab === "ops"
+                                ? "Choose operations report"
+                                : tab === "more"
+                                  ? "Coming soon reports"
+                                  : "Choose core report"}
                 </p>
                 <p className="text-xs text-slate-500">
                   {coreData
@@ -1040,6 +1433,222 @@ export function ReportsPage() {
                     })}
                   </div>
                 ) : null}
+
+                {tab === "attendance" ? (
+                  <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">
+                    {(hub?.attendanceReports ?? []).map((item) => {
+                      const style = ATTENDANCE_REPORT_STYLE[item.key] ?? {
+                        icon: TodayOutlined,
+                        tone: "bg-amber-100 text-amber-700",
+                      };
+                      const Icon = style.icon;
+                      const isSelected =
+                        selectedAttendanceReport === item.key && Boolean(coreData);
+                      return (
+                        <button
+                          key={item.key}
+                          type="button"
+                          onClick={() => void runAttendanceReport(item.key)}
+                          className={`rounded-2xl border bg-white p-4 text-left transition hover:border-slate-300 ${
+                            isSelected
+                              ? "border-amber-400 ring-2 ring-amber-100"
+                              : "border-slate-200"
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <span
+                              className={`inline-flex size-10 shrink-0 items-center justify-center rounded-xl ${style.tone}`}
+                            >
+                              <Icon sx={{ fontSize: 20 }} />
+                            </span>
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-slate-900">{item.label}</p>
+                              <p className="mt-0.5 text-xs text-slate-500">{item.description}</p>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+
+                {tab === "hr" ? (
+                  <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">
+                    {(hub?.hrReports ?? []).map((item) => {
+                      const style = HR_REPORT_STYLE[item.key] ?? {
+                        icon: WorkOutline,
+                        tone: "bg-slate-200 text-slate-700",
+                      };
+                      const Icon = style.icon;
+                      const isSelected = selectedHrReport === item.key && Boolean(coreData);
+                      return (
+                        <button
+                          key={item.key}
+                          type="button"
+                          onClick={() => void runExtraReport(item.key, "hr")}
+                          className={`rounded-2xl border bg-white p-4 text-left transition hover:border-slate-300 ${
+                            isSelected
+                              ? "border-slate-400 ring-2 ring-slate-100"
+                              : "border-slate-200"
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <span
+                              className={`inline-flex size-10 shrink-0 items-center justify-center rounded-xl ${style.tone}`}
+                            >
+                              <Icon sx={{ fontSize: 20 }} />
+                            </span>
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-slate-900">{item.label}</p>
+                              <p className="mt-0.5 text-xs text-slate-500">{item.description}</p>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+
+                {tab === "exams" ? (
+                  <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">
+                    {(hub?.examReports ?? []).map((item) => {
+                      const style = EXAM_REPORT_STYLE[item.key] ?? {
+                        icon: EmojiEventsOutlined,
+                        tone: "bg-indigo-100 text-indigo-700",
+                      };
+                      const Icon = style.icon;
+                      const isSelected = selectedExamReport === item.key && Boolean(coreData);
+                      return (
+                        <button
+                          key={item.key}
+                          type="button"
+                          onClick={() => void runExtraReport(item.key, "exams")}
+                          className={`rounded-2xl border bg-white p-4 text-left transition hover:border-slate-300 ${
+                            isSelected
+                              ? "border-indigo-400 ring-2 ring-indigo-100"
+                              : "border-slate-200"
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <span
+                              className={`inline-flex size-10 shrink-0 items-center justify-center rounded-xl ${style.tone}`}
+                            >
+                              <Icon sx={{ fontSize: 20 }} />
+                            </span>
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-slate-900">{item.label}</p>
+                              <p className="mt-0.5 text-xs text-slate-500">{item.description}</p>
+                              <span className="mt-2 inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+                                Session exams — use Core tab for single-exam rank
+                              </span>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+
+                {tab === "ops" ? (
+                  <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">
+                    {opsCatalog.map((item) => {
+                      const style = OPS_REPORT_STYLE[item.key] ?? {
+                        icon: HistoryOutlined,
+                        tone: "bg-orange-100 text-orange-700",
+                      };
+                      const Icon = style.icon;
+                      const isSelected = selectedOpsReport === item.key && Boolean(coreData);
+                      return (
+                        <button
+                          key={item.key}
+                          type="button"
+                          onClick={() => void runExtraReport(item.key, "ops")}
+                          className={`rounded-2xl border bg-white p-4 text-left transition hover:border-slate-300 ${
+                            isSelected
+                              ? "border-orange-400 ring-2 ring-orange-100"
+                              : "border-slate-200"
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <span
+                              className={`inline-flex size-10 shrink-0 items-center justify-center rounded-xl ${style.tone}`}
+                            >
+                              <Icon sx={{ fontSize: 20 }} />
+                            </span>
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-slate-900">{item.label}</p>
+                              <p className="mt-0.5 text-xs text-slate-500">{item.description}</p>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+
+                {tab === "more" ? (
+                  <div className="grid gap-0 lg:grid-cols-2">
+                    {MORE_REPORT_GROUPS.map((group) => {
+                      const rows = group.keys
+                        .map((key) => moreReportMap.get(key))
+                        .filter(Boolean) as CatalogReportItem[];
+                      if (!rows.length) return null;
+                      return (
+                        <div
+                          key={group.title}
+                          className="border-b border-slate-100 lg:[&:nth-child(odd)]:border-r"
+                        >
+                          <div className="bg-slate-50 px-5 py-2.5 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                            {group.title}
+                          </div>
+                          <div className="divide-y divide-slate-100">
+                            {rows.map((item) => {
+                              const style = MORE_REPORT_STYLE[item.key] ?? {
+                                icon: AutoStoriesOutlined,
+                                tone: "bg-slate-100 text-slate-600",
+                              };
+                              const Icon = style.icon;
+                              const isSelected =
+                                selectedMoreReport === item.key && Boolean(coreData);
+                              return (
+                                <button
+                                  key={item.key}
+                                  type="button"
+                                  onClick={() => void runExtraReport(item.key, "more")}
+                                  className={`flex w-full items-center gap-3 px-5 py-3 text-left transition hover:bg-slate-50 ${
+                                    isSelected ? "bg-indigo-50/70" : "bg-white"
+                                  }`}
+                                >
+                                  <span
+                                    className={`inline-flex size-9 shrink-0 items-center justify-center rounded-lg ${style.tone}`}
+                                  >
+                                    <Icon sx={{ fontSize: 18 }} />
+                                  </span>
+                                  <span className="min-w-0 flex-1">
+                                    <span className="block text-sm font-semibold text-slate-900">
+                                      {item.label}
+                                    </span>
+                                    <span className="block truncate text-xs text-slate-500">
+                                      {item.description}
+                                    </span>
+                                  </span>
+                                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase text-slate-500">
+                                    Soon
+                                  </span>
+                                  {isSelected ? (
+                                    <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-bold uppercase text-indigo-700">
+                                      Active
+                                    </span>
+                                  ) : null}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
               </div>
             ) : null}
           </section>
@@ -1101,22 +1710,46 @@ function CoreReportView({ data, metaLabel }: { data: CoreReportResult; metaLabel
   const studentStyle = STUDENT_REPORT_STYLE[data.reportKey];
   const feeStyle = FEE_REPORT_STYLE[data.reportKey];
   const homeworkStyle = HOMEWORK_REPORT_STYLE[data.reportKey];
+  const attendanceStyle = ATTENDANCE_REPORT_STYLE[data.reportKey];
+  const hrStyle = HR_REPORT_STYLE[data.reportKey];
+  const examStyle = EXAM_REPORT_STYLE[data.reportKey];
+  const opsStyle = OPS_REPORT_STYLE[data.reportKey];
+  const moreStyle = MORE_REPORT_STYLE[data.reportKey];
   const Icon =
-    coreStyle?.icon ?? studentStyle?.icon ?? feeStyle?.icon ?? homeworkStyle?.icon ?? AssessmentOutlined;
+    coreStyle?.icon ??
+    studentStyle?.icon ??
+    feeStyle?.icon ??
+    homeworkStyle?.icon ??
+    attendanceStyle?.icon ??
+    hrStyle?.icon ??
+    examStyle?.icon ??
+    opsStyle?.icon ??
+    moreStyle?.icon ??
+    AssessmentOutlined;
   const iconWrap =
     coreStyle?.iconWrap ??
     studentStyle?.tone ??
     feeStyle?.tone ??
     homeworkStyle?.tone ??
+    attendanceStyle?.tone ??
+    hrStyle?.tone ??
+    examStyle?.tone ??
+    opsStyle?.tone ??
+    moreStyle?.tone ??
     "bg-slate-100 text-slate-700";
   const headerTone = coreStyle?.card ?? "border-slate-100 bg-slate-50";
+  const unavailable = data.summary?.available === false;
+  const unavailableMessage =
+    typeof data.summary?.message === "string"
+      ? data.summary.message
+      : "This report is not available yet.";
   const summaryEntries = Object.entries(data.summary ?? {}).filter(
-    ([, value]) => typeof value !== "object",
+    ([key, value]) => typeof value !== "object" && key !== "available" && key !== "message",
   );
   const columns = data.rows[0]
     ? Object.keys(data.rows[0]).filter((key) => !HIDDEN_COLUMNS.has(key))
     : [];
-  const canDownload = Boolean(columns.length || summaryEntries.length);
+  const canDownload = Boolean(!unavailable && (columns.length || summaryEntries.length));
 
   return (
     <section className="mt-5 overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-md">
@@ -1160,7 +1793,15 @@ function CoreReportView({ data, metaLabel }: { data: CoreReportResult; metaLabel
         </div>
       </div>
 
-      {!data.rows.length ? (
+      {unavailable ? (
+        <div className="border-b border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900">
+          {unavailableMessage}
+        </div>
+      ) : null}
+
+      {unavailable ? (
+        <div className="p-10 text-center text-sm text-slate-500">{unavailableMessage}</div>
+      ) : !data.rows.length ? (
         <div className="p-10 text-center text-sm text-slate-500">
           No rows for this report with the current filters.
         </div>
@@ -1177,15 +1818,28 @@ function CoreReportView({ data, metaLabel }: { data: CoreReportResult; metaLabel
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {data.rows.map((row, index) => (
-                <tr key={String(row.id ?? row.admissionNumber ?? index)} className="hover:bg-slate-50/80">
+              {data.rows.map((row, index) => {
+                const disabled = isDisabledStudentRow(row);
+                return (
+                <tr
+                  key={String(row.id ?? row.admissionNumber ?? index)}
+                  className={
+                    disabled
+                      ? "bg-rose-50 text-rose-900 hover:bg-rose-100/80"
+                      : "hover:bg-slate-50/80"
+                  }
+                >
                   {columns.map((key) => (
-                    <td key={`${index}-${key}`} className="px-4 py-3 text-slate-700">
+                    <td
+                      key={`${index}-${key}`}
+                      className={`px-4 py-3 ${disabled ? "text-rose-900" : "text-slate-700"}`}
+                    >
                       {renderCell(key, row[key])}
                     </td>
                   ))}
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>

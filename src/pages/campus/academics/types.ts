@@ -246,6 +246,7 @@ export type AcademicsTab =
   | "incharge"
   | "elective-categories"
   | "subjects"
+  | "assign-subjects"
   | "subject-groups"
   | "assign-electives"
   | "class-timetable"

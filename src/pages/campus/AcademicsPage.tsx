@@ -8,6 +8,7 @@ import {
   CloseOutlined,
   EventOutlined,
   GroupsOutlined,
+  LinkOutlined,
   MenuBookOutlined,
   PersonSearchOutlined,
   SchoolOutlined,
@@ -22,6 +23,7 @@ import { CmsIconTabs, type CmsIconTabItem } from "../../components/cms/CmsIconTa
 import { apiRequest } from "../../lib/api";
 import { notifyError, notifySuccess } from "../../lib/notify";
 import { AcademicReportsPanel } from "./academics/AcademicReportsPanel";
+import { AssignSubjectsPanel } from "./academics/AssignSubjectsPanel";
 import { BulkUpdatePanel } from "./academics/BulkUpdatePanel";
 import { ClassesSectionsPanel } from "./academics/ClassesSectionsPanel";
 import { ClassTimetablePanel } from "./academics/ClassTimetablePanel";
@@ -52,6 +54,13 @@ const TABS: Array<CmsIconTabItem<AcademicsTab>> = [
     tone: "fuchsia",
   },
   { key: "subjects", label: "Subjects", shortLabel: "Subjects", icon: MenuBookOutlined, tone: "blue" },
+  {
+    key: "assign-subjects",
+    label: "Assign Subjects",
+    shortLabel: "Assign Subjects",
+    icon: LinkOutlined,
+    tone: "indigo",
+  },
   {
     key: "subject-groups",
     label: "Subject Group",
@@ -229,6 +238,15 @@ export function AcademicsPage() {
             ) : null}
             {tab === "subjects" ? (
               <SubjectsPanel setup={setup} token={accessToken} canManage={canManage} onSaved={load} onError={notifyError} />
+            ) : null}
+            {tab === "assign-subjects" ? (
+              <AssignSubjectsPanel
+                setup={setup}
+                token={accessToken}
+                canManage={canManage}
+                onSaved={load}
+                onError={notifyError}
+              />
             ) : null}
             {tab === "subject-groups" ? (
               <SubjectGroupsPanel setup={setup} token={accessToken} canManage={canManage} onSaved={load} onError={notifyError} />

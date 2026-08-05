@@ -70,6 +70,12 @@ export function headerForTab(tab: AcademicsTab) {
         title: "Subjects",
         description: "Manage core and elective subjects for the academic structure.",
       };
+    case "assign-subjects":
+      return {
+        title: "Assign Subjects",
+        description:
+          "Link subjects and teachers to each class-section for timetable, homework, and exams.",
+      };
     case "subject-groups":
       return {
         title: "Subject Group",
