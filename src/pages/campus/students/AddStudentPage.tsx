@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   CloseOutlined,
@@ -266,6 +266,24 @@ export function AddStudentPage() {
     if (index > 0) setStep(STEPS[index - 1].key);
   }
 
+  /** Enter in inputs must not create the student on steps 1–2 (or accidentally on step 3). */
+  function handleFormKeyDown(event: KeyboardEvent<HTMLFormElement>) {
+    if (event.key !== "Enter") return;
+    const target = event.target as HTMLElement;
+    if (target.tagName === "TEXTAREA") return;
+    event.preventDefault();
+    if (step !== "address") goNext();
+  }
+
+  function handleFormSubmit(event: FormEvent) {
+    event.preventDefault();
+    // Implicit form submit (Enter) on early steps used to POST /students — only Create may create.
+    if (step !== "address") {
+      goNext();
+      return;
+    }
+  }
+
   function handlePhotoFile(file: File | undefined) {
     if (!file) return;
     if (!file.type.startsWith("image/")) {
@@ -320,8 +338,8 @@ export function AddStudentPage() {
     return [base.trim(), region].filter(Boolean).join("\n") || undefined;
   }
 
-  async function submit(event: FormEvent) {
-    event.preventDefault();
+  async function createStudent() {
+    if (busy) return;
     const issue = validateStep("basic");
     if (issue) {
       notifyError(issue);
@@ -435,7 +453,7 @@ export function AddStudentPage() {
       />
 
       <CmsScrollBody>
-      <form className="nx-card overflow-hidden" onSubmit={submit}>
+      <form className="nx-card overflow-hidden" onSubmit={handleFormSubmit} onKeyDown={handleFormKeyDown}>
         <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
           <div>
             <h2 className="text-[16px] font-bold text-slate-900">
@@ -1090,7 +1108,12 @@ export function AddStudentPage() {
             </button>
           )}
           {step === "address" ? (
-            <button className="nx-btn-primary" type="submit" disabled={busy}>
+            <button
+              className="nx-btn-primary"
+              type="button"
+              disabled={busy}
+              onClick={() => void createStudent()}
+            >
               {busy ? "Creating…" : "Create"}
             </button>
           ) : (
