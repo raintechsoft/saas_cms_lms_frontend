@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { DownloadRounded } from "@mui/icons-material";
 import {
   Button,
@@ -150,6 +151,17 @@ export function ParentFeesPage() {
         title="Fees & Payments"
         subtitle={`Fee details and payment history for ${activeChild.name}.`}
       />
+
+      <div
+        className="rounded-[16px] border px-4 py-3 text-[13px]"
+        style={{ borderColor: PARENT_BORDER, background: "#F8FAFC", color: "#475569" }}
+      >
+        This preview uses sample data. Live dues, Razorpay Pay Now, and receipts are available in the{" "}
+        <Link to="/portal/student/fees" className="font-bold text-[#4F46E5] hover:underline">
+          student/parent portal fees page
+        </Link>
+        .
+      </div>
 
       <div
         className="flex flex-wrap items-center justify-between gap-4 rounded-[20px] border bg-white p-5 shadow-[0_4px_18px_rgba(28,27,60,0.04)] sm:p-6"

@@ -1261,7 +1261,7 @@ function GeneratePanel({ type, templates, students, classSections, staff, token,
         </div>
         {!activeTemplates.length ? (
           <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
-            No active {lowerNoun} templates. Create one in the Design {noun} tab first.
+            No active {lowerNoun} templates. Create one in the Design {noun} tab first — templates define layout, background, and fields before bulk generation.
           </p>
         ) : null}
 

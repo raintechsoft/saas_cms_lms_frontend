@@ -6,6 +6,14 @@ export interface ParentChild {
   className: string;
   section: string;
   photoUrl?: string | null;
+  transportOptIn?: boolean;
+  transportRoute?: string | null;
+  transport?: {
+    routeName?: string | null;
+    vehicleNumber?: string | null;
+    driverName?: string | null;
+    driverPhone?: string | null;
+  } | null;
 }
 
 export interface ParentUser {
