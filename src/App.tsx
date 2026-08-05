@@ -18,6 +18,8 @@ import { RequireProductBucket } from "./components/RequireProductBucket";
 import { ExamsPage } from "./pages/campus/ExamsPage";
 import { HrPage } from "./pages/campus/HrPage";
 import { DocumentsPage } from "./pages/campus/DocumentsPage";
+import { TransportPage } from "./pages/campus/TransportPage";
+import { HostelPage } from "./pages/campus/HostelPage";
 import { ReportsPage } from "./pages/campus/ReportsPage";
 import { DocumentPrintPage } from "./pages/campus/DocumentPrintPage";
 import { FeeReceiptPrintPage } from "./pages/campus/FeeReceiptPrintPage";
@@ -251,6 +253,11 @@ export function App() {
         <Route path="/fees" element={<RequireProductBucket bucket="CMS"><FeesPage /></RequireProductBucket>} />
         <Route path="/hr" element={<RequireProductBucket bucket="CMS"><HrPage /></RequireProductBucket>} />
         <Route path="/documents" element={<RequireProductBucket bucket="CMS"><DocumentsPage /></RequireProductBucket>} />
+        <Route path="/transport" element={<RequireProductBucket bucket="CMS"><TransportPage /></RequireProductBucket>} />
+        <Route path="/hostel" element={<RequireProductBucket bucket="CMS"><HostelPage /></RequireProductBucket>} />
+        <Route path="/hostel/blocks" element={<RequireProductBucket bucket="CMS"><HostelPage /></RequireProductBucket>} />
+        <Route path="/hostel/rooms" element={<RequireProductBucket bucket="CMS"><HostelPage /></RequireProductBucket>} />
+        <Route path="/hostel/assign" element={<RequireProductBucket bucket="CMS"><HostelPage /></RequireProductBucket>} />
         <Route path="/erp" element={<RequireProductBucket bucket="CMS"><ErpSettingsPage /></RequireProductBucket>} />
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/users" element={<UsersPage />} />

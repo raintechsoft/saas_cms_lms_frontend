@@ -34,6 +34,7 @@ interface FeePayment {
 }
 
 interface FeeAssignmentRow {
+  id: string;
   feeMaster?: {
     dueDate?: string;
     feeType?: { name: string };
@@ -42,12 +43,33 @@ interface FeeAssignmentRow {
   totals: { base: number; paid: number; balance: number; discount?: number; fine?: number };
 }
 
-interface FeeStatement {
-  totals: { base: number; discount: number; fine: number; paid: number; balance: number };
-  assignments: FeeAssignmentRow[];
+interface OnlinePaymentConfig {
+  enabled: boolean;
+  keyId: string;
+  currency: string;
+}
+
+interface OnlineCheckoutPayload {
+  keyId: string;
+  orderId: string;
+  amount: number;
+  currency: string;
+  name: string;
+  description: string;
+  prefill?: {
+    name?: string;
+    email?: string;
+    contact?: string;
+  };
+}
+
+interface CreateOnlineOrderResponse {
+  order: { id: string; status: string };
+  checkout: OnlineCheckoutPayload;
 }
 
 interface FeesResponse {
+  academicSessionId: string | null;
   statement: FeeStatement;
   due: {
     amount: number;
@@ -56,6 +78,53 @@ interface FeesResponse {
     overdue: boolean;
   } | null;
   payments: FeePayment[];
+}
+
+interface FeeStatement {
+  totals: { base: number; discount: number; fine: number; paid: number; balance: number };
+  assignments: FeeAssignmentRow[];
+}
+
+interface RazorpaySuccessResponse {
+  razorpay_payment_id: string;
+  razorpay_order_id: string;
+  razorpay_signature: string;
+}
+
+interface RazorpayCheckoutInstance {
+  open: () => void;
+  on: (event: string, handler: (response: { error?: { description?: string } }) => void) => void;
+}
+
+interface RazorpayConstructor {
+  new (options: Record<string, unknown>): RazorpayCheckoutInstance;
+}
+
+declare global {
+  interface Window {
+    Razorpay?: RazorpayConstructor;
+  }
+}
+
+function loadRazorpayScript() {
+  if (window.Razorpay) return Promise.resolve();
+  return new Promise<void>((resolve, reject) => {
+    const existing = document.querySelector('script[data-razorpay-checkout="true"]');
+    if (existing) {
+      existing.addEventListener("load", () => resolve(), { once: true });
+      existing.addEventListener("error", () => reject(new Error("Unable to load Razorpay checkout")), {
+        once: true,
+      });
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.async = true;
+    script.dataset.razorpayCheckout = "true";
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Unable to load Razorpay checkout"));
+    document.body.appendChild(script);
+  });
 }
 
 function Card({
@@ -122,6 +191,9 @@ export function PortalFeesPage() {
   const [showAllPayments, setShowAllPayments] = useState(false);
   const [uploadNote, setUploadNote] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [paying, setPaying] = useState(false);
+  const [payNote, setPayNote] = useState("");
+  const [onlineConfig, setOnlineConfig] = useState<OnlinePaymentConfig | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const showCms = isProductBucketAllowed(productMode, "CMS");
@@ -136,13 +208,114 @@ export function PortalFeesPage() {
       return;
     }
     setLoading(true);
-    apiRequest<FeesResponse>(`/portal/children/${child.student.id}/fees`, accessToken)
-      .then(setData)
+    Promise.all([
+      apiRequest<FeesResponse>(`/portal/children/${child.student.id}/fees`, accessToken),
+      apiRequest<OnlinePaymentConfig>("/portal/fees/online/config", accessToken).catch(() => ({
+        enabled: false,
+        keyId: "",
+        currency: "INR",
+      })),
+    ])
+      .then(([fees, config]) => {
+        setData(fees);
+        setOnlineConfig(config);
+      })
       .catch((cause: unknown) => {
         setError(cause instanceof Error ? cause.message : "Unable to load fees");
       })
       .finally(() => setLoading(false));
   }, [accessToken, child?.student.id, showCms]);
+
+  async function reloadFees() {
+    if (!child) return;
+    const fees = await apiRequest<FeesResponse>(`/portal/children/${child.student.id}/fees`, accessToken);
+    setData(fees);
+  }
+
+  async function payNow() {
+    if (!child || !data?.statement || paying) return;
+    if (!onlineConfig?.enabled) {
+      setPayNote("Online payments are not enabled. Upload payment proof or contact the school office.");
+      scrollTo("fee-upload");
+      return;
+    }
+    if (!data.academicSessionId) {
+      setPayNote("No active academic session found for fee payment.");
+      return;
+    }
+
+    const items = data.statement.assignments
+      .filter((row) => row.totals.balance > 0)
+      .map((row) => ({ assignmentId: row.id, amount: row.totals.balance }));
+    if (!items.length) {
+      setPayNote("No outstanding dues to pay.");
+      return;
+    }
+
+    setPaying(true);
+    setPayNote("");
+    try {
+      const created = await apiRequest<CreateOnlineOrderResponse>(
+        `/portal/children/${child.student.id}/fees/online/orders`,
+        accessToken,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            studentId: child.student.id,
+            academicSessionId: data.academicSessionId,
+            items,
+          }),
+        },
+      );
+
+      await loadRazorpayScript();
+      if (!window.Razorpay) {
+        throw new Error("Razorpay checkout is unavailable");
+      }
+
+      await new Promise<void>((resolve, reject) => {
+        const checkout = new window.Razorpay!({
+          key: created.checkout.keyId,
+          amount: created.checkout.amount,
+          currency: created.checkout.currency,
+          name: created.checkout.name,
+          description: created.checkout.description,
+          order_id: created.checkout.orderId,
+          prefill: created.checkout.prefill,
+          theme: { color: PRIMARY },
+          handler: (response: RazorpaySuccessResponse) => {
+            void (async () => {
+              try {
+                await apiRequest(`/portal/fees/online/orders/${created.order.id}/confirm`, accessToken, {
+                  method: "POST",
+                  body: JSON.stringify({
+                    paymentId: response.razorpay_payment_id,
+                    signature: response.razorpay_signature,
+                  }),
+                });
+                await reloadFees();
+                setPayNote("Payment successful. Your receipt is now available in payment history.");
+                resolve();
+              } catch (cause) {
+                reject(cause instanceof Error ? cause : new Error("Payment confirmation failed"));
+              }
+            })();
+          },
+          modal: {
+            ondismiss: () => resolve(),
+          },
+        });
+        checkout.on("payment.failed", (response) => {
+          reject(new Error(response.error?.description ?? "Payment failed"));
+        });
+        checkout.open();
+      });
+    } catch (cause) {
+      setPayNote(cause instanceof Error ? cause.message : "Unable to start online payment");
+    } finally {
+      setPaying(false);
+    }
+  }
 
   const statement = data?.statement;
   const paidPct = useMemo(() => {
@@ -222,6 +395,7 @@ export function PortalFeesPage() {
       </div>
 
       {error && <p className="alert-error">{error}</p>}
+      {payNote ? <p className="text-sm font-medium text-[#534AB7]">{payNote}</p> : null}
 
       {loading ? (
         <p className="text-sm text-[#6B7280]">Loading fees…</p>
@@ -284,13 +458,18 @@ export function PortalFeesPage() {
               </p>
               <button
                 type="button"
-                className="mt-auto inline-flex items-center justify-center gap-1 rounded-xl px-4 py-2.5 text-[13px] font-bold text-white"
+                className="mt-auto inline-flex items-center justify-center gap-1 rounded-xl px-4 py-2.5 text-[13px] font-bold text-white disabled:opacity-60"
                 style={{ background: PRIMARY }}
-                onClick={() => scrollTo("fee-upload")}
-                disabled={!due || due.amount <= 0}
+                onClick={() => void payNow()}
+                disabled={!due || due.amount <= 0 || paying || !onlineConfig?.enabled}
               >
-                Pay Now <ArrowForwardRounded sx={{ fontSize: 16 }} />
+                {paying ? "Opening checkout…" : "Pay Now"} <ArrowForwardRounded sx={{ fontSize: 16 }} />
               </button>
+              {!onlineConfig?.enabled && due && due.amount > 0 ? (
+                <p className="mt-2 text-[11px] text-[#6B7280]">
+                  Online pay unavailable — upload proof below or contact the office.
+                </p>
+              ) : null}
             </Card>
 
             <Card
@@ -306,10 +485,11 @@ export function PortalFeesPage() {
                 <p className="mt-1 text-[12px] text-white/80">Secure and easy online payment</p>
                 <button
                   type="button"
-                  className="mt-4 inline-flex items-center gap-1 text-[13px] font-bold text-white hover:underline"
-                  onClick={() => scrollTo("fee-upload")}
+                  className="mt-4 inline-flex items-center gap-1 text-[13px] font-bold text-white hover:underline disabled:opacity-60"
+                  onClick={() => void payNow()}
+                  disabled={paying || !onlineConfig?.enabled || !due || due.amount <= 0}
                 >
-                  Pay Now <ArrowForwardRounded sx={{ fontSize: 16 }} />
+                  {paying ? "Opening checkout…" : "Pay Now"} <ArrowForwardRounded sx={{ fontSize: 16 }} />
                 </button>
               </div>
             </Card>

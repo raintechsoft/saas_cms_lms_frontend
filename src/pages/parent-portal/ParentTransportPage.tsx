@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   DirectionsBusFilledOutlined,
   PersonOutlined,
@@ -12,33 +12,53 @@ import { useParentPortal } from "./ParentPortalContext";
 import { PageHeader } from "./components/PageHeader";
 import { StatusChip } from "./components/StatusChip";
 
-const TRANSPORT = {
-  busNumber: "MH-12-AB-4521",
-  routeName: "Route B — Koregaon Park",
-  driverName: "Suresh Patil",
-  driverPhone: "+91 98765 43210",
-  etaPickup: "7 mins",
-  etaDrop: "18 mins",
-  status: "On route",
+const MAP_PLACEHOLDER = {
+  etaPickup: "—",
+  etaDrop: "—",
+  status: "Assigned",
 };
 
 export function ParentTransportPage() {
   const { activeChild } = useParentPortal();
   const [notifyNear, setNotifyNear] = useState(true);
 
+  const transport = useMemo(() => {
+    const detail = activeChild.transport;
+    const routeName = detail?.routeName ?? activeChild.transportRoute ?? null;
+    if (!activeChild.transportOptIn && !routeName) return null;
+    return {
+      busNumber: detail?.vehicleNumber ?? "—",
+      routeName: routeName ?? "Transport assigned",
+      driverName: detail?.driverName ?? "—",
+      driverPhone: detail?.driverPhone ?? "—",
+      ...MAP_PLACEHOLDER,
+    };
+  }, [activeChild]);
+
   return (
     <div>
       <PageHeader
         title="Transport Tracking"
-        subtitle={`Live bus status for ${activeChild.name.split(" ")[0]}`}
+        subtitle={`Bus details for ${activeChild.name.split(" ")[0]}`}
       />
 
+      {!transport ? (
+        <div
+          className="rounded-[20px] border bg-white p-8 text-center shadow-[0_4px_18px_rgba(28,27,60,0.04)]"
+          style={{ borderColor: PARENT_BORDER }}
+        >
+          <DirectionsBusFilledOutlined sx={{ fontSize: 40, color: PARENT_PRIMARY }} />
+          <p className="mt-3 text-[15px] font-bold text-[#1A1A2E]">No transport assigned</p>
+          <p className="mt-1 text-[13px] text-[#6B7280]">
+            When the school assigns a route, driver and vehicle details will appear here.
+          </p>
+        </div>
+      ) : (
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_340px]">
         <div
           className="relative min-h-[420px] overflow-hidden rounded-[20px] border bg-white shadow-[0_4px_18px_rgba(28,27,60,0.04)]"
           style={{ borderColor: PARENT_BORDER }}
         >
-          {/* Map placeholder — ready for map library integration */}
           <div
             className="absolute inset-0"
             style={{
@@ -58,8 +78,8 @@ export function ParentTransportPage() {
 
           <div className="absolute left-4 top-4 z-10 flex items-center gap-2 rounded-xl border bg-white/95 px-3 py-2 shadow-sm" style={{ borderColor: PARENT_BORDER }}>
             <DirectionsBusFilledOutlined sx={{ fontSize: 18, color: PARENT_PRIMARY }} />
-            <span className="text-[12.5px] font-bold text-[#1A1A2E]">{TRANSPORT.busNumber}</span>
-            <StatusChip label={TRANSPORT.status} tone="green" />
+            <span className="text-[12.5px] font-bold text-[#1A1A2E]">{transport.busNumber}</span>
+            <StatusChip label={transport.status} tone="green" />
           </div>
 
           <svg className="absolute inset-0 z-[1] h-full w-full" viewBox="0 0 800 420" preserveAspectRatio="none" aria-hidden>
@@ -89,7 +109,7 @@ export function ParentTransportPage() {
           </div>
 
           <div className="absolute bottom-4 left-4 z-10 rounded-xl border bg-white/95 px-3 py-2 text-[11.5px] text-[#6B7280]" style={{ borderColor: PARENT_BORDER }}>
-            Map placeholder — connect Google Maps / Mapbox later
+            Live GPS tracking can be connected later — route details below are from the school profile.
           </div>
         </div>
 
@@ -99,7 +119,7 @@ export function ParentTransportPage() {
             style={{ borderColor: PARENT_BORDER }}
           >
             <h2 className="text-[15px] font-bold text-[#1A1A2E]">Bus Details</h2>
-            <p className="mt-1 text-[12.5px] text-[#6B7280]">{TRANSPORT.routeName}</p>
+            <p className="mt-1 text-[12.5px] text-[#6B7280]">{transport.routeName}</p>
 
             <dl className="mt-4 flex flex-col gap-3">
               <div className="flex items-center gap-3">
@@ -111,7 +131,7 @@ export function ParentTransportPage() {
                 </div>
                 <div>
                   <dt className="text-[11px] font-semibold uppercase tracking-wide text-[#9CA3AF]">Bus number</dt>
-                  <dd className="text-[13.5px] font-bold text-[#1A1A2E]">{TRANSPORT.busNumber}</dd>
+                  <dd className="text-[13.5px] font-bold text-[#1A1A2E]">{transport.busNumber}</dd>
                 </div>
               </div>
               <div className="flex items-center gap-3">
@@ -123,7 +143,7 @@ export function ParentTransportPage() {
                 </div>
                 <div>
                   <dt className="text-[11px] font-semibold uppercase tracking-wide text-[#9CA3AF]">Driver</dt>
-                  <dd className="text-[13.5px] font-bold text-[#1A1A2E]">{TRANSPORT.driverName}</dd>
+                  <dd className="text-[13.5px] font-bold text-[#1A1A2E]">{transport.driverName}</dd>
                 </div>
               </div>
               <div className="flex items-center gap-3">
@@ -135,7 +155,7 @@ export function ParentTransportPage() {
                 </div>
                 <div>
                   <dt className="text-[11px] font-semibold uppercase tracking-wide text-[#9CA3AF]">Contact</dt>
-                  <dd className="text-[13.5px] font-bold text-[#1A1A2E]">{TRANSPORT.driverPhone}</dd>
+                  <dd className="text-[13.5px] font-bold text-[#1A1A2E]">{transport.driverPhone}</dd>
                 </div>
               </div>
             </dl>
@@ -153,12 +173,12 @@ export function ParentTransportPage() {
               <div className="rounded-xl border p-3" style={{ borderColor: PARENT_BORDER }}>
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-[#9CA3AF]">Pickup</p>
                 <p className="mt-1 text-[20px] font-extrabold" style={{ color: PARENT_PRIMARY }}>
-                  {TRANSPORT.etaPickup}
+                  {transport.etaPickup}
                 </p>
               </div>
               <div className="rounded-xl border p-3" style={{ borderColor: PARENT_BORDER }}>
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-[#9CA3AF]">Drop</p>
-                <p className="mt-1 text-[20px] font-extrabold text-[#1A1A2E]">{TRANSPORT.etaDrop}</p>
+                <p className="mt-1 text-[20px] font-extrabold text-[#1A1A2E]">{transport.etaDrop}</p>
               </div>
             </div>
           </div>
@@ -185,6 +205,7 @@ export function ParentTransportPage() {
           </div>
         </aside>
       </div>
+      )}
     </div>
   );
 }

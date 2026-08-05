@@ -98,6 +98,14 @@ export function ParentCertificatesPage() {
         subtitle={`Request and download certificates for ${activeChild.name.split(" ")[0]}`}
       />
 
+      <div
+        className="mb-6 rounded-[20px] border bg-[#EEF0FD] px-5 py-4 text-[13px] text-[#4B5563]"
+        style={{ borderColor: PARENT_BORDER }}
+      >
+        School-issued certificates and ID cards (after generation) appear in the student/parent portal under{" "}
+        <strong>Documents</strong> with a print link to <code className="text-[12px]">/print/documents/:id</code>.
+      </div>
+
       <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
         {CERT_CARDS.map((card) => {
           const Icon = card.icon;

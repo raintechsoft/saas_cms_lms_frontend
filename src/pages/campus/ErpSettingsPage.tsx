@@ -21,7 +21,7 @@ interface ErpSetup {
   students: Array<{ id: string; admissionNumber: string; firstName: string; lastName: string | null }>;
 }
 type Tab = "integrations" | "access" | "fields" | "calendar" | "documents" | "backups";
-const categories = ["NOTIFICATION", "SMS", "EMAIL", "WEBSITE", "LIVE_CLASS"];
+const categories = ["NOTIFICATION", "SMS", "EMAIL", "WEBSITE", "LIVE_CLASS", "PAYMENT"];
 const moduleKeys = ["dashboard", "students", "academics", "timetable", "attendance", "fees", "examinations", "homework", "hr", "documents", "reports"];
 
 export function ErpSettingsPage() {
@@ -77,6 +77,10 @@ function IntegrationPanel({ setup, token, run }: { setup: ErpSetup; token: strin
         2,
       );
     }
+    if (category === "PAYMENT" && emptyConfig) {
+      provider = provider || "razorpay";
+      config = JSON.stringify({ mode: "test", currency: "INR" }, null, 2);
+    }
     setIntegration({
       category,
       provider,
@@ -86,7 +90,9 @@ function IntegrationPanel({ setup, token, run }: { setup: ErpSetup; token: strin
         ? '{\n  "authKey": "your_msg91_authkey"\n}'
         : category === "EMAIL"
           ? '{\n  "user": "smtp-user",\n  "pass": "smtp-password"\n}'
-          : "{}",
+          : category === "PAYMENT"
+            ? '{\n  "keyId": "rzp_test_xxx",\n  "keySecret": "your_key_secret",\n  "webhookSecret": "your_webhook_secret"\n}'
+            : "{}",
     });
   }
 
@@ -132,8 +138,10 @@ function IntegrationPanel({ setup, token, run }: { setup: ErpSetup; token: strin
         {integration.category === "EMAIL"
           ? 'EMAIL config: {"host","port","secure","from","fromName"}. Secrets: {"user","pass"}'
           : integration.category === "SMS"
-            ? 'SMS config: {"senderId":"SCHOOL","templateId":"your_flow_id"}. Secrets: {"authKey":"..."}. Provider: msg91. Template maps reminder text to VAR1.'
-            : "Enable and save provider settings used by campus notifications and reminders."}
+            ? 'SMS config: {"senderId":"SCHOOL","templateId":"your_flow_id"}. Secrets: {"authKey":"..."}. Provider: msg91. Template maps reminder text to VAR1. Without templateId, plain HTTP SMS is used. Configure ERP → SMS or set MSG91_* env vars on the server.'
+            : integration.category === "PAYMENT"
+              ? 'PAYMENT config: {"mode":"test|live","currency":"INR"}. Secrets: {"keyId":"rzp_test_xxx","keySecret":"...","webhookSecret":"..."}. Provider: razorpay. Webhook URL: POST /api/v1/webhooks/razorpay'
+              : "Enable and save provider settings used by campus notifications and reminders."}
       </p>
       <label className="label mt-4">Public config (JSON)</label><textarea className="input min-h-28 font-mono text-xs" value={integration.config} onChange={(e) => setIntegration({ ...integration, config: e.target.value })} />
       <label className="label mt-3">Secrets (JSON, leave {"{}"} to preserve)</label><textarea className="input min-h-20 font-mono text-xs" value={integration.secrets} onChange={(e) => setIntegration({ ...integration, secrets: e.target.value })} />

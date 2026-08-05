@@ -37,6 +37,8 @@ import {
   PlayArrowOutlined,
   QuizOutlined,
   ReceiptLongOutlined,
+  PrintOutlined,
+  SmsOutlined,
   SchoolOutlined,
   SummarizeOutlined,
   SupervisorAccountOutlined,
@@ -172,6 +174,13 @@ const today = new Date().toISOString().slice(0, 10);
 const monthStart = `${today.slice(0, 8)}01`;
 
 const HIDDEN_COLUMNS = new Set(["id", "studentId", "examStudentId"]);
+
+const FEE_RECEIPT_REPORT_KEYS = new Set([
+  "fee_collection",
+  "daily_fees_collection",
+  "day_book",
+  "online_fee",
+]);
 
 function csvEscape(value: unknown) {
   if (value == null) return "";
@@ -514,7 +523,8 @@ function statusPill(value: string): ReactNode {
 }
 
 export function ReportsPage() {
-  const { accessToken } = useAuth();
+  const { accessToken, user } = useAuth();
+  const canManageFees = user?.permissions.includes("fees.manage") ?? false;
   const [hub, setHub] = useState<Hub | null>(null);
   const [tab, setTab] = useState<ReportsTab>("core");
   const [selectedCore, setSelectedCore] = useState<CoreReportKey>("active_students");
@@ -536,6 +546,7 @@ export function ReportsPage() {
   const [moduleData, setModuleData] = useState<unknown>(null);
   const [loading, setLoading] = useState(false);
   const [catalogOpen, setCatalogOpen] = useState(true);
+  const [feeReminderRunning, setFeeReminderRunning] = useState(false);
   const resultsRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -718,6 +729,31 @@ export function ReportsPage() {
       notifyError(cause instanceof Error ? cause.message : "Unable to generate fee report");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function runFeeReminderSms() {
+    if (!canManageFees) return;
+    setFeeReminderRunning(true);
+    try {
+      const result = await apiRequest<{
+        count: number;
+        smsSent: number;
+        smsFailed: number;
+        sessionName?: string;
+      }>("/fees/reminders/run", accessToken, {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+      notifySuccess(
+        `Fee reminders sent: ${result.count} notices · SMS ${result.smsSent ?? 0} delivered` +
+          (result.smsFailed ? ` · ${result.smsFailed} failed` : "") +
+          (result.sessionName ? ` · ${result.sessionName}` : ""),
+      );
+    } catch (cause) {
+      notifyError(cause instanceof Error ? cause.message : "Unable to run fee reminder SMS");
+    } finally {
+      setFeeReminderRunning(false);
     }
   }
 
@@ -1332,6 +1368,23 @@ export function ReportsPage() {
                 ) : null}
 
                 {tab === "fees" ? (
+                  <div className="space-y-0">
+                    {canManageFees ? (
+                      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-emerald-50/60 px-5 py-3">
+                        <p className="text-sm text-emerald-900">
+                          Send SMS/email fee reminders for students with outstanding balance.
+                        </p>
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-white px-3.5 py-2 text-sm font-semibold text-emerald-800 shadow-sm transition hover:bg-emerald-50 disabled:opacity-50"
+                          disabled={feeReminderRunning}
+                          onClick={() => void runFeeReminderSms()}
+                        >
+                          <SmsOutlined sx={{ fontSize: 18 }} />
+                          {feeReminderRunning ? "Sending…" : "Send fee reminder SMS"}
+                        </button>
+                      </div>
+                    ) : null}
                   <div className="grid gap-0 lg:grid-cols-2">
                     {FEE_REPORT_GROUPS.map((group) => {
                       const rows = group.keys
@@ -1393,6 +1446,7 @@ export function ReportsPage() {
                         </div>
                       );
                     })}
+                  </div>
                   </div>
                 ) : null}
 
@@ -1749,6 +1803,9 @@ function CoreReportView({ data, metaLabel }: { data: CoreReportResult; metaLabel
   const columns = data.rows[0]
     ? Object.keys(data.rows[0]).filter((key) => !HIDDEN_COLUMNS.has(key))
     : [];
+  const showReceiptLinks =
+    FEE_RECEIPT_REPORT_KEYS.has(data.reportKey) &&
+    data.rows.some((row) => typeof row.id === "string" && row.id.length > 0);
   const canDownload = Boolean(!unavailable && (columns.length || summaryEntries.length));
 
   return (
@@ -1815,6 +1872,9 @@ function CoreReportView({ data, metaLabel }: { data: CoreReportResult; metaLabel
                     {key.replaceAll(/([A-Z])/g, " $1").replaceAll("_", " ")}
                   </th>
                 ))}
+                {showReceiptLinks ? (
+                  <th className="px-4 py-3 font-semibold">Print</th>
+                ) : null}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -1837,6 +1897,22 @@ function CoreReportView({ data, metaLabel }: { data: CoreReportResult; metaLabel
                       {renderCell(key, row[key])}
                     </td>
                   ))}
+                  {showReceiptLinks ? (
+                    <td className="px-4 py-3">
+                      {typeof row.id === "string" && row.id ? (
+                        <Link
+                          to={`/print/fees/${row.id}`}
+                          target="_blank"
+                          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-50"
+                        >
+                          <PrintOutlined sx={{ fontSize: 14 }} />
+                          Print slip
+                        </Link>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                  ) : null}
                 </tr>
                 );
               })}

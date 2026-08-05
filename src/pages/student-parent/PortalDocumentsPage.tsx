@@ -280,12 +280,20 @@ export function PortalDocumentsPage() {
   }, [data]);
 
   const categories = useMemo(() => {
-    return [...new Set(rows.map((r) => r.category))].sort((a, b) => a.localeCompare(b));
+    return [...new Set(rows.filter((r) => r.kind !== "certificate").map((r) => r.category))].sort((a, b) =>
+      a.localeCompare(b),
+    );
   }, [rows]);
 
+  const certificateRows = useMemo(
+    () => rows.filter((row) => row.kind === "certificate"),
+    [rows],
+  );
+
   const filtered = useMemo(() => {
-    if (categoryFilter === "ALL") return rows;
-    return rows.filter((r) => r.category === categoryFilter);
+    const docsOnly = rows.filter((row) => row.kind !== "certificate");
+    if (categoryFilter === "ALL") return docsOnly;
+    return docsOnly.filter((r) => r.category === categoryFilter);
   }, [rows, categoryFilter]);
 
   const visible = filtered.slice(0, visibleCount);
@@ -447,6 +455,35 @@ export function PortalDocumentsPage() {
           </Card>
         ))}
       </div>
+
+      {certificateRows.length ? (
+        <Card>
+          <h2 className="text-[15px] font-bold text-[#1A1A1A]">Certificates &amp; ID cards</h2>
+          <p className="mt-1 text-[12.5px] text-[#6B7280]">
+            School-generated certificates and ID cards — open print view to download or print.
+          </p>
+          <ul className="mt-4 divide-y divide-[#F1F2F6]">
+            {certificateRows.map((cert) => (
+              <li key={cert.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                <div>
+                  <p className="text-[13.5px] font-bold text-[#1A1A2E]">{cert.name}</p>
+                  <p className="text-[11.5px] text-[#9CA3AF]">Issued {cert.uploadedOn}</p>
+                </div>
+                {cert.printPath ? (
+                  <Link
+                    to={cert.printPath}
+                    target="_blank"
+                    className="inline-flex items-center gap-1 rounded-xl px-3 py-2 text-[12px] font-bold text-white"
+                    style={{ background: PRIMARY }}
+                  >
+                    Print
+                  </Link>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
         <Card className="!p-0 overflow-hidden">
