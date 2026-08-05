@@ -11,7 +11,8 @@ import {
   SettingsOutlined,
 } from "@mui/icons-material";
 import { Menu, MenuItem, Divider } from "@mui/material";
-import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Navigate, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "../../auth/AuthContext";
 import { InitialsAvatar } from "../../components/InitialsAvatar";
 import { PARENT_NAV } from "./parentPortalNav";
 import { ParentPortalProvider, useParentPortal } from "./ParentPortalContext";
@@ -300,8 +301,15 @@ function ChildSwitcher() {
 
 function ProfileMenu() {
   const { parent } = useParentPortal();
+  const { logout } = useAuth();
   const navigate = useNavigate();
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
+
+  const handleLogout = () => {
+    setAnchorEl(null);
+    logout();
+    navigate("/login", { replace: true });
+  };
 
   return (
     <>
@@ -328,7 +336,7 @@ function ProfileMenu() {
           <PersonOutlined sx={{ fontSize: 18 }} /> My Profile
         </MenuItem>
         <Divider />
-        <MenuItem onClick={() => setAnchorEl(null)} className="gap-2 text-red-600">
+        <MenuItem onClick={handleLogout} className="gap-2 text-red-600">
           <LogoutOutlined sx={{ fontSize: 18 }} /> Logout
         </MenuItem>
       </Menu>
@@ -406,6 +414,15 @@ function ParentPortalShellInner() {
 }
 
 export function ParentPortalLayout() {
+  const { user, isAuthenticated } = useAuth();
+
+  if (!isAuthenticated || !user) {
+    return <Navigate to="/login" replace />;
+  }
+  if (!user.roles.includes("PARENT")) {
+    return <Navigate to={user.roles.includes("STUDENT") ? "/portal/student" : "/dashboard"} replace />;
+  }
+
   return (
     <ParentPortalProvider>
       <ParentPortalShellInner />

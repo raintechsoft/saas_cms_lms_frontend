@@ -162,7 +162,7 @@ export function LoginPage() {
 
   if (isAuthenticated && user && isPortalUser(user.roles)) {
 
-    return <Navigate to={user.roles.includes("PARENT") ? "/portal/parent" : "/portal/student"} replace />;
+    return <Navigate to={user.roles.includes("PARENT") ? "/parent/dashboard" : "/portal/student"} replace />;
 
   }
 
@@ -178,7 +178,7 @@ export function LoginPage() {
 
     } else if (id === "parent") {
 
-      navigate("/portal/parent", { replace: true });
+      navigate("/parent/dashboard", { replace: true });
 
     } else {
 
