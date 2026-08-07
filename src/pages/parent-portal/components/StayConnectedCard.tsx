@@ -1,32 +1,32 @@
-import { FamilyRestroomRounded, ShieldRounded } from "@mui/icons-material";
-import { PARENT_PRIMARY, PARENT_PRIMARY_DARK } from "../ParentPortalLayout";
+import { ShieldRounded } from "@mui/icons-material";
+import { Link } from "react-router-dom";
+import { PARENT_PRIMARY } from "../ParentPortalLayout";
 
 export function StayConnectedCard({ childName }: { childName: string }) {
+  const first = childName.split(" ")[0] || childName;
   return (
-    <div
-      className="relative flex flex-col gap-2.5 overflow-hidden rounded-2xl p-3.5"
-      style={{ background: `linear-gradient(135deg, #EEF2FF, #E0E7FF)` }}
+    <section
+      className="rounded-2xl px-4 py-4"
+      style={{ background: "linear-gradient(145deg, #EEF2FF 0%, #E0E7FF 100%)" }}
     >
       <div
-        className="absolute -right-5 -top-5 grid size-20 place-items-center rounded-full opacity-90"
-        style={{ background: `linear-gradient(135deg, ${PARENT_PRIMARY}, ${PARENT_PRIMARY_DARK})` }}
-      >
-        <FamilyRestroomRounded sx={{ fontSize: 28, color: "#FFFFFF" }} />
-      </div>
-      <div
         className="grid size-9 place-items-center rounded-xl"
-        style={{ background: `linear-gradient(135deg, ${PARENT_PRIMARY}, ${PARENT_PRIMARY_DARK})` }}
+        style={{ background: PARENT_PRIMARY }}
       >
         <ShieldRounded sx={{ fontSize: 18, color: "#FFFFFF" }} />
       </div>
-      <div>
-        <h2 className="text-[13.5px] font-bold leading-snug text-[#1A1A2E]">
-          Stay connected with {childName}&apos;s learning journey
-        </h2>
-        <p className="mt-1 text-[12px] leading-snug text-[#4B5563]">
-          Check updates regularly and help {childName.split(" ")[0]} stay ahead.
-        </p>
-      </div>
-    </div>
+      <h2 className="mt-3 text-[14px] font-bold leading-snug text-[#111827]">
+        Stay on top of {first}&apos;s progress
+      </h2>
+      <p className="mt-1.5 text-[12.5px] leading-snug text-[#4B5563]">
+        Check attendance, homework, and fees regularly so nothing slips through.
+      </p>
+      <Link
+        to="/parent/academics/homework"
+        className="mt-3 inline-flex text-[12.5px] font-bold text-[#4F46E5] hover:underline"
+      >
+        Review homework →
+      </Link>
+    </section>
   );
 }

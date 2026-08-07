@@ -1,4 +1,4 @@
-/** Shared data contracts for the Parent Portal. Mock data today; drop-in API data later. */
+/** Shared data contracts for the Parent Portal UI. Live child data comes from /portal/overview. */
 
 export interface ParentChild {
   id: string;
@@ -76,4 +76,5 @@ export interface QuickLink {
   id: string;
   label: string;
   icon: "reportCard" | "hallTicket" | "feeReceipt" | "applyLeave";
+  to: string;
 }

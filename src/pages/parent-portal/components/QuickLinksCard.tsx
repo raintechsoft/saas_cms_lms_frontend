@@ -4,6 +4,7 @@ import {
   ReceiptLongOutlined,
   EventBusyOutlined,
 } from "@mui/icons-material";
+import { Link } from "react-router-dom";
 import type { QuickLink } from "../types";
 import { PARENT_BORDER } from "../ParentPortalLayout";
 
@@ -23,30 +24,35 @@ const COLOR_MAP: Record<QuickLink["icon"], { bg: string; text: string }> = {
 
 export function QuickLinksCard({ links }: { links: QuickLink[] }) {
   return (
-    <div
-      className="flex flex-col rounded-2xl border bg-white p-3.5 shadow-[0_4px_18px_rgba(28,27,60,0.04)]"
+    <section
+      className="rounded-2xl border bg-white shadow-[0_2px_12px_rgba(28,27,60,0.04)]"
       style={{ borderColor: PARENT_BORDER }}
     >
-      <h2 className="mb-2.5 text-[14px] font-bold text-[#1A1A2E]">Quick Links</h2>
-      <div className="grid grid-cols-2 gap-2">
+      <div className="border-b px-4 py-3" style={{ borderColor: PARENT_BORDER }}>
+        <h2 className="text-[14px] font-bold text-[#111827]">Quick Links</h2>
+      </div>
+      <div className="grid grid-cols-2 gap-2.5 p-3.5">
         {links.map((link) => {
           const Icon = ICON_MAP[link.icon];
           const colors = COLOR_MAP[link.icon];
           return (
-            <button
+            <Link
               key={link.id}
-              type="button"
-              className="flex flex-col items-start gap-1.5 rounded-xl border p-2.5 text-left transition hover:bg-[#F5F6FA]"
+              to={link.to}
+              className="flex flex-col items-start gap-2 rounded-xl border bg-[#FAFBFC] p-3 transition hover:border-[#C7D2FE] hover:bg-[#EEF2FF]"
               style={{ borderColor: PARENT_BORDER }}
             >
-              <div className="grid size-8 place-items-center rounded-lg" style={{ background: colors.bg }}>
+              <div
+                className="grid size-8 place-items-center rounded-lg"
+                style={{ background: colors.bg }}
+              >
                 <Icon sx={{ fontSize: 16, color: colors.text }} />
               </div>
-              <span className="text-[11.5px] font-semibold leading-tight text-[#1A1A2E]">{link.label}</span>
-            </button>
+              <span className="text-[12px] font-semibold leading-snug text-[#111827]">{link.label}</span>
+            </Link>
           );
         })}
       </div>
-    </div>
+    </section>
   );
 }

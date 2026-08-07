@@ -18,33 +18,40 @@ const TAG_ICON: Record<AnnouncementTag, typeof CampaignOutlined> = {
 
 export function AnnouncementsCard({ announcements }: { announcements: Announcement[] }) {
   return (
-    <SectionCard title="Announcements" linkLabel="View All" linkTo="/parent/communication/announcements">
-      <ul className="flex flex-col gap-3.5">
-        {announcements.map((item) => {
-          const Icon = TAG_ICON[item.tag];
-          const tagStyle = TAG_STYLES[item.tag];
-          return (
-            <li key={item.id} className="flex items-start gap-3">
-              <div className="grid size-9 shrink-0 place-items-center rounded-xl" style={{ background: tagStyle.bg }}>
-                <Icon sx={{ fontSize: 18, color: tagStyle.text }} />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[13px] font-semibold text-[#1A1A2E]">{item.title}</p>
-                <p className="mt-0.5 line-clamp-1 text-[11.5px] text-[#6B7280]">{item.description}</p>
-                <div className="mt-1 flex items-center gap-2">
-                  <span className="text-[11.5px] text-[#6B7280]">{item.date}</span>
-                  <span
-                    className="rounded-full px-2 py-0.5 text-[10px] font-bold"
-                    style={{ background: tagStyle.bg, color: tagStyle.text }}
-                  >
-                    {item.tag}
-                  </span>
+    <SectionCard title="Announcements" linkLabel="View all" linkTo="/parent/communication/announcements">
+      {announcements.length === 0 ? (
+        <p className="py-6 text-center text-[12.5px] text-[#9CA3AF]">No announcements yet.</p>
+      ) : (
+        <ul className="flex flex-col gap-3">
+          {announcements.slice(0, 4).map((item) => {
+            const Icon = TAG_ICON[item.tag];
+            const tagStyle = TAG_STYLES[item.tag];
+            return (
+              <li key={item.id} className="flex items-start gap-3">
+                <div
+                  className="grid size-9 shrink-0 place-items-center rounded-xl"
+                  style={{ background: tagStyle.bg }}
+                >
+                  <Icon sx={{ fontSize: 18, color: tagStyle.text }} />
                 </div>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[13px] font-semibold text-[#111827]">{item.title}</p>
+                  <p className="mt-0.5 line-clamp-1 text-[12px] text-[#6B7280]">{item.description}</p>
+                  <div className="mt-1.5 flex items-center gap-2">
+                    <span className="text-[11px] text-[#9CA3AF]">{item.date}</span>
+                    <span
+                      className="rounded-full px-2 py-0.5 text-[10px] font-bold"
+                      style={{ background: tagStyle.bg, color: tagStyle.text }}
+                    >
+                      {item.tag}
+                    </span>
+                  </div>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </SectionCard>
   );
 }

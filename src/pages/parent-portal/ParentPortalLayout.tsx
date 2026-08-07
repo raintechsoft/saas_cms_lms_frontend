@@ -349,45 +349,47 @@ function TopBar() {
 
   return (
     <header
-      className="flex h-16 items-center gap-3 border-b bg-white px-5"
+      className="flex h-[64px] items-center gap-3 border-b bg-white px-4 sm:px-6"
       style={{ borderColor: PARENT_BORDER }}
     >
       <ChildSwitcher />
 
       <div
-        className="mx-auto hidden min-w-0 max-w-[440px] flex-1 items-center gap-2 rounded-xl border px-3.5 py-2 sm:flex"
+        className="mx-auto hidden min-w-0 max-w-[420px] flex-1 items-center gap-2 rounded-xl border px-3.5 py-2 md:flex"
         style={{ borderColor: "#E8EAF0", background: PARENT_BG }}
       >
         <SearchOutlined sx={{ fontSize: 18 }} className="shrink-0 text-[#9CA3AF]" />
         <input
           value={searchQuery}
           onChange={(event) => setSearchQuery(event.target.value)}
-          placeholder="Search anything..."
-          className="min-w-0 flex-1 border-none bg-transparent text-[13px] text-[#1A1A2E] outline-none placeholder:text-[#9CA3AF]"
+          placeholder="Search fees, homework, notices…"
+          className="min-w-0 flex-1 border-none bg-transparent text-[13px] text-[#111827] outline-none placeholder:text-[#9CA3AF]"
         />
       </div>
 
-      <div className="ml-auto flex shrink-0 items-center gap-1.5">
+      <div className="ml-auto flex shrink-0 items-center gap-1">
         <NavLink
           to="/parent/notifications"
-          className="relative grid size-9 place-items-center rounded-xl transition hover:bg-[#F5F6FA]"
+          className="relative grid size-10 place-items-center rounded-xl transition hover:bg-[#F5F6FA]"
           title="Notifications"
         >
           <NotificationsOutlined sx={{ fontSize: 20 }} style={{ color: PARENT_PRIMARY }} />
           {NOTIFICATION_COUNT > 0 && (
-            <span className="absolute right-0.5 top-0.5 grid min-w-[16px] place-items-center rounded-full bg-[#3B82F6] px-1 text-[10px] font-bold leading-[16px] text-white">
+            <span className="absolute right-1 top-1 grid min-w-[16px] place-items-center rounded-full bg-[#3B82F6] px-1 text-[10px] font-bold leading-[16px] text-white">
               {NOTIFICATION_COUNT}
             </span>
           )}
         </NavLink>
         <NavLink
           to="/parent/settings"
-          className="grid size-9 place-items-center rounded-xl transition hover:bg-[#F5F6FA]"
+          className="grid size-10 place-items-center rounded-xl transition hover:bg-[#F5F6FA]"
           title="Settings"
         >
           <SettingsOutlined sx={{ fontSize: 20 }} className="text-[#6B7280]" />
         </NavLink>
-        <ProfileMenu />
+        <div className="ml-1 border-l pl-2" style={{ borderColor: PARENT_BORDER }}>
+          <ProfileMenu />
+        </div>
       </div>
     </header>
   );
@@ -395,6 +397,7 @@ function TopBar() {
 
 function ParentPortalShellInner() {
   const [collapsed, setCollapsed] = useState(false);
+  const { loading, error, children, reload } = useParentPortal();
 
   return (
     <div className="flex min-h-screen" style={{ background: PARENT_BG }}>
@@ -403,9 +406,30 @@ function ParentPortalShellInner() {
         <div className="sticky top-0 z-20">
           <TopBar />
         </div>
-        <main className="min-w-0 flex-1 px-5 py-4">
-          <div className="mx-auto w-full max-w-[1168px]">
-            <Outlet />
+        <main className="min-w-0 flex-1 px-4 py-5 sm:px-6 sm:py-6">
+          <div className="mx-auto w-full max-w-[1180px]">
+            {loading ? (
+              <div className="rounded-2xl border border-[#E5E7EB] bg-white px-6 py-16 text-center text-[14px] text-[#6B7280]">
+                Loading parent portal…
+              </div>
+            ) : error ? (
+              <div className="rounded-2xl border border-red-200 bg-red-50 px-6 py-10 text-center">
+                <p className="text-[14px] font-semibold text-red-700">{error}</p>
+                <button
+                  type="button"
+                  className="mt-4 rounded-xl bg-[#4F46E5] px-4 py-2 text-[13px] font-bold text-white"
+                  onClick={() => void reload()}
+                >
+                  Retry
+                </button>
+              </div>
+            ) : children.length === 0 ? (
+              <div className="rounded-2xl border border-[#E5E7EB] bg-white px-6 py-16 text-center text-[14px] text-[#6B7280]">
+                No student is linked to this parent account yet. Contact the school office.
+              </div>
+            ) : (
+              <Outlet />
+            )}
           </div>
         </main>
       </div>

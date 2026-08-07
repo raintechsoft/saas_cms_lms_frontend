@@ -102,6 +102,9 @@ export function ParentAcademicCalendarPage() {
         title="Academic Calendar"
         subtitle={`Holidays, exams and school events for ${activeChild.name}'s class.`}
       />
+      <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-800">
+        School calendar API is not available yet. Showing sample events until it is wired.
+      </p>
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_320px]">
         <section

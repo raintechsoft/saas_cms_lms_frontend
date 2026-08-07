@@ -1,215 +1,162 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CampaignOutlined, CloseRounded } from "@mui/icons-material";
 import { Dialog, DialogContent, Tab, Tabs } from "@mui/material";
-import { PARENT_BORDER, PARENT_PRIMARY, PARENT_PRIMARY_SUBTLE } from "./ParentPortalLayout";
-import { useParentPortal } from "./ParentPortalContext";
+import { apiRequest } from "../../lib/api";
+import type { PortalNotice } from "../student-parent/portalTypes";
 import { PageHeader } from "./components/PageHeader";
 import { StatusChip } from "./components/StatusChip";
+import { useParentPortal } from "./ParentPortalContext";
+import { PARENT_BORDER, PARENT_PRIMARY, PARENT_PRIMARY_SUBTLE } from "./ParentPortalLayout";
 
 type NoticeCategory = "Circulars" | "Events" | "Fee Alerts" | "Exam Alerts";
 type TabKey = "All" | NoticeCategory;
 
-interface Notice {
-  id: string;
-  title: string;
-  description: string;
-  fullBody: string;
-  date: string;
-  category: NoticeCategory;
+function inferCategory(notice: PortalNotice): NoticeCategory {
+  const text = `${notice.title} ${notice.body}`.toLowerCase();
+  if (/fee|tuition|payment|due/.test(text)) return "Fee Alerts";
+  if (/exam|test|result|mark/.test(text)) return "Exam Alerts";
+  if (/event|sports|day|festival|holiday|celebration|trip|meeting|pta|annual/.test(text)) {
+    return "Events";
+  }
+  return "Circulars";
 }
 
-const MOCK_NOTICES: Notice[] = [
-  {
-    id: "n1",
-    title: "Uniform Guidelines Update",
-    description: "Updated dress code and winter uniform schedule for Classes 1–10.",
-    fullBody:
-      "Dear Parents,\n\nPlease note the updated uniform guidelines effective from 1 June 2025. Winter blazers are mandatory on Mondays and Fridays. Detailed circular is available at the school office.\n\nRegards,\nPrincipal's Office",
-    date: "28 May 2025",
-    category: "Circulars",
-  },
-  {
-    id: "n2",
-    title: "Annual Sports Day 2025",
-    description: "Join us for athletic events and team spirit on the main ground.",
-    fullBody:
-      "Annual Sports Day will be held on 15 June 2025 from 8:00 AM to 1:00 PM on the main ground. Parents are cordially invited. Students should report in sports kit by 7:30 AM.",
-    date: "24 May 2025",
-    category: "Events",
-  },
-  {
-    id: "n3",
-    title: "Term Fee Reminder — Q1",
-    description: "Q1 tuition fee is due before 25 May. Online payment is preferred.",
-    fullBody:
-      "This is a reminder that Q1 tuition fees are due on or before 25 May 2025. Please pay via the Fees & Payments section. Late fee of ₹200/day applies after the due date.",
-    date: "20 May 2025",
-    category: "Fee Alerts",
-  },
-  {
-    id: "n4",
-    title: "Unit Test 2 Schedule Released",
-    description: "Class 8 Unit Test 2 timetable is now available for download.",
-    fullBody:
-      "Unit Test 2 for Class 8 will begin on 28 May 2025. Subjects: Maths, Science, English, Social Studies. Please ensure your child revises thoroughly. Hall tickets will be issued next week.",
-    date: "18 May 2025",
-    category: "Exam Alerts",
-  },
-  {
-    id: "n5",
-    title: "Science Exhibition Invitation",
-    description: "Students from Class 6–10 will showcase projects in the auditorium.",
-    fullBody:
-      "You are invited to the Science Exhibition on 15 May 2025, 9:00 AM – 1:00 PM in the school auditorium. Refreshments will be served for visiting parents.",
-    date: "12 May 2025",
-    category: "Events",
-  },
-  {
-    id: "n6",
-    title: "Library Book Return Notice",
-    description: "All borrowed books must be returned before summer vacation.",
-    fullBody:
-      "Parents are requested to ensure all library books are returned by 5 June 2025. Overdue charges will apply thereafter. Contact the library desk for renewals.",
-    date: "10 May 2025",
-    category: "Circulars",
-  },
-  {
-    id: "n7",
-    title: "Transport Fee Adjustment",
-    description: "Updated transport fee slab for Route B effective June.",
-    fullBody:
-      "Due to revised fuel costs, Route B transport fee will increase by ₹300/month from June 2025. The revised amount will reflect in your next fee invoice.",
-    date: "8 May 2025",
-    category: "Fee Alerts",
-  },
-  {
-    id: "n8",
-    title: "Pre-Board Exam Guidelines",
-    description: "Important instructions for Classes 9–10 pre-board examinations.",
-    fullBody:
-      "Pre-board exams start 2 June 2025. Students must carry hall tickets and school ID. Electronic devices are prohibited in exam halls. Reporting time is 8:15 AM sharp.",
-    date: "5 May 2025",
-    category: "Exam Alerts",
-  },
-];
+function formatWhen(value: string) {
+  return new Date(value).toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
 
-const TABS: TabKey[] = ["All", "Circulars", "Events", "Fee Alerts", "Exam Alerts"];
-
-const CATEGORY_TONE: Record<NoticeCategory, "purple" | "orange" | "red" | "blue"> = {
-  Circulars: "purple",
+const CATEGORY_TONE: Record<NoticeCategory, "blue" | "orange" | "red" | "green"> = {
+  Circulars: "blue",
   Events: "orange",
   "Fee Alerts": "red",
-  "Exam Alerts": "blue",
+  "Exam Alerts": "green",
 };
 
 export function ParentAnnouncementsPage() {
-  const { activeChild } = useParentPortal();
+  const { activeChild, accessToken } = useParentPortal();
+  const [notices, setNotices] = useState<PortalNotice[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [tab, setTab] = useState<TabKey>("All");
-  const [selected, setSelected] = useState<Notice | null>(null);
+  const [selected, setSelected] = useState<PortalNotice | null>(null);
 
-  const filtered = useMemo(
-    () => (tab === "All" ? MOCK_NOTICES : MOCK_NOTICES.filter((n) => n.category === tab)),
-    [tab],
-  );
+  useEffect(() => {
+    setLoading(true);
+    setError("");
+    apiRequest<PortalNotice[]>("/portal/notices?limit=50", accessToken)
+      .then((data) => setNotices(data ?? []))
+      .catch((cause: unknown) => {
+        setError(cause instanceof Error ? cause.message : "Unable to load announcements");
+      })
+      .finally(() => setLoading(false));
+  }, [accessToken]);
+
+  const filtered = useMemo(() => {
+    if (tab === "All") return notices;
+    return notices.filter((notice) => inferCategory(notice) === tab);
+  }, [notices, tab]);
 
   return (
-    <div>
+    <div className="flex flex-col gap-5">
       <PageHeader
         title="Announcements"
-        subtitle={`School notices and alerts for ${activeChild.name.split(" ")[0]}`}
+        subtitle={`School notices for parents of ${activeChild.name}.`}
       />
 
-      <div
-        className="mb-5 rounded-[20px] border bg-white px-2 pt-1 shadow-[0_4px_18px_rgba(28,27,60,0.04)] sm:px-4"
-        style={{ borderColor: PARENT_BORDER }}
+      <Tabs
+        value={tab}
+        onChange={(_, value: TabKey) => setTab(value)}
+        variant="scrollable"
+        scrollButtons="auto"
+        sx={{
+          minHeight: 36,
+          "& .MuiTab-root": { textTransform: "none", fontWeight: 700, minHeight: 36, fontSize: 13 },
+          "& .Mui-selected": { color: `${PARENT_PRIMARY} !important` },
+          "& .MuiTabs-indicator": { backgroundColor: PARENT_PRIMARY },
+        }}
       >
-        <Tabs
-          value={tab}
-          onChange={(_, value: TabKey) => setTab(value)}
-          variant="scrollable"
-          scrollButtons="auto"
-          sx={{
-            minHeight: 48,
-            "& .MuiTab-root": {
-              textTransform: "none",
-              fontWeight: 700,
-              fontSize: 13.5,
-              minHeight: 48,
-              color: "#6B7280",
-            },
-            "& .Mui-selected": { color: `${PARENT_PRIMARY} !important` },
-            "& .MuiTabs-indicator": { backgroundColor: PARENT_PRIMARY, height: 3, borderRadius: 2 },
-          }}
-        >
-          {TABS.map((t) => (
-            <Tab key={t} label={t} value={t} />
-          ))}
-        </Tabs>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        {filtered.map((notice) => (
-          <article
-            key={notice.id}
-            className="flex flex-col rounded-[20px] border bg-white p-5 shadow-[0_4px_18px_rgba(28,27,60,0.04)]"
-            style={{ borderColor: PARENT_BORDER }}
-          >
-            <div className="mb-3 flex items-start justify-between gap-3">
-              <div
-                className="grid size-11 shrink-0 place-items-center rounded-2xl"
-                style={{ background: PARENT_PRIMARY_SUBTLE, color: PARENT_PRIMARY }}
-              >
-                <CampaignOutlined sx={{ fontSize: 22 }} />
-              </div>
-              <StatusChip label={notice.category} tone={CATEGORY_TONE[notice.category]} />
-            </div>
-            <h2 className="text-[15px] font-bold text-[#1A1A2E]">{notice.title}</h2>
-            <p className="mt-1.5 flex-1 text-[13px] leading-relaxed text-[#6B7280]">{notice.description}</p>
-            <div className="mt-4 flex items-center justify-between gap-2 border-t pt-3" style={{ borderColor: PARENT_BORDER }}>
-              <span className="text-[12px] font-medium text-[#9CA3AF]">{notice.date}</span>
-              <button
-                type="button"
-                onClick={() => setSelected(notice)}
-                className="text-[12.5px] font-semibold hover:underline"
-                style={{ color: PARENT_PRIMARY }}
-              >
-                View full notice
-              </button>
-            </div>
-          </article>
+        {(["All", "Circulars", "Events", "Fee Alerts", "Exam Alerts"] as TabKey[]).map((key) => (
+          <Tab key={key} value={key} label={key} />
         ))}
-      </div>
+      </Tabs>
 
-      {filtered.length === 0 && (
-        <div
-          className="rounded-[20px] border bg-white p-10 text-center text-[14px] text-[#6B7280] shadow-[0_4px_18px_rgba(28,27,60,0.04)]"
+      {loading ? (
+        <p className="text-[13px] text-[#6B7280]">Loading announcements…</p>
+      ) : error ? (
+        <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-700">{error}</p>
+      ) : filtered.length === 0 ? (
+        <p
+          className="rounded-[20px] border bg-white px-5 py-12 text-center text-[13px] text-[#6B7280]"
           style={{ borderColor: PARENT_BORDER }}
         >
           No announcements in this category.
-        </div>
-      )}
-
-      <Dialog open={Boolean(selected)} onClose={() => setSelected(null)} maxWidth="sm" fullWidth>
-        <DialogContent className="!p-0">
-          {selected && (
-            <div className="p-5 sm:p-6">
-              <div className="mb-4 flex items-start justify-between gap-3">
-                <div>
-                  <StatusChip label={selected.category} tone={CATEGORY_TONE[selected.category]} />
-                  <h2 className="mt-3 text-[18px] font-extrabold text-[#1A1A2E]">{selected.title}</h2>
-                  <p className="mt-1 text-[12.5px] text-[#9CA3AF]">{selected.date}</p>
-                </div>
+        </p>
+      ) : (
+        <ul className="flex flex-col gap-3">
+          {filtered.map((notice) => {
+            const category = inferCategory(notice);
+            return (
+              <li key={notice.id}>
                 <button
                   type="button"
-                  onClick={() => setSelected(null)}
-                  className="grid size-8 place-items-center rounded-full text-[#6B7280] hover:bg-[#F3F4F6]"
-                  aria-label="Close"
+                  onClick={() => setSelected(notice)}
+                  className="flex w-full items-start gap-3 rounded-[20px] border bg-white p-4 text-left shadow-[0_4px_18px_rgba(28,27,60,0.04)] transition hover:bg-[#F9FAFB]"
+                  style={{ borderColor: PARENT_BORDER }}
                 >
-                  <CloseRounded sx={{ fontSize: 20 }} />
+                  <span
+                    className="grid size-10 shrink-0 place-items-center rounded-xl"
+                    style={{ background: PARENT_PRIMARY_SUBTLE, color: PARENT_PRIMARY }}
+                  >
+                    <CampaignOutlined sx={{ fontSize: 20 }} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-[14px] font-bold text-[#1A1A2E]">{notice.title}</p>
+                      <StatusChip label={category} tone={CATEGORY_TONE[category]} />
+                    </div>
+                    <p className="mt-1 line-clamp-2 text-[13px] text-[#6B7280]">{notice.body}</p>
+                    <p className="mt-2 text-[11px] font-semibold text-[#9CA3AF]">
+                      {formatWhen(notice.publishedAt)}
+                    </p>
+                  </div>
                 </button>
-              </div>
-              <p className="whitespace-pre-line text-[13.5px] leading-relaxed text-[#374151]">{selected.fullBody}</p>
-            </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      <Dialog open={Boolean(selected)} onClose={() => setSelected(null)} fullWidth maxWidth="sm">
+        <DialogContent className="relative !p-6">
+          <button
+            type="button"
+            className="absolute right-3 top-3 grid size-8 place-items-center rounded-lg text-[#6B7280] hover:bg-[#F5F6FA]"
+            onClick={() => setSelected(null)}
+          >
+            <CloseRounded sx={{ fontSize: 18 }} />
+          </button>
+          {selected && (
+            <>
+              <p className="pr-8 text-[18px] font-extrabold text-[#1A1A2E]">{selected.title}</p>
+              <p className="mt-1 text-[12px] text-[#6B7280]">{formatWhen(selected.publishedAt)}</p>
+              <p className="mt-4 whitespace-pre-wrap text-[14px] leading-relaxed text-[#374151]">
+                {selected.body}
+              </p>
+              {selected.attachmentUrl && (
+                <a
+                  href={selected.attachmentUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-4 inline-flex text-[13px] font-bold text-[#4F46E5] hover:underline"
+                >
+                  Open attachment
+                </a>
+              )}
+            </>
           )}
         </DialogContent>
       </Dialog>

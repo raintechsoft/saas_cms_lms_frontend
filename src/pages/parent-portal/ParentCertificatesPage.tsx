@@ -1,187 +1,149 @@
-import { useState } from "react";
-import {
-  DownloadOutlined,
-  EmojiEventsOutlined,
-  DescriptionOutlined,
-  SwapHorizOutlined,
-} from "@mui/icons-material";
-import Swal from "sweetalert2";
+import { useEffect, useState } from "react";
+import { DescriptionOutlined, DownloadOutlined, EmojiEventsOutlined } from "@mui/icons-material";
+import { apiRequest } from "../../lib/api";
+import { isProductBucketAllowed } from "../../lib/productMode";
 import { notifySuccess } from "../../lib/notify";
-import { PARENT_BORDER, PARENT_PRIMARY, PARENT_PRIMARY_SUBTLE } from "./ParentPortalLayout";
-import { useParentPortal } from "./ParentPortalContext";
 import { PageHeader } from "./components/PageHeader";
 import { StatusChip } from "./components/StatusChip";
+import { useParentPortal } from "./ParentPortalContext";
+import { PARENT_BORDER, PARENT_PRIMARY, PARENT_PRIMARY_SUBTLE } from "./ParentPortalLayout";
 
-type CertType = "Bonafide" | "Transfer Certificate" | "Achievement Certificate";
-type RequestStatus = "Requested" | "Approved" | "Ready";
-
-interface CertRequest {
+interface CertificateRow {
   id: string;
-  type: CertType;
-  requestedOn: string;
-  status: RequestStatus;
+  name: string;
+  serialNumber?: string | null;
+  createdAt: string;
 }
 
-const CERT_CARDS: {
-  type: CertType;
-  description: string;
-  icon: typeof DescriptionOutlined;
-}[] = [
-  {
-    type: "Bonafide",
-    description: "Official school enrolment certificate for bank, visa, or other formal use.",
-    icon: DescriptionOutlined,
-  },
-  {
-    type: "Transfer Certificate",
-    description: "Required when changing schools. Issued after clearance of dues.",
-    icon: SwapHorizOutlined,
-  },
-  {
-    type: "Achievement Certificate",
-    description: "Recognition for academic, sports, or co-curricular excellence.",
-    icon: EmojiEventsOutlined,
-  },
-];
+interface DocumentsResponse {
+  certificates?: CertificateRow[];
+  documents?: Array<{ id: string; name: string; fileUrl: string | null; createdAt: string }>;
+}
 
-const INITIAL_REQUESTS: CertRequest[] = [
-  { id: "cr1", type: "Bonafide", requestedOn: "12 May 2025", status: "Ready" },
-  { id: "cr2", type: "Achievement Certificate", requestedOn: "20 May 2025", status: "Approved" },
-  { id: "cr3", type: "Transfer Certificate", requestedOn: "28 May 2025", status: "Requested" },
-];
-
-const STATUS_TONE: Record<RequestStatus, "orange" | "blue" | "green"> = {
-  Requested: "orange",
-  Approved: "blue",
-  Ready: "green",
-};
+function formatDate(value: string) {
+  return new Date(value).toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
 
 export function ParentCertificatesPage() {
-  const { activeChild } = useParentPortal();
-  const [requests, setRequests] = useState(INITIAL_REQUESTS);
+  const { activeChild, portalChild, accessToken, productMode } = useParentPortal();
+  const showCms = isProductBucketAllowed(productMode, "CMS");
+  const studentId = portalChild?.student.id;
+  const [certificates, setCertificates] = useState<CertificateRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  async function requestCertificate(type: CertType) {
-    const result = await Swal.fire({
-      title: `Request ${type}?`,
-      text: `Submit a request for ${type} for ${activeChild.name}?`,
-      showCancelButton: true,
-      confirmButtonText: "Submit request",
-      confirmButtonColor: PARENT_PRIMARY,
-      cancelButtonColor: "#9CA3AF",
-    });
-    if (!result.isConfirmed) return;
+  useEffect(() => {
+    if (!showCms || !studentId) {
+      setLoading(false);
+      setCertificates([]);
+      return;
+    }
+    setLoading(true);
+    setError("");
+    apiRequest<DocumentsResponse>(`/portal/children/${studentId}/documents`, accessToken)
+      .then((data) => setCertificates(data.certificates ?? []))
+      .catch((cause: unknown) => {
+        setError(cause instanceof Error ? cause.message : "Unable to load certificates");
+      })
+      .finally(() => setLoading(false));
+  }, [accessToken, studentId, showCms]);
 
-    setRequests((prev) => [
-      {
-        id: `cr-${Date.now()}`,
-        type,
-        requestedOn: new Date().toLocaleDateString("en-IN", {
-          day: "2-digit",
-          month: "short",
-          year: "numeric",
-        }),
-        status: "Requested",
-      },
-      ...prev,
-    ]);
-    notifySuccess(`${type} request submitted`);
-  }
-
-  function downloadCert(req: CertRequest) {
-    notifySuccess(`Downloading ${req.type}…`);
+  if (!showCms) {
+    return (
+      <div className="rounded-2xl border border-[#E5E7EB] bg-white px-6 py-12 text-center text-[14px] text-[#6B7280]">
+        Certificates are available when the school has CMS documents enabled.
+      </div>
+    );
   }
 
   return (
-    <div>
+    <div className="flex flex-col gap-5">
       <PageHeader
         title="Certificates"
-        subtitle={`Request and download certificates for ${activeChild.name.split(" ")[0]}`}
+        subtitle={`Issued certificates and documents for ${activeChild.name}.`}
       />
 
-      <div
-        className="mb-6 rounded-[20px] border bg-[#EEF0FD] px-5 py-4 text-[13px] text-[#4B5563]"
-        style={{ borderColor: PARENT_BORDER }}
-      >
-        School-issued certificates and ID cards (after generation) appear in the student/parent portal under{" "}
-        <strong>Documents</strong> with a print link to <code className="text-[12px]">/print/documents/:id</code>.
-      </div>
-
-      <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
-        {CERT_CARDS.map((card) => {
-          const Icon = card.icon;
-          return (
-            <div
-              key={card.type}
-              className="flex flex-col rounded-[20px] border bg-white p-5 shadow-[0_4px_18px_rgba(28,27,60,0.04)]"
-              style={{ borderColor: PARENT_BORDER }}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {[
+          {
+            title: "Bonafide / School docs",
+            description: "Issued school certificates appear in the list below when ready.",
+            icon: DescriptionOutlined,
+          },
+          {
+            title: "Achievement",
+            description: "Recognition certificates generated by the school office.",
+            icon: EmojiEventsOutlined,
+          },
+          {
+            title: "Print / Download",
+            description: "Open a ready certificate to print or save as PDF.",
+            icon: DownloadOutlined,
+          },
+        ].map((card) => (
+          <div
+            key={card.title}
+            className="rounded-[20px] border bg-white p-4 shadow-[0_4px_18px_rgba(28,27,60,0.04)]"
+            style={{ borderColor: PARENT_BORDER }}
+          >
+            <span
+              className="grid size-10 place-items-center rounded-xl"
+              style={{ background: PARENT_PRIMARY_SUBTLE, color: PARENT_PRIMARY }}
             >
-              <div
-                className="mb-3 grid size-12 place-items-center rounded-2xl"
-                style={{ background: PARENT_PRIMARY_SUBTLE, color: PARENT_PRIMARY }}
-              >
-                <Icon sx={{ fontSize: 24 }} />
-              </div>
-              <h2 className="text-[15px] font-bold text-[#1A1A2E]">{card.type}</h2>
-              <p className="mt-1.5 flex-1 text-[13px] leading-relaxed text-[#6B7280]">{card.description}</p>
-              <button
-                type="button"
-                onClick={() => requestCertificate(card.type)}
-                className="mt-4 h-10 rounded-xl text-[13px] font-bold text-white"
-                style={{ background: PARENT_PRIMARY }}
-              >
-                Request
-              </button>
-            </div>
-          );
-        })}
+              <card.icon sx={{ fontSize: 20 }} />
+            </span>
+            <p className="mt-3 text-[14px] font-bold text-[#1A1A2E]">{card.title}</p>
+            <p className="mt-1 text-[12px] text-[#6B7280]">{card.description}</p>
+          </div>
+        ))}
       </div>
 
-      <div
+      <section
         className="overflow-hidden rounded-[20px] border bg-white shadow-[0_4px_18px_rgba(28,27,60,0.04)]"
         style={{ borderColor: PARENT_BORDER }}
       >
         <div className="border-b px-5 py-4" style={{ borderColor: PARENT_BORDER }}>
-          <h2 className="text-[15px] font-bold text-[#1A1A2E]">Past Requests</h2>
+          <h2 className="text-[15px] font-bold text-[#1A1A2E]">Issued certificates</h2>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[560px] text-left">
-            <thead>
-              <tr className="border-b bg-[#F9FAFB] text-[12px] font-bold uppercase tracking-wide text-[#6B7280]" style={{ borderColor: PARENT_BORDER }}>
-                <th className="px-5 py-3">Certificate</th>
-                <th className="px-5 py-3">Requested On</th>
-                <th className="px-5 py-3">Status</th>
-                <th className="px-5 py-3">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {requests.map((req) => (
-                <tr key={req.id} className="border-b last:border-b-0" style={{ borderColor: PARENT_BORDER }}>
-                  <td className="px-5 py-3.5 text-[13.5px] font-semibold text-[#1A1A2E]">{req.type}</td>
-                  <td className="px-5 py-3.5 text-[13px] text-[#6B7280]">{req.requestedOn}</td>
-                  <td className="px-5 py-3.5">
-                    <StatusChip label={req.status} tone={STATUS_TONE[req.status]} />
-                  </td>
-                  <td className="px-5 py-3.5">
-                    {req.status === "Ready" ? (
-                      <button
-                        type="button"
-                        onClick={() => downloadCert(req)}
-                        className="inline-flex items-center gap-1 text-[12.5px] font-semibold hover:underline"
-                        style={{ color: PARENT_PRIMARY }}
-                      >
-                        <DownloadOutlined sx={{ fontSize: 16 }} />
-                        Download
-                      </button>
-                    ) : (
-                      <span className="text-[12.5px] text-[#9CA3AF]">—</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+        {loading ? (
+          <p className="px-5 py-10 text-center text-[13px] text-[#6B7280]">Loading…</p>
+        ) : error ? (
+          <p className="px-5 py-6 text-[13px] text-red-700">{error}</p>
+        ) : certificates.length === 0 ? (
+          <p className="px-5 py-10 text-center text-[13px] text-[#6B7280]">
+            No certificates have been issued yet. Request new ones through the school office.
+          </p>
+        ) : (
+          <ul className="divide-y" style={{ borderColor: PARENT_BORDER }}>
+            {certificates.map((cert) => (
+              <li key={cert.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+                <div>
+                  <p className="text-[14px] font-bold text-[#1A1A2E]">{cert.name}</p>
+                  <p className="text-[12px] text-[#6B7280]">
+                    {cert.serialNumber ? `Serial ${cert.serialNumber} · ` : ""}
+                    Issued {formatDate(cert.createdAt)}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <StatusChip label="Ready" tone="green" />
+                  <a
+                    href={`#/print/documents/${cert.id}`}
+                    className="inline-flex items-center gap-1 rounded-xl px-3 py-1.5 text-[12px] font-bold text-white"
+                    style={{ background: PARENT_PRIMARY }}
+                    onClick={() => notifySuccess("Opening certificate print view")}
+                  >
+                    <DownloadOutlined sx={{ fontSize: 16 }} /> Open
+                  </a>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </div>
   );
 }

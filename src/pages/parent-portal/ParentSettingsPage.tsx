@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PhotoCameraOutlined } from "@mui/icons-material";
 import {
   Accordion,
@@ -10,6 +10,7 @@ import {
   TextField,
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import { useAuth } from "../../auth/AuthContext";
 import { notifyError, notifySuccess } from "../../lib/notify";
 import { PARENT_BORDER, PARENT_PRIMARY, PARENT_PRIMARY_SUBTLE } from "./ParentPortalLayout";
 import { useParentPortal } from "./ParentPortalContext";
@@ -25,13 +26,14 @@ const inputSx = {
 };
 
 export function ParentSettingsPage() {
+  const { user } = useAuth();
   const { parent, children } = useParentPortal();
   const photoRef = useRef<HTMLInputElement>(null);
 
   const [profile, setProfile] = useState({
     name: parent.name,
-    phone: "+91 98765 12345",
-    email: "rahul.sharma@email.com",
+    phone: user?.phone ?? "",
+    email: user?.email ?? "",
     photoName: "",
   });
   const [prefs, setPrefs] = useState({
@@ -43,8 +45,17 @@ export function ParentSettingsPage() {
   const [language, setLanguage] = useState("en");
   const [password, setPassword] = useState({ current: "", next: "", confirm: "" });
 
+  useEffect(() => {
+    setProfile((current) => ({
+      ...current,
+      name: parent.name,
+      phone: user?.phone ?? "",
+      email: user?.email ?? "",
+    }));
+  }, [parent.name, user?.phone, user?.email]);
+
   function saveProfile() {
-    notifySuccess("Parent profile saved");
+    notifySuccess("Profile details are shown from your login account. Contact the school to update them.");
   }
 
   function savePrefs() {

@@ -36,7 +36,7 @@ const portalConfig: Record<PortalKind, {
     panelLabel: "Parents",
     accentClass: "text-sky-400",
     heroClass: "bg-sky-700",
-    redirectTo: "/portal/parent",
+    redirectTo: "/parent/dashboard",
     requiredRole: "PARENT",
     wrongRoleMessage: "This page is for parent accounts only. Students should use the student login.",
     emailPlaceholder: "parent@school.local",
@@ -56,7 +56,7 @@ function PortalLoginPage({ kind }: { kind: PortalKind }) {
   if (isAuthenticated && user) {
     if (isPlatformUser(user.permissions)) return <Navigate to="/admin/dashboard" replace />;
     if (user.roles.includes(config.requiredRole)) return <Navigate to={config.redirectTo} replace />;
-    if (user.roles.includes("PARENT")) return <Navigate to="/portal/parent" replace />;
+    if (user.roles.includes("PARENT")) return <Navigate to="/parent/dashboard" replace />;
     if (user.roles.includes("STUDENT")) return <Navigate to="/portal/student" replace />;
     if (isPortalUser(user.roles)) return <Navigate to={config.redirectTo} replace />;
     return <Navigate to="/dashboard" replace />;

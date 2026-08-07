@@ -85,10 +85,10 @@ export const MOCK_ACTIVITY: ActivityItem[] = [
 ];
 
 export const MOCK_QUICK_LINKS: QuickLink[] = [
-  { id: "ql-1", label: "Download Report Card", icon: "reportCard" },
-  { id: "ql-2", label: "Download Hall Ticket", icon: "hallTicket" },
-  { id: "ql-3", label: "Fee Receipt", icon: "feeReceipt" },
-  { id: "ql-4", label: "Apply Leave", icon: "applyLeave" },
+  { id: "ql-1", label: "Exams & Results", icon: "reportCard", to: "/parent/academics/examination" },
+  { id: "ql-2", label: "Timetable", icon: "hallTicket", to: "/parent/academics/timetable" },
+  { id: "ql-3", label: "Fees & Payments", icon: "feeReceipt", to: "/parent/fees" },
+  { id: "ql-4", label: "Apply Leave", icon: "applyLeave", to: "/parent/attendance-calendar/attendance" },
 ];
 
 /** May 2025 calendar grid (Mon-first), matching the reference design. */

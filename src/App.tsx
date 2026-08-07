@@ -103,6 +103,7 @@ import { ParentCertificatesPage } from "./pages/parent-portal/ParentCertificates
 import { ParentTransportPage } from "./pages/parent-portal/ParentTransportPage";
 import { ParentSettingsPage } from "./pages/parent-portal/ParentSettingsPage";
 import { ParentHelpPage } from "./pages/parent-portal/ParentHelpPage";
+import { ParentNotificationsPage } from "./pages/parent-portal/ParentNotificationsPage";
 import { PARENT_NAV } from "./pages/parent-portal/parentPortalNav";
 import type { ReactElement } from "react";
 
@@ -137,7 +138,7 @@ function parentPortalRoutes() {
           element={PARENT_PAGE_BY_PATH[leaf.to] ?? <ParentComingSoonPage />}
         />
       ))}
-      <Route path="notifications" element={<ParentComingSoonPage />} />
+      <Route path="notifications" element={<ParentNotificationsPage />} />
       <Route path="activity" element={<ParentComingSoonPage />} />
     </>
   );

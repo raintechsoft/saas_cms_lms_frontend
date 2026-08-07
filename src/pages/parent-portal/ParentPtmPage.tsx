@@ -148,6 +148,9 @@ export function ParentPtmPage() {
         title="PTM Scheduling"
         subtitle={`Book parent-teacher meetings for ${activeChild.name.split(" ")[0]}`}
       />
+      <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-800">
+        PTM booking is not connected to the backend yet. This screen is a preview only.
+      </p>
 
       <div className="mb-6">
         <h2 className="mb-3 text-[15px] font-bold text-[#1A1A2E]">Available Slots</h2>

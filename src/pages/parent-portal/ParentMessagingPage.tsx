@@ -95,6 +95,7 @@ function lastPreview(conv: Conversation) {
 
 export function ParentMessagingPage() {
   const { activeChild } = useParentPortal();
+  // Teacher messaging API is not available yet — UI remains preview-only.
   const [conversations, setConversations] = useState(INITIAL);
   const [activeId, setActiveId] = useState(INITIAL[0].id);
   const [draft, setDraft] = useState("");
@@ -133,6 +134,9 @@ export function ParentMessagingPage() {
         title="Messaging"
         subtitle={`Chat with ${activeChild.name.split(" ")[0]}'s teachers`}
       />
+      <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-800">
+        Teacher messaging is not connected to the backend yet. This screen is a preview only.
+      </p>
 
       <div
         className="grid min-h-[560px] grid-cols-1 overflow-hidden rounded-[20px] border bg-white shadow-[0_4px_18px_rgba(28,27,60,0.04)] lg:grid-cols-[320px_1fr]"

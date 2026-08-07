@@ -172,6 +172,9 @@ export function ParentTestSeriesPage() {
         title="Test Series & Performance"
         subtitle={`Mock tests and analysis for ${firstName}`}
       />
+      <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-800">
+        Test series API is not available yet. This screen is a preview only.
+      </p>
 
       <div className="mb-5 flex flex-col gap-3">
         {TESTS.map((test) => {

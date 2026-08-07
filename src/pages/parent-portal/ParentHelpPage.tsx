@@ -161,6 +161,9 @@ export function ParentHelpPage() {
         title="Help / Support"
         subtitle={`FAQs and support for ${activeChild.name.split(" ")[0]}'s parent account`}
       />
+      <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-800">
+        Support tickets are local preview only until a helpdesk API is added. FAQs below are static.
+      </p>
 
       <div className="mb-6">
         <h2 className="mb-3 text-[15px] font-bold text-[#1A1A2E]">Frequently Asked Questions</h2>

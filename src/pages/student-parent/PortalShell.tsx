@@ -216,7 +216,7 @@ export function PortalShell() {
   if (!isPortalUser(user.roles)) return <Navigate to="/dashboard" replace />;
 
   const isParentUser = user.roles.includes("PARENT");
-  if (isParentUser && !isParentPath) return <Navigate to="/portal/parent" replace />;
+  if (isParentUser && !isParentPath) return <Navigate to="/parent/dashboard" replace />;
   if (!isParentUser && isParentPath) return <Navigate to="/portal/student" replace />;
 
   const child = overview?.children[activeChild] ?? null;
