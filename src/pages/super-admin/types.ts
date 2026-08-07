@@ -59,6 +59,8 @@ export const CMS_MODULE_OPTIONS: Array<{ key: string; label: string }> = [
   { key: "hr", label: "HR & Payroll" },
   { key: "documents", label: "Certificates & ID" },
   { key: "erp", label: "ERP Control Center" },
+  { key: "transport", label: "Transport" },
+  { key: "hostel", label: "Hostel" },
   { key: "reports", label: "Reports" },
 ];
 
