@@ -20,6 +20,7 @@ import { HrPage } from "./pages/campus/HrPage";
 import { DocumentsPage } from "./pages/campus/DocumentsPage";
 import { TransportPage } from "./pages/campus/TransportPage";
 import { HostelPage } from "./pages/campus/HostelPage";
+import { LibraryPage } from "./pages/campus/LibraryPage";
 import { ReportsPage } from "./pages/campus/ReportsPage";
 import { DocumentPrintPage } from "./pages/campus/DocumentPrintPage";
 import { FeeReceiptPrintPage } from "./pages/campus/FeeReceiptPrintPage";
@@ -260,6 +261,7 @@ export function App() {
         <Route path="/hostel/rooms" element={<RequireProductBucket bucket="CMS"><HostelPage /></RequireProductBucket>} />
         <Route path="/hostel/assign" element={<RequireProductBucket bucket="CMS"><HostelPage /></RequireProductBucket>} />
         <Route path="/hostel/history" element={<RequireProductBucket bucket="CMS"><HostelPage /></RequireProductBucket>} />
+        <Route path="/library" element={<RequireProductBucket bucket="CMS"><LibraryPage /></RequireProductBucket>} />
         <Route path="/erp" element={<RequireProductBucket bucket="CMS"><ErpSettingsPage /></RequireProductBucket>} />
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/users" element={<UsersPage />} />

@@ -22,7 +22,7 @@ interface ErpSetup {
 }
 type Tab = "integrations" | "access" | "fields" | "calendar" | "documents" | "backups";
 const categories = ["NOTIFICATION", "SMS", "EMAIL", "WEBSITE", "LIVE_CLASS", "PAYMENT"];
-const moduleKeys = ["dashboard", "students", "academics", "timetable", "attendance", "fees", "examinations", "homework", "hr", "documents", "reports"];
+const moduleKeys = ["dashboard", "students", "academics", "timetable", "attendance", "fees", "examinations", "homework", "hr", "documents", "transport", "hostel", "library", "reports"];
 
 export function ErpSettingsPage() {
   const { accessToken } = useAuth();

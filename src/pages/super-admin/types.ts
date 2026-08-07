@@ -61,6 +61,7 @@ export const CMS_MODULE_OPTIONS: Array<{ key: string; label: string }> = [
   { key: "erp", label: "ERP Control Center" },
   { key: "transport", label: "Transport" },
   { key: "hostel", label: "Hostel" },
+  { key: "library", label: "Library" },
   { key: "reports", label: "Reports" },
 ];
 
