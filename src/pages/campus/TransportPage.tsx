@@ -1,38 +1,37 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import {
   AddOutlined,
-  DirectionsBusOutlined,
-  HistoryOutlined,
-  LocalShippingOutlined,
-  PeopleOutlined,
-  PlaceOutlined,
-  RouteOutlined,
+  AssessmentOutlined,
   DeleteOutline,
+  DirectionsBusOutlined,
   EditOutlined,
-  PersonPinCircleOutlined,
+  LocalShippingOutlined,
+  MoreVertOutlined,
+  PeopleOutlined,
+  PersonOutlined,
+  RouteOutlined,
+  VisibilityOutlined,
 } from "@mui/icons-material";
 import { useAuth } from "../../auth/AuthContext";
 import {
   CmsFooter,
-  CmsKpiCard,
-  CmsKpiGrid,
   CmsPage,
   CmsPageHeader,
   CmsScrollBody,
   CmsSectionCard,
 } from "../../components/cms/CmsLayout";
-import { CmsIconTabs, type CmsIconTabItem } from "../../components/cms/CmsIconTabs";
-import { ListPagination, paginateItems } from "../../components/ListPagination";
 import { apiRequest } from "../../lib/api";
 import { confirmDelete } from "../../lib/confirm";
 import { notifyError, notifySuccess } from "../../lib/notify";
 
-type Tab = "routes" | "roster" | "assign" | "history";
+type Tab = "routes" | "vehicles" | "drivers" | "assign" | "reports";
 
 interface TransportStop {
   name: string;
   sequence?: number;
   fare?: number | null;
+  pickupTime?: string | null;
+  dropTime?: string | null;
 }
 
 interface TransportRoute {
@@ -58,55 +57,82 @@ interface StudentOption {
   transportRoute: string | null;
   transportRouteId: string | null;
   transportStopName: string | null;
+  enrollments?: Array<{
+    status?: string;
+    classSection?: {
+      academicClass?: { name?: string };
+      section?: { name?: string };
+    };
+  }>;
 }
 
-interface RouteStudent {
-  id: string;
-  admissionNumber: string;
-  firstName: string;
-  lastName: string | null;
-  transportStopName: string | null;
+interface RouteMeta {
+  vehicleType?: "Bus" | "Van";
+  capacity?: number | null;
+  vehicleStatus?: "ACTIVE" | "MAINTENANCE" | "INACTIVE";
+  insuranceExpiry?: string | null;
+  licenseNumber?: string | null;
+  licenseExpiry?: string | null;
+  driverStatus?: "ACTIVE" | "ON_LEAVE";
 }
 
-interface AssignmentLog {
-  id: string;
-  action: string;
-  stopName: string | null;
-  note: string | null;
-  createdAt: string;
-  student: {
-    id: string;
-    admissionNumber: string;
-    firstName: string;
-    lastName: string | null;
-  };
-  transportRoute: { id: string; name: string } | null;
-  assignedBy: { id: string; firstName: string; lastName: string | null } | null;
-}
-
-const TABS: Array<CmsIconTabItem<Tab>> = [
-  { key: "routes", label: "Routes & stops", shortLabel: "Routes", icon: RouteOutlined, tone: "sky" },
-  { key: "roster", label: "Route roster", shortLabel: "Roster", icon: PeopleOutlined, tone: "emerald" },
-  { key: "assign", label: "Assign students", shortLabel: "Assign", icon: DirectionsBusOutlined, tone: "indigo" },
-  { key: "history", label: "History", shortLabel: "History", icon: HistoryOutlined, tone: "amber" },
+const TABS: Array<{ key: Tab; label: string }> = [
+  { key: "routes", label: "Routes" },
+  { key: "vehicles", label: "Vehicles" },
+  { key: "drivers", label: "Drivers" },
+  { key: "assign", label: "Student Assignment" },
+  { key: "reports", label: "Reports" },
 ];
 
-const PAGE_SIZE = 8;
+const META_PREFIX = "__transport_meta__:";
 
 function studentLabel(student: { firstName: string; lastName: string | null }) {
   return `${student.firstName} ${student.lastName ?? ""}`.trim();
 }
 
-function emptyStop(): TransportStop {
-  return { name: "", sequence: 1, fare: null };
+function classSectionLabel(student: StudentOption) {
+  const enrollment = student.enrollments?.find((row) => row.status === "ACTIVE") ?? student.enrollments?.[0];
+  const cls = enrollment?.classSection?.academicClass?.name;
+  const sec = enrollment?.classSection?.section?.name;
+  if (cls && sec) return `${cls} / ${sec}`;
+  if (cls) return cls;
+  if (sec) return sec;
+  return "—";
 }
 
-function actionPill(action: string) {
-  const upper = action.toUpperCase();
-  if (upper === "ASSIGNED") return "nx-pill nx-pill-success";
-  if (upper === "CLEARED") return "nx-pill nx-pill-neutral";
-  if (upper === "UPDATED") return "nx-pill nx-pill-indigo";
-  return "nx-pill nx-pill-warning";
+function emptyStop(): TransportStop {
+  return { name: "", sequence: 1, fare: null, pickupTime: "", dropTime: "" };
+}
+
+function parseMeta(notes: string | null | undefined): RouteMeta {
+  if (!notes) return {};
+  const line = notes.split("\n").find((row) => row.startsWith(META_PREFIX));
+  if (!line) return {};
+  try {
+    return JSON.parse(line.slice(META_PREFIX.length)) as RouteMeta;
+  } catch {
+    return {};
+  }
+}
+
+function writeMeta(notes: string | null | undefined, meta: RouteMeta): string {
+  const cleaned = (notes ?? "")
+    .split("\n")
+    .filter((row) => !row.startsWith(META_PREFIX))
+    .join("\n")
+    .trim();
+  const encoded = `${META_PREFIX}${JSON.stringify(meta)}`;
+  return cleaned ? `${cleaned}\n${encoded}` : encoded;
+}
+
+function statusPill(kind: "green" | "amber" | "gray" | "red", label: string) {
+  const map = {
+    green: "nx-pill nx-pill-success",
+    amber: "nx-pill nx-pill-warning",
+    gray: "nx-pill nx-pill-neutral",
+    red: "nx-pill nx-pill-danger",
+  } as const;
+  return <span className={map[kind]}>{label}</span>;
 }
 
 function EmptyState({
@@ -119,33 +145,40 @@ function EmptyState({
   hint?: string;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-2 px-6 py-14 text-center">
-      <div className="flex size-12 items-center justify-center rounded-2xl bg-sky-50 text-sky-600 ring-1 ring-sky-100">
+    <div className="flex flex-col items-center justify-center gap-nx-1 px-nx-3 py-nx-6 text-center">
+      <div className="flex size-12 items-center justify-center rounded-[12px] bg-primary/10 text-primary">
         {icon}
       </div>
-      <p className="text-sm font-semibold text-slate-800">{title}</p>
-      {hint ? <p className="max-w-sm text-xs text-slate-500">{hint}</p> : null}
+      <p className="text-sm font-semibold text-ink">{title}</p>
+      {hint ? <p className="max-w-sm text-xs text-ink-muted">{hint}</p> : null}
     </div>
   );
 }
 
-function SectionTitle({
+function CardShell({
   title,
   subtitle,
   action,
+  children,
 }: {
-  title: string;
+  title?: string;
   subtitle?: string;
   action?: ReactNode;
+  children: ReactNode;
 }) {
   return (
-    <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-      <div>
-        <h2 className="text-sm font-bold tracking-tight text-slate-900">{title}</h2>
-        {subtitle ? <p className="mt-0.5 text-xs text-slate-500">{subtitle}</p> : null}
-      </div>
-      {action}
-    </div>
+    <CmsSectionCard className="overflow-hidden !rounded-[12px] !border-border !bg-white !p-0 shadow-none">
+      {title ? (
+        <div className="flex flex-wrap items-start justify-between gap-nx-2 border-b border-border px-nx-2 py-nx-2">
+          <div>
+            <h2 className="text-sm font-bold text-ink">{title}</h2>
+            {subtitle ? <p className="mt-0.5 text-xs text-ink-muted">{subtitle}</p> : null}
+          </div>
+          {action}
+        </div>
+      ) : null}
+      <div className={title ? "" : "p-nx-2"}>{children}</div>
+    </CmsSectionCard>
   );
 }
 
@@ -154,83 +187,145 @@ export function TransportPage() {
   const [tab, setTab] = useState<Tab>("routes");
   const [routes, setRoutes] = useState<TransportRoute[]>([]);
   const [students, setStudents] = useState<StudentOption[]>([]);
-  const [logs, setLogs] = useState<AssignmentLog[]>([]);
   const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(1);
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [showForm, setShowForm] = useState(false);
-  const [name, setName] = useState("");
-  const [code, setCode] = useState("");
+
+  const [showRouteForm, setShowRouteForm] = useState(false);
+  const [editingRouteId, setEditingRouteId] = useState<string | null>(null);
+  const [routeName, setRouteName] = useState("");
+  const [routeVehicle, setRouteVehicle] = useState("");
+  const [routeDriver, setRouteDriver] = useState("");
+  const [stops, setStops] = useState<TransportStop[]>([emptyStop()]);
+  const [viewStopsId, setViewStopsId] = useState<string | null>(null);
+
+  const [showVehicleForm, setShowVehicleForm] = useState(false);
+  const [editingVehicleRouteId, setEditingVehicleRouteId] = useState<string | null>(null);
   const [vehicleNumber, setVehicleNumber] = useState("");
+  const [vehicleType, setVehicleType] = useState<"Bus" | "Van">("Bus");
+  const [vehicleCapacity, setVehicleCapacity] = useState("");
+  const [vehicleRouteId, setVehicleRouteId] = useState("");
+  const [vehicleStatus, setVehicleStatus] = useState<"ACTIVE" | "MAINTENANCE" | "INACTIVE">("ACTIVE");
+  const [insuranceExpiry, setInsuranceExpiry] = useState("");
+  const [registrationName, setRegistrationName] = useState("");
+
+  const [showDriverForm, setShowDriverForm] = useState(false);
+  const [editingDriverRouteId, setEditingDriverRouteId] = useState<string | null>(null);
   const [driverName, setDriverName] = useState("");
   const [driverPhone, setDriverPhone] = useState("");
-  const [fareAmount, setFareAmount] = useState("");
-  const [isActive, setIsActive] = useState(true);
-  const [notes, setNotes] = useState("");
-  const [stops, setStops] = useState<TransportStop[]>([emptyStop()]);
+  const [licenseNumber, setLicenseNumber] = useState("");
+  const [licenseExpiry, setLicenseExpiry] = useState("");
+  const [driverStatus, setDriverStatus] = useState<"ACTIVE" | "ON_LEAVE">("ACTIVE");
+  const [driverVehicleRouteId, setDriverVehicleRouteId] = useState("");
+  const [driverPhotoName, setDriverPhotoName] = useState("");
+  const [driverDocName, setDriverDocName] = useState("");
+
+  const [showAssignForm, setShowAssignForm] = useState(false);
+  const [filterClass, setFilterClass] = useState("");
+  const [filterSection, setFilterSection] = useState("");
+  const [filterRoute, setFilterRoute] = useState("");
+  const [filterSearch, setFilterSearch] = useState("");
   const [assignStudentId, setAssignStudentId] = useState("");
   const [assignRouteId, setAssignRouteId] = useState("");
   const [assignStopName, setAssignStopName] = useState("");
-  const [assignNote, setAssignNote] = useState("");
-  const [rosterRouteId, setRosterRouteId] = useState("");
-  const [rosterStudents, setRosterStudents] = useState<RouteStudent[]>([]);
-  const [rosterLoading, setRosterLoading] = useState(false);
 
   const canManage = user?.permissions.includes("transport.manage") ?? false;
-  const pageRows = useMemo(() => paginateItems(routes, page, PAGE_SIZE), [routes, page]);
-  const activeRoutes = useMemo(() => routes.filter((route) => route.isActive), [routes]);
+
+  const vehicleOptions = useMemo(() => {
+    const seen = new Set<string>();
+    return routes
+      .filter((route) => route.vehicleNumber)
+      .map((route) => route.vehicleNumber!.trim())
+      .filter((value) => {
+        const key = value.toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+  }, [routes]);
+
+  const driverOptions = useMemo(() => {
+    const seen = new Set<string>();
+    return routes
+      .filter((route) => route.driverName)
+      .map((route) => route.driverName!.trim())
+      .filter((value) => {
+        const key = value.toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+  }, [routes]);
+
+  const classOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const student of students) {
+      const enrollment = student.enrollments?.find((row) => row.status === "ACTIVE") ?? student.enrollments?.[0];
+      const name = enrollment?.classSection?.academicClass?.name;
+      if (name) set.add(name);
+    }
+    return [...set].sort();
+  }, [students]);
+
+  const sectionOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const student of students) {
+      const enrollment = student.enrollments?.find((row) => row.status === "ACTIVE") ?? student.enrollments?.[0];
+      const cls = enrollment?.classSection?.academicClass?.name;
+      const sec = enrollment?.classSection?.section?.name;
+      if (!sec) continue;
+      if (filterClass && cls !== filterClass) continue;
+      set.add(sec);
+    }
+    return [...set].sort();
+  }, [students, filterClass]);
+
+  const assignedStudents = useMemo(() => {
+    return students.filter((student) => {
+      if (!student.transportRouteId && !student.transportOptIn) return false;
+      if (filterRoute && student.transportRouteId !== filterRoute) return false;
+      if (filterSearch) {
+        const q = filterSearch.toLowerCase();
+        const hay = `${studentLabel(student)} ${student.admissionNumber}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      const label = classSectionLabel(student);
+      if (filterClass && !label.startsWith(filterClass)) return false;
+      if (filterSection && !label.includes(`/ ${filterSection}`) && label !== filterSection) return false;
+      return Boolean(student.transportRouteId);
+    });
+  }, [students, filterRoute, filterSearch, filterClass, filterSection]);
+
   const selectedAssignRoute = useMemo(
-    () => activeRoutes.find((route) => route.id === assignRouteId) ?? null,
-    [activeRoutes, assignRouteId],
+    () => routes.find((route) => route.id === assignRouteId) ?? null,
+    [routes, assignRouteId],
   );
-  const totalStudents = useMemo(
-    () => routes.reduce((sum, route) => sum + route._count.students, 0),
-    [routes],
-  );
-  const totalStops = useMemo(
-    () => routes.reduce((sum, route) => sum + (route.stops?.length ?? 0), 0),
-    [routes],
-  );
-
-  useEffect(() => {
-    const maxPage = Math.max(1, Math.ceil(routes.length / PAGE_SIZE));
-    if (page > maxPage) setPage(maxPage);
-  }, [routes.length, page]);
-
-  function resetForm() {
-    setEditingId(null);
-    setName("");
-    setCode("");
-    setVehicleNumber("");
-    setDriverName("");
-    setDriverPhone("");
-    setFareAmount("");
-    setIsActive(true);
-    setNotes("");
-    setStops([emptyStop()]);
-    setShowForm(false);
-  }
 
   async function load() {
+    if (!accessToken) return;
+    setLoading(true);
     try {
-      const [routeRows, studentList, logRows] = await Promise.all([
-        apiRequest<TransportRoute[]>("/transport/routes", accessToken),
-        apiRequest<{ items: StudentOption[] }>("/students?limit=100&status=ACTIVE", accessToken),
-        apiRequest<AssignmentLog[]>("/transport/logs?take=100", accessToken),
-      ]);
+      const routeRows = await apiRequest<TransportRoute[]>("/transport/routes", accessToken);
       setRoutes(
         routeRows.map((route) => ({
           ...route,
           stops: Array.isArray(route.stops) ? route.stops : [],
         })),
       );
-      setStudents(studentList.items);
-      setLogs(logRows);
-      setPage(1);
-      if (!rosterRouteId && routeRows[0]) setRosterRouteId(routeRows[0].id);
     } catch (cause) {
-      notifyError(cause instanceof Error ? cause.message : "Unable to load transport data");
+      notifyError(cause instanceof Error ? cause.message : "Unable to load transport routes");
+      setRoutes([]);
+    }
+
+    try {
+      // Backend students listQuery max limit is 100
+      const studentList = await apiRequest<{ items: StudentOption[] }>(
+        "/students?limit=100&status=ACTIVE&page=1",
+        accessToken,
+      );
+      setStudents(studentList.items ?? []);
+    } catch (cause) {
+      notifyError(cause instanceof Error ? cause.message : "Unable to load students");
+      setStudents([]);
     } finally {
       setLoading(false);
     }
@@ -240,73 +335,46 @@ export function TransportPage() {
     void load();
   }, [accessToken]);
 
-  useEffect(() => {
-    if (!rosterRouteId) {
-      setRosterStudents([]);
-      return;
-    }
-    let cancelled = false;
-    setRosterLoading(true);
-    void apiRequest<{ students: RouteStudent[] }>(
-      `/transport/routes/${rosterRouteId}/students`,
-      accessToken,
-    )
-      .then((data) => {
-        if (!cancelled) setRosterStudents(data.students);
-      })
-      .catch((cause) => {
-        if (!cancelled) {
-          notifyError(cause instanceof Error ? cause.message : "Unable to load roster");
-          setRosterStudents([]);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setRosterLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [accessToken, rosterRouteId]);
+  function resetRouteForm() {
+    setEditingRouteId(null);
+    setRouteName("");
+    setRouteVehicle("");
+    setRouteDriver("");
+    setStops([emptyStop()]);
+    setShowRouteForm(false);
+  }
 
-  function startEdit(route: TransportRoute) {
-    setEditingId(route.id);
-    setName(route.name);
-    setCode(route.code ?? "");
-    setVehicleNumber(route.vehicleNumber ?? "");
-    setDriverName(route.driverName ?? "");
-    setDriverPhone(route.driverPhone ?? "");
-    setFareAmount(route.fareAmount ?? "");
-    setIsActive(route.isActive);
-    setNotes(route.notes ?? "");
-    setStops(route.stops.length ? route.stops.map((s) => ({ ...s })) : [emptyStop()]);
-    setShowForm(true);
+  function startEditRoute(route: TransportRoute) {
+    setEditingRouteId(route.id);
+    setRouteName(route.name);
+    setRouteVehicle(route.vehicleNumber ?? "");
+    setRouteDriver(route.driverName ?? "");
+    setStops(route.stops.length ? route.stops.map((stop) => ({ ...stop })) : [emptyStop()]);
+    setShowRouteForm(true);
+    setTab("routes");
   }
 
   async function saveRoute(event: FormEvent) {
     event.preventDefault();
     if (!canManage) return;
     setSubmitting(true);
-    const cleanedStops = stops
-      .map((stop, index) => ({
-        name: stop.name.trim(),
-        sequence: stop.sequence ?? index + 1,
-        fare: stop.fare == null ? null : Number(stop.fare),
-      }))
-      .filter((stop) => stop.name);
-    const payload = {
-      name,
-      code: code || null,
-      vehicleNumber: vehicleNumber || null,
-      driverName: driverName || null,
-      driverPhone: driverPhone || null,
-      fareAmount: fareAmount ? Number(fareAmount) : null,
-      isActive,
-      notes: notes || null,
-      stops: cleanedStops,
-    };
     try {
-      if (editingId) {
-        await apiRequest(`/transport/routes/${editingId}`, accessToken, {
+      const payload = {
+        name: routeName.trim(),
+        vehicleNumber: routeVehicle.trim() || null,
+        driverName: routeDriver.trim() || null,
+        stops: stops
+          .filter((stop) => stop.name.trim())
+          .map((stop, index) => ({
+            name: stop.name.trim(),
+            sequence: index + 1,
+            pickupTime: stop.pickupTime || null,
+            dropTime: stop.dropTime || null,
+            fare: stop.fare ?? null,
+          })),
+      };
+      if (editingRouteId) {
+        await apiRequest(`/transport/routes/${editingRouteId}`, accessToken, {
           method: "PUT",
           body: JSON.stringify(payload),
         });
@@ -318,7 +386,7 @@ export function TransportPage() {
         });
         notifySuccess("Route created");
       }
-      resetForm();
+      resetRouteForm();
       await load();
     } catch (cause) {
       notifyError(cause instanceof Error ? cause.message : "Unable to save route");
@@ -327,17 +395,15 @@ export function TransportPage() {
     }
   }
 
-  async function remove(id: string) {
+  async function removeRoute(id: string) {
     if (!canManage) return;
     const ok = await confirmDelete({
-      title: "Delete route?",
-      text: "Students on this route will be unassigned.",
+      text: "Delete this route? Students will be unassigned.",
+      confirmText: "Yes, delete route",
     });
     if (!ok) return;
     try {
       await apiRequest(`/transport/routes/${id}`, accessToken, { method: "DELETE" });
-      if (editingId === id) resetForm();
-      if (rosterRouteId === id) setRosterRouteId("");
       notifySuccess("Route deleted");
       await load();
     } catch (cause) {
@@ -345,7 +411,134 @@ export function TransportPage() {
     }
   }
 
-  async function assignStudent(event: FormEvent) {
+  function resetVehicleForm() {
+    setEditingVehicleRouteId(null);
+    setVehicleNumber("");
+    setVehicleType("Bus");
+    setVehicleCapacity("");
+    setVehicleRouteId("");
+    setVehicleStatus("ACTIVE");
+    setInsuranceExpiry("");
+    setRegistrationName("");
+    setShowVehicleForm(false);
+  }
+
+  function startEditVehicle(route: TransportRoute) {
+    const meta = parseMeta(route.notes);
+    setEditingVehicleRouteId(route.id);
+    setVehicleNumber(route.vehicleNumber ?? "");
+    setVehicleType(meta.vehicleType ?? "Bus");
+    setVehicleCapacity(meta.capacity != null ? String(meta.capacity) : "");
+    setVehicleRouteId(route.id);
+    setVehicleStatus(meta.vehicleStatus ?? (route.isActive ? "ACTIVE" : "INACTIVE"));
+    setInsuranceExpiry(meta.insuranceExpiry ?? "");
+    setRegistrationName("");
+    setShowVehicleForm(true);
+    setTab("vehicles");
+  }
+
+  async function saveVehicle(event: FormEvent) {
+    event.preventDefault();
+    if (!canManage) return;
+    const targetId = editingVehicleRouteId || vehicleRouteId;
+    if (!targetId) {
+      notifyError("Select a route to assign this vehicle");
+      return;
+    }
+    const route = routes.find((row) => row.id === targetId);
+    if (!route) return;
+    setSubmitting(true);
+    try {
+      const meta: RouteMeta = {
+        ...parseMeta(route.notes),
+        vehicleType,
+        capacity: vehicleCapacity ? Number(vehicleCapacity) : null,
+        vehicleStatus,
+        insuranceExpiry: insuranceExpiry || null,
+      };
+      await apiRequest(`/transport/routes/${targetId}`, accessToken, {
+        method: "PUT",
+        body: JSON.stringify({
+          name: route.name,
+          vehicleNumber: vehicleNumber.trim() || null,
+          isActive: vehicleStatus !== "INACTIVE",
+          notes: writeMeta(route.notes, meta),
+        }),
+      });
+      notifySuccess(editingVehicleRouteId ? "Vehicle updated" : "Vehicle saved");
+      resetVehicleForm();
+      await load();
+    } catch (cause) {
+      notifyError(cause instanceof Error ? cause.message : "Unable to save vehicle");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function resetDriverForm() {
+    setEditingDriverRouteId(null);
+    setDriverName("");
+    setDriverPhone("");
+    setLicenseNumber("");
+    setLicenseExpiry("");
+    setDriverStatus("ACTIVE");
+    setDriverVehicleRouteId("");
+    setDriverPhotoName("");
+    setDriverDocName("");
+    setShowDriverForm(false);
+  }
+
+  function startEditDriver(route: TransportRoute) {
+    const meta = parseMeta(route.notes);
+    setEditingDriverRouteId(route.id);
+    setDriverName(route.driverName ?? "");
+    setDriverPhone(route.driverPhone ?? "");
+    setLicenseNumber(meta.licenseNumber ?? "");
+    setLicenseExpiry(meta.licenseExpiry ?? "");
+    setDriverStatus(meta.driverStatus ?? "ACTIVE");
+    setDriverVehicleRouteId(route.id);
+    setShowDriverForm(true);
+    setTab("drivers");
+  }
+
+  async function saveDriver(event: FormEvent) {
+    event.preventDefault();
+    if (!canManage) return;
+    const targetId = editingDriverRouteId || driverVehicleRouteId;
+    if (!targetId) {
+      notifyError("Select an assigned vehicle/route");
+      return;
+    }
+    const route = routes.find((row) => row.id === targetId);
+    if (!route) return;
+    setSubmitting(true);
+    try {
+      const meta: RouteMeta = {
+        ...parseMeta(route.notes),
+        licenseNumber: licenseNumber || null,
+        licenseExpiry: licenseExpiry || null,
+        driverStatus,
+      };
+      await apiRequest(`/transport/routes/${targetId}`, accessToken, {
+        method: "PUT",
+        body: JSON.stringify({
+          name: route.name,
+          driverName: driverName.trim() || null,
+          driverPhone: driverPhone.trim() || null,
+          notes: writeMeta(route.notes, meta),
+        }),
+      });
+      notifySuccess(editingDriverRouteId ? "Driver updated" : "Driver saved");
+      resetDriverForm();
+      await load();
+    } catch (cause) {
+      notifyError(cause instanceof Error ? cause.message : "Unable to save driver");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function saveAssignment(event: FormEvent) {
     event.preventDefault();
     if (!canManage || !assignStudentId) return;
     setSubmitting(true);
@@ -355,23 +548,15 @@ export function TransportPage() {
         body: JSON.stringify({
           studentId: assignStudentId,
           routeId: assignRouteId || null,
-          stopName: assignRouteId ? assignStopName || null : null,
-          note: assignNote || null,
+          stopName: assignStopName || null,
         }),
       });
-      notifySuccess(assignRouteId ? "Student assigned to route" : "Transport assignment cleared");
+      notifySuccess(assignRouteId ? "Student assigned" : "Assignment cleared");
+      setShowAssignForm(false);
       setAssignStudentId("");
       setAssignRouteId("");
       setAssignStopName("");
-      setAssignNote("");
       await load();
-      if (assignRouteId && rosterRouteId === assignRouteId) {
-        const data = await apiRequest<{ students: RouteStudent[] }>(
-          `/transport/routes/${assignRouteId}/students`,
-          accessToken,
-        );
-        setRosterStudents(data.students);
-      }
     } catch (cause) {
       notifyError(cause instanceof Error ? cause.message : "Unable to assign student");
     } finally {
@@ -379,153 +564,160 @@ export function TransportPage() {
     }
   }
 
-  const rosterRoute = routes.find((r) => r.id === rosterRouteId) ?? null;
+  async function clearAssignment(studentId: string) {
+    if (!canManage) return;
+    const ok = await confirmDelete({
+      text: "Remove this student from transport?",
+      confirmText: "Yes, remove",
+    });
+    if (!ok) return;
+    try {
+      await apiRequest("/transport/assign", accessToken, {
+        method: "POST",
+        body: JSON.stringify({ studentId, routeId: null, stopName: null }),
+      });
+      notifySuccess("Assignment removed");
+      await load();
+    } catch (cause) {
+      notifyError(cause instanceof Error ? cause.message : "Unable to remove assignment");
+    }
+  }
+
+  function generateReport() {
+    const rows = [
+      ["Student Name", "Admission No", "Class/Section", "Route", "Stop Point"],
+      ...students
+        .filter((student) => student.transportRouteId)
+        .map((student) => [
+          studentLabel(student),
+          student.admissionNumber,
+          classSectionLabel(student),
+          student.transportRoute ?? "",
+          student.transportStopName ?? "",
+        ]),
+    ];
+    const csv = rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "student-transport-report.csv";
+    anchor.click();
+    URL.revokeObjectURL(url);
+    notifySuccess("Student Transport Report generated");
+  }
+
+  const primaryAction =
+    canManage && tab === "routes" ? (
+      <button
+        type="button"
+        className="nx-btn-primary"
+        onClick={() => {
+          if (showRouteForm && !editingRouteId) resetRouteForm();
+          else {
+            resetRouteForm();
+            setShowRouteForm(true);
+          }
+        }}
+      >
+        <AddOutlined sx={{ fontSize: 16 }} />
+        {showRouteForm && !editingRouteId ? "Close form" : "+ Add route"}
+      </button>
+    ) : canManage && tab === "vehicles" ? (
+      <button
+        type="button"
+        className="nx-btn-primary"
+        onClick={() => {
+          if (showVehicleForm && !editingVehicleRouteId) resetVehicleForm();
+          else {
+            resetVehicleForm();
+            setShowVehicleForm(true);
+          }
+        }}
+      >
+        <AddOutlined sx={{ fontSize: 16 }} />
+        {showVehicleForm && !editingVehicleRouteId ? "Close form" : "+ Add vehicle"}
+      </button>
+    ) : canManage && tab === "drivers" ? (
+      <button
+        type="button"
+        className="nx-btn-primary"
+        onClick={() => {
+          if (showDriverForm && !editingDriverRouteId) resetDriverForm();
+          else {
+            resetDriverForm();
+            setShowDriverForm(true);
+          }
+        }}
+      >
+        <AddOutlined sx={{ fontSize: 16 }} />
+        {showDriverForm && !editingDriverRouteId ? "Close form" : "+ Add driver"}
+      </button>
+    ) : canManage && tab === "assign" ? (
+      <button
+        type="button"
+        className="nx-btn-primary"
+        onClick={() => setShowAssignForm((open) => !open)}
+      >
+        <AddOutlined sx={{ fontSize: 16 }} />
+        {showAssignForm ? "Close form" : "+ Assign student"}
+      </button>
+    ) : null;
 
   return (
     <CmsPage>
       <CmsPageHeader
-        title="Transport"
-        description="Manage bus routes, pickup stops, and student assignments."
-        actions={
-          canManage && tab === "routes" ? (
-            <button
-              type="button"
-              className="nx-btn-primary"
-              onClick={() => {
-                if (showForm && !editingId) resetForm();
-                else {
-                  setEditingId(null);
-                  setShowForm(true);
-                }
-              }}
-            >
-              <AddOutlined sx={{ fontSize: 16 }} />
-              {showForm && !editingId ? "Close form" : "Add route"}
-            </button>
-          ) : null
-        }
+        title="Transportation"
+        description="Manage routes, vehicles, drivers, and student transport assignments."
+        actions={primaryAction}
       />
 
-      <CmsKpiGrid>
-        <CmsKpiCard
-          icon={<RouteOutlined sx={{ fontSize: 20 }} />}
-          label="Active routes"
-          value={activeRoutes.length}
-          tint="#0284c7"
-        />
-        <CmsKpiCard
-          icon={<PeopleOutlined sx={{ fontSize: 20 }} />}
-          label="Students on transport"
-          value={totalStudents}
-          tint="#059669"
-        />
-        <CmsKpiCard
-          icon={<PlaceOutlined sx={{ fontSize: 20 }} />}
-          label="Pickup stops"
-          value={totalStops}
-          tint="#4f46e5"
-        />
-        <CmsKpiCard
-          icon={<HistoryOutlined sx={{ fontSize: 20 }} />}
-          label="Recent changes"
-          value={logs.length}
-          tint="#d97706"
-        />
-      </CmsKpiGrid>
+      <div className="nx-tabs shrink-0" role="tablist" aria-label="Transportation sections">
+        {TABS.map((item) => (
+          <button
+            key={item.key}
+            type="button"
+            role="tab"
+            aria-selected={tab === item.key}
+            className={`nx-tab ${tab === item.key ? "nx-tab-active" : ""}`}
+            onClick={() => setTab(item.key)}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
 
-      <CmsIconTabs
-        ariaLabel="Transport sections"
-        value={tab}
-        onChange={setTab}
-        columnsClass="grid-cols-2 sm:grid-cols-4"
-        items={TABS}
-      />
-
-      <CmsScrollBody className="space-y-4 pt-4">
+      <CmsScrollBody className="space-y-nx-2 pt-nx-2">
         {tab === "routes" ? (
           <>
-            {canManage && showForm ? (
-              <CmsSectionCard className="overflow-hidden !p-0">
-                <div className="border-b border-sky-100 bg-gradient-to-r from-sky-50 via-white to-indigo-50/40 px-5 py-4">
-                  <SectionTitle
-                    title={editingId ? "Edit route" : "New route"}
-                    subtitle="Vehicle, driver, fare, and ordered pickup stops."
-                  />
-                </div>
-                <form className="grid gap-3 p-5 sm:grid-cols-2 lg:grid-cols-3" onSubmit={saveRoute}>
-                  <label>
-                    <span className="nx-label">Route name *</span>
-                    <input className="nx-input w-full" value={name} onChange={(e) => setName(e.target.value)} required />
-                  </label>
-                  <label>
-                    <span className="nx-label">Code</span>
-                    <input className="nx-input w-full" value={code} onChange={(e) => setCode(e.target.value)} placeholder="R-01" />
-                  </label>
-                  <label>
-                    <span className="nx-label">Vehicle number</span>
-                    <input className="nx-input w-full" value={vehicleNumber} onChange={(e) => setVehicleNumber(e.target.value)} placeholder="KL-07-AB-1234" />
-                  </label>
-                  <label>
-                    <span className="nx-label">Driver name</span>
-                    <input className="nx-input w-full" value={driverName} onChange={(e) => setDriverName(e.target.value)} />
-                  </label>
-                  <label>
-                    <span className="nx-label">Driver phone</span>
-                    <input className="nx-input w-full" value={driverPhone} onChange={(e) => setDriverPhone(e.target.value)} />
-                  </label>
-                  <label>
-                    <span className="nx-label">Default fare (₹)</span>
-                    <input className="nx-input w-full" type="number" min="0" step="0.01" value={fareAmount} onChange={(e) => setFareAmount(e.target.value)} />
-                  </label>
-                  <label className="flex items-center gap-2 pt-6 text-sm sm:col-span-2">
-                    <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
-                    <span className="font-medium text-slate-700">Active route</span>
-                  </label>
-                  <label className="sm:col-span-3">
-                    <span className="nx-label">Notes</span>
-                    <textarea className="nx-input w-full" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
+            {canManage && showRouteForm ? (
+              <CardShell
+                title={editingRouteId ? "Edit route" : "Add route"}
+                subtitle="Route name, stop points, vehicle, and driver."
+              >
+                <form className="grid gap-nx-2 p-nx-2 sm:grid-cols-2" onSubmit={saveRoute}>
+                  <label className="sm:col-span-2">
+                    <span className="nx-label">Route Name</span>
+                    <input className="nx-input w-full" value={routeName} onChange={(e) => setRouteName(e.target.value)} required />
                   </label>
 
-                  <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 sm:col-span-3">
-                    <div className="mb-3 flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <PlaceOutlined sx={{ fontSize: 18 }} className="text-sky-600" />
-                        <span className="text-sm font-semibold text-slate-800">Pickup stops</span>
-                      </div>
+                  <div className="rounded-[12px] border border-border bg-background p-nx-2 sm:col-span-2">
+                    <div className="mb-nx-2 flex items-center justify-between gap-nx-2">
+                      <span className="text-sm font-semibold text-ink">Stop Points</span>
                       <button
                         type="button"
-                        className="nx-btn-secondary text-xs"
-                        onClick={() =>
-                          setStops((prev) => [
-                            ...prev,
-                            { name: "", sequence: prev.length + 1, fare: null },
-                          ])
-                        }
+                        className="text-sm font-semibold text-primary"
+                        onClick={() => setStops((prev) => [...prev, { ...emptyStop(), sequence: prev.length + 1 }])}
                       >
-                        <AddOutlined sx={{ fontSize: 14 }} /> Add stop
+                        + Add stop
                       </button>
                     </div>
-                    <div className="space-y-2">
+                    <div className="space-y-nx-1">
                       {stops.map((stop, index) => (
-                        <div
-                          key={index}
-                          className="grid items-center gap-2 rounded-lg border border-white bg-white p-2 shadow-sm sm:grid-cols-12"
-                        >
+                        <div key={index} className="grid gap-nx-1 rounded-[8px] border border-border bg-white p-nx-1 sm:grid-cols-12">
                           <input
-                            className="nx-input sm:col-span-1"
-                            type="number"
-                            min="1"
-                            title="Sequence"
-                            value={stop.sequence ?? index + 1}
-                            onChange={(e) => {
-                              const next = [...stops];
-                              next[index] = { ...stop, sequence: Number(e.target.value) || index + 1 };
-                              setStops(next);
-                            }}
-                          />
-                          <input
-                            className="nx-input sm:col-span-7"
-                            placeholder="Stop name"
+                            className="nx-input sm:col-span-4"
+                            placeholder="Stop Name"
                             value={stop.name}
                             onChange={(e) => {
                               const next = [...stops];
@@ -535,27 +727,31 @@ export function TransportPage() {
                           />
                           <input
                             className="nx-input sm:col-span-3"
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            placeholder="Fare"
-                            value={stop.fare ?? ""}
+                            type="time"
+                            title="Pickup Time"
+                            value={stop.pickupTime ?? ""}
                             onChange={(e) => {
                               const next = [...stops];
-                              next[index] = {
-                                ...stop,
-                                fare: e.target.value === "" ? null : Number(e.target.value),
-                              };
+                              next[index] = { ...stop, pickupTime: e.target.value };
+                              setStops(next);
+                            }}
+                          />
+                          <input
+                            className="nx-input sm:col-span-3"
+                            type="time"
+                            title="Drop Time"
+                            value={stop.dropTime ?? ""}
+                            onChange={(e) => {
+                              const next = [...stops];
+                              next[index] = { ...stop, dropTime: e.target.value };
                               setStops(next);
                             }}
                           />
                           <button
                             type="button"
-                            className="inline-flex items-center justify-center rounded-lg border border-rose-200 bg-rose-50 p-2 text-rose-600 hover:bg-rose-100 sm:col-span-1"
+                            className="inline-flex items-center justify-center rounded-[8px] border border-border p-2 text-ink-muted hover:text-ink sm:col-span-2"
                             onClick={() =>
-                              setStops((prev) =>
-                                prev.length === 1 ? [emptyStop()] : prev.filter((_, i) => i !== index),
-                              )
+                              setStops((prev) => (prev.length === 1 ? [emptyStop()] : prev.filter((_, i) => i !== index)))
                             }
                           >
                             <DeleteOutline sx={{ fontSize: 16 }} />
@@ -565,241 +761,451 @@ export function TransportPage() {
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap gap-2 sm:col-span-3">
+                  <label>
+                    <span className="nx-label">Vehicle</span>
+                    <input
+                      className="nx-input w-full"
+                      list="transport-vehicle-options"
+                      value={routeVehicle}
+                      onChange={(e) => setRouteVehicle(e.target.value)}
+                      placeholder="Select or type vehicle number"
+                    />
+                    <datalist id="transport-vehicle-options">
+                      {vehicleOptions.map((value) => (
+                        <option key={value} value={value} />
+                      ))}
+                    </datalist>
+                  </label>
+                  <label>
+                    <span className="nx-label">Driver</span>
+                    <input
+                      className="nx-input w-full"
+                      list="transport-driver-options"
+                      value={routeDriver}
+                      onChange={(e) => setRouteDriver(e.target.value)}
+                      placeholder="Select or type driver name"
+                    />
+                    <datalist id="transport-driver-options">
+                      {driverOptions.map((value) => (
+                        <option key={value} value={value} />
+                      ))}
+                    </datalist>
+                  </label>
+
+                  <div className="flex flex-wrap gap-nx-1 sm:col-span-2">
                     <button type="submit" className="nx-btn-primary" disabled={submitting}>
-                      {editingId ? "Update route" : "Create route"}
+                      Save
                     </button>
-                    <button type="button" className="nx-btn-secondary" onClick={resetForm}>
+                    <button type="button" className="nx-btn-secondary" onClick={resetRouteForm}>
                       Cancel
                     </button>
                   </div>
                 </form>
-              </CmsSectionCard>
+              </CardShell>
             ) : null}
 
-            <CmsSectionCard className="overflow-hidden !p-0">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-3.5">
-                <SectionTitle title="All routes" subtitle={`${routes.length} route${routes.length === 1 ? "" : "s"} configured`} />
-              </div>
+            <CardShell title="Routes" subtitle={`${routes.length} configured`}>
               {loading ? (
-                <EmptyState icon={<LocalShippingOutlined />} title="Loading routes…" />
+                <EmptyState icon={<RouteOutlined />} title="Loading routes…" />
               ) : !routes.length ? (
                 <EmptyState
                   icon={<DirectionsBusOutlined />}
-                  title="No transport routes yet"
-                  hint={canManage ? "Create a route with vehicle details and pickup stops." : undefined}
+                  title="No routes yet"
+                  hint={canManage ? "Add a route with stop points, vehicle, and driver." : undefined}
                 />
               ) : (
-                <>
-                  <div className="overflow-x-auto">
-                    <table className="nx-table min-w-full text-left">
-                      <thead>
-                        <tr>
-                          <th>Route</th>
-                          <th>Vehicle / driver</th>
-                          <th>Stops</th>
-                          <th>Students</th>
-                          <th>Status</th>
-                          <th>Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {pageRows.map((route) => (
-                          <tr key={route.id}>
-                            <td>
-                              <p className="font-semibold text-slate-900">{route.name}</p>
-                              {route.code ? (
-                                <span className="mt-1 inline-flex rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-600">
-                                  {route.code}
-                                </span>
-                              ) : null}
-                            </td>
-                            <td>
-                              <p className="font-medium text-slate-800">{route.vehicleNumber ?? "—"}</p>
-                              {route.driverName ? (
-                                <p className="text-xs text-slate-500">
-                                  {route.driverName}
-                                  {route.driverPhone ? ` · ${route.driverPhone}` : ""}
-                                </p>
-                              ) : null}
-                            </td>
-                            <td>
-                              {route.stops.length ? (
-                                <div className="flex max-w-xs flex-wrap gap-1">
-                                  {route.stops.slice(0, 4).map((stop) => (
-                                    <span
-                                      key={stop.name}
-                                      className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-700 ring-1 ring-sky-100"
-                                    >
-                                      <PlaceOutlined sx={{ fontSize: 11 }} />
-                                      {stop.name}
-                                    </span>
-                                  ))}
-                                  {route.stops.length > 4 ? (
-                                    <span className="text-[10px] font-semibold text-slate-500">
-                                      +{route.stops.length - 4}
-                                    </span>
-                                  ) : null}
-                                </div>
-                              ) : (
-                                <span className="text-slate-400">No stops</span>
-                              )}
-                            </td>
-                            <td>
-                              <span className="inline-flex min-w-[2rem] items-center justify-center rounded-lg bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700">
-                                {route._count.students}
-                              </span>
-                            </td>
-                            <td>
-                              <span className={route.isActive ? "nx-pill nx-pill-success" : "nx-pill nx-pill-neutral"}>
-                                {route.isActive ? "Active" : "Inactive"}
-                              </span>
-                            </td>
-                            <td>
-                              <div className="flex flex-wrap gap-1.5">
-                                <button
-                                  type="button"
-                                  className="nx-btn-secondary !px-2 !py-1 text-xs"
-                                  onClick={() => {
-                                    setRosterRouteId(route.id);
-                                    setTab("roster");
-                                  }}
-                                  title="View roster"
-                                >
-                                  <PeopleOutlined sx={{ fontSize: 14 }} />
+                <div className="overflow-x-auto">
+                  <table className="nx-table min-w-full">
+                    <thead>
+                      <tr>
+                        <th>Route Name</th>
+                        <th>Stop Points</th>
+                        <th>Vehicle Assigned</th>
+                        <th>Driver Assigned</th>
+                        <th>Students Enrolled</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {routes.map((route) => (
+                        <tr key={route.id} className="h-14">
+                          <td className="font-semibold text-ink">{route.name}</td>
+                          <td className="text-ink-muted">{route.stops.length}</td>
+                          <td className="text-ink">{route.vehicleNumber ?? "—"}</td>
+                          <td className="text-ink">{route.driverName ?? "—"}</td>
+                          <td className="text-ink">{route._count.students}</td>
+                          <td>
+                            <div className="flex flex-wrap items-center gap-1">
+                              {canManage ? (
+                                <button type="button" className="nx-btn-secondary !px-2 !py-1 text-xs" onClick={() => startEditRoute(route)}>
+                                  <EditOutlined sx={{ fontSize: 14 }} /> Edit
                                 </button>
-                                {canManage ? (
-                                  <>
-                                    <button
-                                      type="button"
-                                      className="nx-btn-secondary !px-2 !py-1 text-xs"
-                                      onClick={() => startEdit(route)}
-                                    >
-                                      <EditOutlined sx={{ fontSize: 14 }} />
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="inline-flex items-center rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-rose-600 hover:bg-rose-100"
-                                      onClick={() => void remove(route.id)}
-                                    >
-                                      <DeleteOutline sx={{ fontSize: 14 }} />
-                                    </button>
-                                  </>
-                                ) : null}
+                              ) : null}
+                              <button
+                                type="button"
+                                className="nx-btn-secondary !px-2 !py-1 text-xs"
+                                onClick={() => setViewStopsId((id) => (id === route.id ? null : route.id))}
+                              >
+                                <VisibilityOutlined sx={{ fontSize: 14 }} /> View Stops
+                              </button>
+                              {canManage ? (
+                                <button type="button" className="nx-btn-secondary !px-2 !py-1 text-xs" onClick={() => void removeRoute(route.id)}>
+                                  <MoreVertOutlined sx={{ fontSize: 14 }} />
+                                </button>
+                              ) : null}
+                            </div>
+                            {viewStopsId === route.id ? (
+                              <div className="mt-2 rounded-[8px] border border-border bg-background p-nx-1 text-xs text-ink-muted">
+                                {route.stops.length ? (
+                                  <ul className="space-y-1">
+                                    {route.stops.map((stop, index) => (
+                                      <li key={`${stop.name}-${index}`}>
+                                        <span className="font-semibold text-ink">{stop.name}</span>
+                                        {stop.pickupTime ? ` · Pickup ${stop.pickupTime}` : ""}
+                                        {stop.dropTime ? ` · Drop ${stop.dropTime}` : ""}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                ) : (
+                                  "No stops configured."
+                                )}
                               </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  <ListPagination page={page} pageSize={PAGE_SIZE} total={routes.length} onPageChange={setPage} />
-                </>
+                            ) : null}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
-            </CmsSectionCard>
+            </CardShell>
           </>
         ) : null}
 
-        {tab === "roster" ? (
-          <CmsSectionCard className="overflow-hidden !p-0">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-gradient-to-r from-emerald-50/80 via-white to-white px-5 py-3.5">
-              <SectionTitle
-                title="Route roster"
-                subtitle={
-                  rosterRoute
-                    ? `${rosterRoute.name} · ${rosterStudents.length} student${rosterStudents.length === 1 ? "" : "s"}`
-                    : "Select a route to view assigned students"
-                }
-              />
-              <select
-                className="nx-input w-full max-w-xs text-sm"
-                value={rosterRouteId}
-                onChange={(e) => setRosterRouteId(e.target.value)}
-              >
-                <option value="">Select route</option>
-                {routes.map((route) => (
-                  <option key={route.id} value={route.id}>
-                    {route.name} ({route._count.students})
-                  </option>
-                ))}
-              </select>
-            </div>
-            {rosterLoading ? (
-              <EmptyState icon={<PeopleOutlined />} title="Loading roster…" />
-            ) : !rosterRouteId ? (
-              <EmptyState icon={<RouteOutlined />} title="Select a route" hint="Pick a route above to see students and their stops." />
-            ) : !rosterStudents.length ? (
-              <EmptyState
-                icon={<PeopleOutlined />}
-                title="No students on this route"
-                hint="Assign students from the Assign tab."
-              />
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="nx-table min-w-full text-left">
-                  <thead>
-                    <tr>
-                      <th>Admission #</th>
-                      <th>Student</th>
-                      <th>Pickup stop</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rosterStudents.map((student) => (
-                      <tr key={student.id}>
-                        <td className="font-mono text-xs text-slate-600">{student.admissionNumber}</td>
-                        <td className="font-semibold text-slate-900">{studentLabel(student)}</td>
-                        <td>
-                          {student.transportStopName ? (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700 ring-1 ring-sky-100">
-                              <PersonPinCircleOutlined sx={{ fontSize: 14 }} />
-                              {student.transportStopName}
-                            </span>
-                          ) : (
-                            <span className="text-slate-400">Not set</span>
-                          )}
-                        </td>
+        {tab === "vehicles" ? (
+          <>
+            {canManage && showVehicleForm ? (
+              <CardShell title={editingVehicleRouteId ? "Edit vehicle" : "Add vehicle"}>
+                <form className="grid gap-nx-2 p-nx-2 sm:grid-cols-2" onSubmit={saveVehicle}>
+                  <label>
+                    <span className="nx-label">Vehicle Number</span>
+                    <input className="nx-input w-full" value={vehicleNumber} onChange={(e) => setVehicleNumber(e.target.value)} required />
+                  </label>
+                  <label>
+                    <span className="nx-label">Type</span>
+                    <select className="nx-input w-full" value={vehicleType} onChange={(e) => setVehicleType(e.target.value as "Bus" | "Van")}>
+                      <option value="Bus">Bus</option>
+                      <option value="Van">Van</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span className="nx-label">Capacity</span>
+                    <input className="nx-input w-full" type="number" min="1" value={vehicleCapacity} onChange={(e) => setVehicleCapacity(e.target.value)} />
+                  </label>
+                  <label>
+                    <span className="nx-label">Assigned Route</span>
+                    <select className="nx-input w-full" value={vehicleRouteId} onChange={(e) => setVehicleRouteId(e.target.value)} required={!editingVehicleRouteId}>
+                      <option value="">Select route</option>
+                      {routes.map((route) => (
+                        <option key={route.id} value={route.id}>
+                          {route.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    <span className="nx-label">Status</span>
+                    <select
+                      className="nx-input w-full"
+                      value={vehicleStatus}
+                      onChange={(e) => setVehicleStatus(e.target.value as "ACTIVE" | "MAINTENANCE" | "INACTIVE")}
+                    >
+                      <option value="ACTIVE">Active</option>
+                      <option value="MAINTENANCE">Maintenance</option>
+                      <option value="INACTIVE">Inactive</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span className="nx-label">Insurance Expiry</span>
+                    <input className="nx-input w-full" type="date" value={insuranceExpiry} onChange={(e) => setInsuranceExpiry(e.target.value)} />
+                  </label>
+                  <label className="sm:col-span-2">
+                    <span className="nx-label">Registration Document</span>
+                    <input
+                      className="nx-input w-full"
+                      type="file"
+                      accept=".pdf,.png,.jpg,.jpeg"
+                      onChange={(e) => setRegistrationName(e.target.files?.[0]?.name ?? "")}
+                    />
+                    {registrationName ? <p className="mt-1 text-xs text-ink-muted">Selected: {registrationName}</p> : null}
+                  </label>
+                  <div className="flex flex-wrap gap-nx-1 sm:col-span-2">
+                    <button type="submit" className="nx-btn-primary" disabled={submitting}>
+                      Save
+                    </button>
+                    <button type="button" className="nx-btn-secondary" onClick={resetVehicleForm}>
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              </CardShell>
+            ) : null}
+
+            <CardShell title="Vehicles">
+              {loading ? (
+                <EmptyState icon={<LocalShippingOutlined />} title="Loading vehicles…" />
+              ) : !routes.some((route) => route.vehicleNumber) ? (
+                <EmptyState icon={<LocalShippingOutlined />} title="No vehicles yet" hint="Add a vehicle and link it to a route." />
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="nx-table min-w-full">
+                    <thead>
+                      <tr>
+                        <th>Vehicle Number</th>
+                        <th>Type</th>
+                        <th>Capacity</th>
+                        <th>Assigned Route</th>
+                        <th>Status</th>
+                        <th>Actions</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </CmsSectionCard>
+                    </thead>
+                    <tbody>
+                      {routes
+                        .filter((route) => route.vehicleNumber)
+                        .map((route) => {
+                          const meta = parseMeta(route.notes);
+                          const status = meta.vehicleStatus ?? (route.isActive ? "ACTIVE" : "INACTIVE");
+                          return (
+                            <tr key={route.id} className="h-14">
+                              <td className="font-semibold text-ink">{route.vehicleNumber}</td>
+                              <td>
+                                <span className="nx-pill nx-pill-indigo">{meta.vehicleType ?? "Bus"}</span>
+                              </td>
+                              <td className="text-ink-muted">{meta.capacity ?? "—"}</td>
+                              <td className="text-ink">{route.name}</td>
+                              <td>
+                                {status === "ACTIVE"
+                                  ? statusPill("green", "Active")
+                                  : status === "MAINTENANCE"
+                                    ? statusPill("amber", "Maintenance")
+                                    : statusPill("gray", "Inactive")}
+                              </td>
+                              <td>
+                                {canManage ? (
+                                  <button type="button" className="nx-btn-secondary !px-2 !py-1 text-xs" onClick={() => startEditVehicle(route)}>
+                                    <EditOutlined sx={{ fontSize: 14 }} /> Edit
+                                  </button>
+                                ) : null}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardShell>
+          </>
+        ) : null}
+
+        {tab === "drivers" ? (
+          <>
+            {canManage && showDriverForm ? (
+              <CardShell title={editingDriverRouteId ? "Edit driver" : "Add driver"}>
+                <form className="grid gap-nx-2 p-nx-2 sm:grid-cols-2" onSubmit={saveDriver}>
+                  <label>
+                    <span className="nx-label">Name</span>
+                    <input className="nx-input w-full" value={driverName} onChange={(e) => setDriverName(e.target.value)} required />
+                  </label>
+                  <label>
+                    <span className="nx-label">License Number</span>
+                    <input className="nx-input w-full" value={licenseNumber} onChange={(e) => setLicenseNumber(e.target.value)} />
+                  </label>
+                  <label>
+                    <span className="nx-label">Phone</span>
+                    <input className="nx-input w-full" value={driverPhone} onChange={(e) => setDriverPhone(e.target.value)} />
+                  </label>
+                  <label>
+                    <span className="nx-label">License Expiry</span>
+                    <input className="nx-input w-full" type="date" value={licenseExpiry} onChange={(e) => setLicenseExpiry(e.target.value)} />
+                  </label>
+                  <label>
+                    <span className="nx-label">Assigned Vehicle / Route</span>
+                    <select
+                      className="nx-input w-full"
+                      value={driverVehicleRouteId}
+                      onChange={(e) => setDriverVehicleRouteId(e.target.value)}
+                      required={!editingDriverRouteId}
+                    >
+                      <option value="">Select route</option>
+                      {routes.map((route) => (
+                        <option key={route.id} value={route.id}>
+                          {[route.vehicleNumber, route.name].filter(Boolean).join(" · ")}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    <span className="nx-label">Status</span>
+                    <select
+                      className="nx-input w-full"
+                      value={driverStatus}
+                      onChange={(e) => setDriverStatus(e.target.value as "ACTIVE" | "ON_LEAVE")}
+                    >
+                      <option value="ACTIVE">Active</option>
+                      <option value="ON_LEAVE">On Leave</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span className="nx-label">Photo</span>
+                    <input
+                      className="nx-input w-full"
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => setDriverPhotoName(e.target.files?.[0]?.name ?? "")}
+                    />
+                    {driverPhotoName ? <p className="mt-1 text-xs text-ink-muted">Selected: {driverPhotoName}</p> : null}
+                  </label>
+                  <label>
+                    <span className="nx-label">Document</span>
+                    <input
+                      className="nx-input w-full"
+                      type="file"
+                      accept=".pdf,.png,.jpg,.jpeg"
+                      onChange={(e) => setDriverDocName(e.target.files?.[0]?.name ?? "")}
+                    />
+                    {driverDocName ? <p className="mt-1 text-xs text-ink-muted">Selected: {driverDocName}</p> : null}
+                  </label>
+                  <div className="flex flex-wrap gap-nx-1 sm:col-span-2">
+                    <button type="submit" className="nx-btn-primary" disabled={submitting}>
+                      Save
+                    </button>
+                    <button type="button" className="nx-btn-secondary" onClick={resetDriverForm}>
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              </CardShell>
+            ) : null}
+
+            <CardShell title="Drivers">
+              {loading ? (
+                <EmptyState icon={<PersonOutlined />} title="Loading drivers…" />
+              ) : !routes.some((route) => route.driverName) ? (
+                <EmptyState icon={<PersonOutlined />} title="No drivers yet" hint="Add a driver and link them to a vehicle/route." />
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="nx-table min-w-full">
+                    <thead>
+                      <tr>
+                        <th>Driver</th>
+                        <th>License Number</th>
+                        <th>Phone</th>
+                        <th>Assigned Vehicle/Route</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {routes
+                        .filter((route) => route.driverName)
+                        .map((route) => {
+                          const meta = parseMeta(route.notes);
+                          const status = meta.driverStatus ?? "ACTIVE";
+                          const initials = route.driverName!.slice(0, 2).toUpperCase();
+                          return (
+                            <tr key={route.id} className="h-14">
+                              <td>
+                                <div className="flex items-center gap-nx-1">
+                                  <span className="inline-flex size-8 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                                    {initials}
+                                  </span>
+                                  <span className="font-semibold text-ink">{route.driverName}</span>
+                                </div>
+                              </td>
+                              <td className="text-ink-muted">{meta.licenseNumber ?? "—"}</td>
+                              <td className="text-ink-muted">{route.driverPhone ?? "—"}</td>
+                              <td className="text-ink">
+                                {[route.vehicleNumber, route.name].filter(Boolean).join(" · ")}
+                              </td>
+                              <td>
+                                {status === "ACTIVE" ? statusPill("green", "Active") : statusPill("amber", "On Leave")}
+                              </td>
+                              <td>
+                                {canManage ? (
+                                  <button type="button" className="nx-btn-secondary !px-2 !py-1 text-xs" onClick={() => startEditDriver(route)}>
+                                    <EditOutlined sx={{ fontSize: 14 }} /> Edit
+                                  </button>
+                                ) : null}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardShell>
+          </>
         ) : null}
 
         {tab === "assign" ? (
-          <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
-            <CmsSectionCard className="p-5">
-              <SectionTitle
-                title="Assign student"
-                subtitle="Link a student to a route and optional pickup stop."
-              />
-              {canManage ? (
-                <form className="mt-2 grid gap-3" onSubmit={assignStudent}>
-                  <label>
-                    <span className="nx-label">Student *</span>
-                    <select
-                      className="nx-input w-full"
-                      value={assignStudentId}
-                      onChange={(e) => {
-                        const id = e.target.value;
-                        setAssignStudentId(id);
-                        const student = students.find((s) => s.id === id);
-                        if (student?.transportRouteId) {
-                          setAssignRouteId(student.transportRouteId);
-                          setAssignStopName(student.transportStopName ?? "");
-                        }
-                      }}
-                      required
-                    >
-                      <option value="">Select student</option>
+          <>
+            <div className="flex flex-wrap items-end gap-nx-1 rounded-[12px] border border-border bg-white p-nx-2">
+              <label className="min-w-[140px] flex-1">
+                <span className="nx-label">Class</span>
+                <select className="nx-input w-full" value={filterClass} onChange={(e) => setFilterClass(e.target.value)}>
+                  <option value="">All classes</option>
+                  {classOptions.map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="min-w-[140px] flex-1">
+                <span className="nx-label">Section</span>
+                <select className="nx-input w-full" value={filterSection} onChange={(e) => setFilterSection(e.target.value)}>
+                  <option value="">All sections</option>
+                  {sectionOptions.map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="min-w-[160px] flex-1">
+                <span className="nx-label">Route</span>
+                <select className="nx-input w-full" value={filterRoute} onChange={(e) => setFilterRoute(e.target.value)}>
+                  <option value="">All routes</option>
+                  {routes.map((route) => (
+                    <option key={route.id} value={route.id}>
+                      {route.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="min-w-[180px] flex-[1.4]">
+                <span className="nx-label">Search</span>
+                <input
+                  className="nx-input w-full"
+                  placeholder="Student name or admission no"
+                  value={filterSearch}
+                  onChange={(e) => setFilterSearch(e.target.value)}
+                />
+              </label>
+            </div>
+
+            {canManage && showAssignForm ? (
+              <CardShell title="Assign student">
+                <form className="grid gap-nx-2 p-nx-2 sm:grid-cols-2" onSubmit={saveAssignment}>
+                  <label className="sm:col-span-2">
+                    <span className="nx-label">Student</span>
+                    <select className="nx-input w-full" value={assignStudentId} onChange={(e) => setAssignStudentId(e.target.value)} required>
+                      <option value="">Search / select student</option>
                       {students.map((student) => (
                         <option key={student.id} value={student.id}>
-                          {student.admissionNumber} · {studentLabel(student)}
-                          {student.transportRoute
-                            ? ` · ${student.transportRoute}${student.transportStopName ? ` @ ${student.transportStopName}` : ""}`
-                            : ""}
+                          {studentLabel(student)} ({student.admissionNumber}) · {classSectionLabel(student)}
                         </option>
                       ))}
                     </select>
@@ -814,124 +1220,124 @@ export function TransportPage() {
                         setAssignStopName("");
                       }}
                     >
-                      <option value="">No transport / clear assignment</option>
-                      {activeRoutes.map((route) => (
+                      <option value="">No route (clear)</option>
+                      {routes.filter((route) => route.isActive).map((route) => (
                         <option key={route.id} value={route.id}>
                           {route.name}
-                          {route.vehicleNumber ? ` · ${route.vehicleNumber}` : ""}
                         </option>
                       ))}
                     </select>
                   </label>
-                  {selectedAssignRoute && selectedAssignRoute.stops.length > 0 ? (
-                    <label>
-                      <span className="nx-label">Pickup stop</span>
-                      <select
-                        className="nx-input w-full"
-                        value={assignStopName}
-                        onChange={(e) => setAssignStopName(e.target.value)}
-                      >
-                        <option value="">No specific stop</option>
-                        {selectedAssignRoute.stops.map((stop) => (
-                          <option key={stop.name} value={stop.name}>
-                            {stop.sequence ? `${stop.sequence}. ` : ""}
-                            {stop.name}
-                            {stop.fare != null ? ` (₹${stop.fare})` : ""}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  ) : null}
                   <label>
-                    <span className="nx-label">Note</span>
-                    <input
+                    <span className="nx-label">Stop Point</span>
+                    <select
                       className="nx-input w-full"
-                      value={assignNote}
-                      onChange={(e) => setAssignNote(e.target.value)}
-                      placeholder="Optional"
-                    />
+                      value={assignStopName}
+                      onChange={(e) => setAssignStopName(e.target.value)}
+                      disabled={!selectedAssignRoute}
+                    >
+                      <option value="">Select stop</option>
+                      {(selectedAssignRoute?.stops ?? []).map((stop) => (
+                        <option key={stop.name} value={stop.name}>
+                          {stop.name}
+                        </option>
+                      ))}
+                    </select>
                   </label>
-                  <button type="submit" className="nx-btn-primary w-fit" disabled={submitting}>
-                    Save assignment
-                  </button>
+                  <p className="rounded-[8px] border border-border bg-background px-nx-2 py-nx-1 text-xs text-ink-muted sm:col-span-2">
+                    Transport fee is billed via the &quot;Transportation Bus Fees&quot; fee type — configure in Fees &gt; Structure Setup.
+                  </p>
+                  <div className="flex flex-wrap gap-nx-1 sm:col-span-2">
+                    <button type="submit" className="nx-btn-primary" disabled={submitting}>
+                      Save
+                    </button>
+                    <button type="button" className="nx-btn-secondary" onClick={() => setShowAssignForm(false)}>
+                      Cancel
+                    </button>
+                  </div>
                 </form>
-              ) : (
-                <p className="mt-4 text-sm text-slate-500">You need transport.manage permission to assign students.</p>
-              )}
-            </CmsSectionCard>
+              </CardShell>
+            ) : null}
 
-            <CmsSectionCard className="overflow-hidden !p-0">
-              <div className="border-b border-slate-100 bg-gradient-to-br from-indigo-50 to-white px-5 py-4">
-                <SectionTitle title="Quick tip" subtitle="Leave route empty to clear transport for a student." />
-              </div>
-              <div className="space-y-3 p-5 text-sm text-slate-600">
-                <div className="flex gap-3 rounded-xl border border-slate-100 bg-slate-50/80 p-3">
-                  <DirectionsBusOutlined className="shrink-0 text-indigo-500" sx={{ fontSize: 22 }} />
-                  <p>Assignments are logged automatically under History for audit.</p>
+            <CardShell title="Student assignments" subtitle={`${assignedStudents.length} assigned`}>
+              {!assignedStudents.length ? (
+                <EmptyState icon={<PeopleOutlined />} title="No assigned students" hint="Use Assign student to map learners to routes and stops." />
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="nx-table min-w-full">
+                    <thead>
+                      <tr>
+                        <th>Student Name</th>
+                        <th>Class/Section</th>
+                        <th>Assigned Route</th>
+                        <th>Stop Point</th>
+                        <th>Transport Fee Status</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {assignedStudents.map((student) => (
+                        <tr key={student.id} className="h-14">
+                          <td className="font-semibold text-ink">{studentLabel(student)}</td>
+                          <td className="text-ink-muted">{classSectionLabel(student)}</td>
+                          <td className="text-ink">{student.transportRoute ?? "—"}</td>
+                          <td className="text-ink-muted">{student.transportStopName ?? "—"}</td>
+                          <td>{statusPill("amber", "Due")}</td>
+                          <td>
+                            <div className="flex flex-wrap gap-1">
+                              {canManage ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    className="nx-btn-secondary !px-2 !py-1 text-xs"
+                                    onClick={() => {
+                                      setAssignStudentId(student.id);
+                                      setAssignRouteId(student.transportRouteId ?? "");
+                                      setAssignStopName(student.transportStopName ?? "");
+                                      setShowAssignForm(true);
+                                    }}
+                                  >
+                                    Reassign
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="nx-btn-secondary !px-2 !py-1 text-xs"
+                                    onClick={() => void clearAssignment(student.id)}
+                                  >
+                                    Remove
+                                  </button>
+                                </>
+                              ) : null}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-                <div className="flex gap-3 rounded-xl border border-slate-100 bg-slate-50/80 p-3">
-                  <PlaceOutlined className="shrink-0 text-sky-500" sx={{ fontSize: 22 }} />
-                  <p>Stops only appear when the selected route has pickup points defined.</p>
-                </div>
-                <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 px-3 py-2 text-xs font-semibold text-emerald-800">
-                  {students.filter((s) => s.transportOptIn || s.transportRouteId).length} students currently on transport
-                </div>
-              </div>
-            </CmsSectionCard>
-          </div>
+              )}
+            </CardShell>
+          </>
         ) : null}
 
-        {tab === "history" ? (
-          <CmsSectionCard className="overflow-hidden !p-0">
-            <div className="border-b border-slate-100 bg-gradient-to-r from-amber-50/80 via-white to-white px-5 py-3.5">
-              <SectionTitle title="Assignment history" subtitle="Latest route changes across the campus" />
-            </div>
-            {!logs.length ? (
-              <EmptyState icon={<HistoryOutlined />} title="No assignment history yet" />
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="nx-table min-w-full text-left">
-                  <thead>
-                    <tr>
-                      <th>When</th>
-                      <th>Student</th>
-                      <th>Action</th>
-                      <th>Route / stop</th>
-                      <th>By</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {logs.map((log) => (
-                      <tr key={log.id}>
-                        <td className="whitespace-nowrap text-xs text-slate-500">
-                          {new Date(log.createdAt).toLocaleString()}
-                        </td>
-                        <td>
-                          <p className="font-semibold text-slate-900">{studentLabel(log.student)}</p>
-                          <p className="font-mono text-[11px] text-slate-500">{log.student.admissionNumber}</p>
-                        </td>
-                        <td>
-                          <span className={actionPill(log.action)}>{log.action}</span>
-                        </td>
-                        <td>
-                          <p className="text-slate-800">{log.transportRoute?.name ?? "—"}</p>
-                          {log.stopName ? (
-                            <p className="text-xs text-sky-700">{log.stopName}</p>
-                          ) : null}
-                          {log.note ? <p className="text-xs text-slate-400">{log.note}</p> : null}
-                        </td>
-                        <td className="text-slate-600">
-                          {log.assignedBy ? studentLabel(log.assignedBy) : "—"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+        {tab === "reports" ? (
+          <CardShell>
+            <div className="flex flex-wrap items-center gap-nx-3 p-nx-3">
+              <div className="flex size-12 items-center justify-center rounded-[12px] bg-primary/10 text-primary">
+                <AssessmentOutlined sx={{ fontSize: 24 }} />
               </div>
-            )}
-          </CmsSectionCard>
+              <div className="min-w-0 flex-1">
+                <h2 className="text-base font-bold text-ink">Student Transport Report</h2>
+                <p className="mt-1 text-sm text-ink-muted">Students with their stop points and route details</p>
+              </div>
+              <button type="button" className="nx-btn-primary" onClick={generateReport}>
+                Generate
+              </button>
+            </div>
+          </CardShell>
         ) : null}
       </CmsScrollBody>
+
       <CmsFooter />
     </CmsPage>
   );
