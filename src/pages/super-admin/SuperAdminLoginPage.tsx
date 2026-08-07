@@ -7,8 +7,6 @@ import {
 import {
   Box,
   Button,
-  Checkbox,
-  FormControlLabel,
   IconButton,
   InputAdornment,
   Link as MuiLink,
@@ -18,7 +16,7 @@ import {
   Typography,
 } from "@mui/material";
 import { useState, type FormEvent } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import { isPlatformUser } from "../../components/AppShell";
 import { notifyError, notifySuccess } from "../../lib/notify";
@@ -36,10 +34,9 @@ export function SuperAdminLoginPage() {
 function SuperAdminLoginInner() {
   const { login, isAuthenticated, user } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState("admin@saas-cms-lms.local");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [remember, setRemember] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
   if (isAuthenticated && user && isPlatformUser(user.permissions)) {
@@ -51,8 +48,8 @@ function SuperAdminLoginInner() {
     event.preventDefault();
     setSubmitting(true);
     try {
-      await login({ email, password });
-      notifySuccess("Signed in to Admin Portal");
+      await login({ email: email.trim(), password });
+      notifySuccess("Signed in to Super Admin");
       navigate("/admin/dashboard", { replace: true });
     } catch (cause) {
       notifyError(cause instanceof Error ? cause.message : "Unable to sign in");
@@ -72,7 +69,6 @@ function SuperAdminLoginInner() {
         background: `
           radial-gradient(circle at 18% 22%, rgba(37,99,235,0.18), transparent 42%),
           radial-gradient(circle at 82% 18%, rgba(255,107,53,0.16), transparent 40%),
-          radial-gradient(circle at 70% 78%, rgba(0,43,91,0.12), transparent 45%),
           linear-gradient(180deg, #EEF2F6 0%, #F7F8FA 100%)
         `,
       }}
@@ -81,7 +77,7 @@ function SuperAdminLoginInner() {
         elevation={0}
         sx={{
           width: "100%",
-          maxWidth: 440,
+          maxWidth: 420,
           p: { xs: 3, sm: 4 },
           borderRadius: 3,
           border: `1px solid ${saColors.border}`,
@@ -104,25 +100,28 @@ function SuperAdminLoginInner() {
               <ShieldOutlined fontSize="small" />
             </Box>
             <Typography fontWeight={800} color={saColors.info}>
-              SaaS Super Admin
+              Super Admin
             </Typography>
           </Stack>
           <Typography variant="h5" fontWeight={800} textAlign="center" mt={1.5}>
-            Sign in to Admin Portal
+            Admin login
           </Typography>
           <Typography variant="body2" color="text.secondary" textAlign="center">
-            Manage enterprise infrastructure and user access.
+            Platform operators only. Schools use the institute login.
           </Typography>
         </Stack>
 
-        <Box component="form" onSubmit={handleSubmit}>
+        <Box component="form" onSubmit={handleSubmit} noValidate>
           <Typography variant="overline" color="text.secondary" display="block" mb={0.5}>
-            Admin Email
+            Email
           </Typography>
           <TextField
             fullWidth
             size="medium"
             type="email"
+            name="email"
+            autoComplete="username"
+            placeholder="admin@your-platform.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
@@ -133,39 +132,41 @@ function SuperAdminLoginInner() {
             <Typography variant="overline" color="text.secondary">
               Password
             </Typography>
-            <MuiLink href="/forgot-password" underline="hover" variant="caption" fontWeight={600}>
-              Forgot password?
-            </MuiLink>
+            <Button
+              type="button"
+              size="small"
+              onClick={() => setShowPassword((v) => !v)}
+              sx={{ minWidth: 0, px: 0.5, textTransform: "none", fontWeight: 700 }}
+            >
+              {showPassword ? "Hide" : "Show"}
+            </Button>
           </Stack>
           <TextField
             fullWidth
             size="medium"
+            name="password"
+            autoComplete="current-password"
             type={showPassword ? "text" : "password"}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
+            placeholder="Enter your password"
             InputProps={{
               endAdornment: (
                 <InputAdornment position="end">
-                  <IconButton edge="end" onClick={() => setShowPassword((v) => !v)}>
+                  <IconButton
+                    type="button"
+                    edge="end"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    onClick={() => setShowPassword((v) => !v)}
+                    onMouseDown={(e) => e.preventDefault()}
+                  >
                     {showPassword ? <VisibilityOff /> : <Visibility />}
                   </IconButton>
                 </InputAdornment>
               ),
             }}
-            sx={{ mb: 1 }}
-          />
-
-          <FormControlLabel
-            control={
-              <Checkbox
-                checked={remember}
-                onChange={(e) => setRemember(e.target.checked)}
-                sx={{ color: saColors.info, "&.Mui-checked": { color: saColors.info } }}
-              />
-            }
-            label={<Typography variant="body2">Remember this device</Typography>}
-            sx={{ mb: 2 }}
+            sx={{ mb: 2.5 }}
           />
 
           <Button
@@ -173,7 +174,7 @@ function SuperAdminLoginInner() {
             fullWidth
             variant="contained"
             size="large"
-            disabled={submitting}
+            disabled={submitting || !email.trim() || !password}
             startIcon={<LockOutlined />}
             sx={{
               py: 1.35,
@@ -181,23 +182,19 @@ function SuperAdminLoginInner() {
               "&:hover": { bgcolor: "#1D4ED8" },
             }}
           >
-            {submitting ? "Signing in…" : "Sign In to Dashboard"}
+            {submitting ? "Signing in…" : "Sign in"}
           </Button>
         </Box>
 
         <Box sx={{ mt: 3, pt: 2.5, borderTop: `1px solid ${saColors.border}`, textAlign: "center" }}>
-          <Typography variant="caption" color="text.secondary" display="block">
-            System version: v4.12.0-stable
-          </Typography>
-          <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: "block", letterSpacing: 0.6 }}>
-            PRIVACY POLICY · SYSTEM STATUS
+          <Typography variant="body2" color="text.secondary">
+            School / staff / student?{" "}
+            <MuiLink component={Link} to="/login" underline="hover" fontWeight={700}>
+              Institute login
+            </MuiLink>
           </Typography>
         </Box>
       </Paper>
-
-      <Typography variant="caption" color="text.secondary" sx={{ mt: 3, maxWidth: 480, textAlign: "center" }}>
-        Authorized access only. All actions on this system are logged and monitored for security purposes.
-      </Typography>
     </Box>
   );
 }
