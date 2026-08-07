@@ -259,6 +259,7 @@ export function App() {
         <Route path="/hostel/blocks" element={<RequireProductBucket bucket="CMS"><HostelPage /></RequireProductBucket>} />
         <Route path="/hostel/rooms" element={<RequireProductBucket bucket="CMS"><HostelPage /></RequireProductBucket>} />
         <Route path="/hostel/assign" element={<RequireProductBucket bucket="CMS"><HostelPage /></RequireProductBucket>} />
+        <Route path="/hostel/history" element={<RequireProductBucket bucket="CMS"><HostelPage /></RequireProductBucket>} />
         <Route path="/erp" element={<RequireProductBucket bucket="CMS"><ErpSettingsPage /></RequireProductBucket>} />
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/users" element={<UsersPage />} />

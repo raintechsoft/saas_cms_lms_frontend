@@ -101,8 +101,12 @@ export interface StudentDetail extends StudentListItem {
   rteCertificateNo: string | null;
   transportOptIn: boolean;
   transportRoute: string | null;
+  transportRouteId?: string | null;
+  transportStopName?: string | null;
   hostelOptIn: boolean;
   hostelRoom: string | null;
+  hostelRoomId?: string | null;
+  hostelBedId?: string | null;
   additionalNotes: string | null;
   disabledReason: string | null;
   siblingGroupId: string | null;

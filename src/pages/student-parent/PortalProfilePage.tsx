@@ -495,9 +495,12 @@ export function PortalProfilePage() {
                     label="Transport"
                     value={
                       s.transportOptIn
-                        ? display(s.transportRoute) !== "—"
-                          ? `Yes · ${s.transportRoute}`
-                          : "Yes"
+                        ? [
+                            s.transport?.routeName ?? s.transportRoute,
+                            s.transport?.stopName ?? s.transportStopName,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ") || "Yes"
                         : "No"
                     }
                   />
@@ -505,9 +508,14 @@ export function PortalProfilePage() {
                     label="Hostel"
                     value={
                       s.hostelOptIn
-                        ? display(s.hostelRoom) !== "—"
-                          ? `Yes · ${s.hostelRoom}`
-                          : "Yes"
+                        ? [
+                            s.hostel
+                              ? `${s.hostel.blockName} · ${s.hostel.roomName}`
+                              : s.hostelRoom,
+                            s.hostel?.bedLabel,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ") || "Yes"
                         : "No"
                     }
                   />

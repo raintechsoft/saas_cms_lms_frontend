@@ -83,6 +83,7 @@ export interface PortalChild {
     admissionType?: string | null;
     transportOptIn?: boolean;
     transportRoute?: string | null;
+    transportStopName?: string | null;
     transport?: {
       routeId: string;
       routeName: string;
@@ -90,14 +91,18 @@ export interface PortalChild {
       vehicleNumber: string | null;
       driverName: string | null;
       driverPhone: string | null;
+      stopName?: string | null;
     } | null;
     hostelOptIn?: boolean;
     hostelRoom?: string | null;
+    hostelBedId?: string | null;
     hostel?: {
       roomId: string;
       roomName: string;
       blockId: string;
       blockName: string;
+      bedId?: string | null;
+      bedLabel?: string | null;
     } | null;
     additionalNotes?: string | null;
   };
