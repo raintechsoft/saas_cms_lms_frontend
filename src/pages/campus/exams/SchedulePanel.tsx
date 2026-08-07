@@ -11,6 +11,13 @@ import {
 } from "@mui/icons-material";
 import { apiRequest } from "../../../lib/api";
 import { confirmDelete } from "../../../lib/confirm";
+import { FieldError } from "../../../components/forms/Field";
+import {
+  applyApiFieldErrors,
+  clearFieldError,
+  type FieldErrors,
+  validateRequired,
+} from "../../../lib/formErrors";
 import { notifySuccess } from "../../../lib/notify";
 import type { ExamWithGroup, Schedule, ScheduleWithExam, Setup } from "./types";
 import {
@@ -84,6 +91,7 @@ export function SchedulePanel({
   );
   const [saving, setSaving] = useState(false);
   const [busyKey, setBusyKey] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
 
   useEffect(() => {
     if (initialExamId) setExamFilter(initialExamId);
@@ -154,6 +162,7 @@ export function SchedulePanel({
 
   function openCreate() {
     setEditing(null);
+    setFieldErrors({});
     setForm(
       emptyForm(
         examFilter || exams.find((exam) => exam.status === "DRAFT")?.id || "",
@@ -165,6 +174,7 @@ export function SchedulePanel({
 
   function openEdit(schedule: ScheduleWithExam) {
     setEditing(schedule);
+    setFieldErrors({});
     setForm({
       examId: schedule.exam.id,
       classSectionId: schedule.classSection.id,
@@ -187,19 +197,33 @@ export function SchedulePanel({
   function cancelForm() {
     setFormOpen(false);
     setEditing(null);
+    setFieldErrors({});
     setForm(emptyForm(examFilter, sectionFilter));
   }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!form.examId) {
-      onError("Select an exam before scheduling a subject.");
-      return;
-    }
-    if (!form.classSectionId) {
-      onError("Select a class section.");
-      return;
-    }
+    const rules = editing
+      ? [
+          { key: "examDate", label: "Date" },
+          { key: "startTime", label: "Time from" },
+          { key: "endTime", label: "Time to" },
+          { key: "maximumMarks", label: "Max marks" },
+          { key: "minimumMarks", label: "Min marks" },
+        ]
+      : [
+          { key: "examId", label: "Exam" },
+          { key: "classSectionId", label: "Class / section" },
+          { key: "classSubjectId", label: "Subject" },
+          { key: "examDate", label: "Date" },
+          { key: "startTime", label: "Time from" },
+          { key: "endTime", label: "Time to" },
+          { key: "maximumMarks", label: "Max marks" },
+          { key: "minimumMarks", label: "Min marks" },
+        ];
+    const next = validateRequired(form, rules);
+    setFieldErrors(next);
+    if (Object.keys(next).length) return;
     setSaving(true);
     try {
       const creditHoursPayload =
@@ -259,7 +283,9 @@ export function SchedulePanel({
       cancelForm();
       await onSaved();
     } catch (cause) {
-      onError(cause instanceof Error ? cause.message : "Unable to save schedule");
+      if (!applyApiFieldErrors(cause, setFieldErrors)) {
+        onError(cause instanceof Error ? cause.message : "Unable to save schedule");
+      }
     } finally {
       setSaving(false);
     }
@@ -481,10 +507,12 @@ export function SchedulePanel({
                     Exam <span className="text-rose-500">*</span>
                   </span>
                   <select
-                    className="nx-input"
-                    required
+                    className={`nx-input${fieldErrors.examId ? " is-invalid" : ""}`}
                     value={form.examId}
-                    onChange={(event) => setForm({ ...form, examId: event.target.value })}
+                    onChange={(event) => {
+                      setFieldErrors((prev) => clearFieldError(prev, "examId"));
+                      setForm({ ...form, examId: event.target.value });
+                    }}
                   >
                     <option value="">Select exam</option>
                     {exams
@@ -495,18 +523,19 @@ export function SchedulePanel({
                         </option>
                       ))}
                   </select>
+                  <FieldError error={fieldErrors.examId} />
                 </label>
                 <label className="xl:col-span-2">
                   <span className="nx-label">
                     Class / Section <span className="text-rose-500">*</span>
                   </span>
                   <select
-                    className="nx-input"
-                    required
+                    className={`nx-input${fieldErrors.classSectionId ? " is-invalid" : ""}`}
                     value={form.classSectionId}
-                    onChange={(event) =>
-                      setForm({ ...form, classSectionId: event.target.value, classSubjectId: "" })
-                    }
+                    onChange={(event) => {
+                      setFieldErrors((prev) => clearFieldError(prev, "classSectionId"));
+                      setForm({ ...form, classSectionId: event.target.value, classSubjectId: "" });
+                    }}
                   >
                     <option value="">Select class section</option>
                     {setup.classSections.map((item) => (
@@ -515,16 +544,19 @@ export function SchedulePanel({
                       </option>
                     ))}
                   </select>
+                  <FieldError error={fieldErrors.classSectionId} />
                 </label>
                 <label className="xl:col-span-2">
                   <span className="nx-label">
                     Subject <span className="text-rose-500">*</span>
                   </span>
                   <select
-                    className="nx-input"
-                    required
+                    className={`nx-input${fieldErrors.classSubjectId ? " is-invalid" : ""}`}
                     value={form.classSubjectId}
-                    onChange={(event) => setForm({ ...form, classSubjectId: event.target.value })}
+                    onChange={(event) => {
+                      setFieldErrors((prev) => clearFieldError(prev, "classSubjectId"));
+                      setForm({ ...form, classSubjectId: event.target.value });
+                    }}
                   >
                     <option value="">Select subject</option>
                     {availableSubjects.map((item) => (
@@ -533,6 +565,7 @@ export function SchedulePanel({
                       </option>
                     ))}
                   </select>
+                  <FieldError error={fieldErrors.classSubjectId} />
                 </label>
               </>
             ) : (
@@ -548,36 +581,45 @@ export function SchedulePanel({
                 Date <span className="text-rose-500">*</span>
               </span>
               <input
-                className="nx-input"
+                className={`nx-input${fieldErrors.examDate ? " is-invalid" : ""}`}
                 type="date"
-                required
                 value={form.examDate}
-                onChange={(event) => setForm({ ...form, examDate: event.target.value })}
+                onChange={(event) => {
+                  setFieldErrors((prev) => clearFieldError(prev, "examDate"));
+                  setForm({ ...form, examDate: event.target.value });
+                }}
               />
+              <FieldError error={fieldErrors.examDate} />
             </label>
             <label>
               <span className="nx-label">
                 Time From <span className="text-rose-500">*</span>
               </span>
               <input
-                className="nx-input"
+                className={`nx-input${fieldErrors.startTime ? " is-invalid" : ""}`}
                 type="time"
-                required
                 value={form.startTime}
-                onChange={(event) => setForm({ ...form, startTime: event.target.value })}
+                onChange={(event) => {
+                  setFieldErrors((prev) => clearFieldError(prev, "startTime"));
+                  setForm({ ...form, startTime: event.target.value });
+                }}
               />
+              <FieldError error={fieldErrors.startTime} />
             </label>
             <label>
               <span className="nx-label">
                 Time To <span className="text-rose-500">*</span>
               </span>
               <input
-                className="nx-input"
+                className={`nx-input${fieldErrors.endTime ? " is-invalid" : ""}`}
                 type="time"
-                required
                 value={form.endTime}
-                onChange={(event) => setForm({ ...form, endTime: event.target.value })}
+                onChange={(event) => {
+                  setFieldErrors((prev) => clearFieldError(prev, "endTime"));
+                  setForm({ ...form, endTime: event.target.value });
+                }}
               />
+              <FieldError error={fieldErrors.endTime} />
             </label>
             <label>
               <span className="nx-label">Duration</span>
@@ -615,26 +657,32 @@ export function SchedulePanel({
                 Max Marks <span className="text-rose-500">*</span>
               </span>
               <input
-                className="nx-input"
+                className={`nx-input${fieldErrors.maximumMarks ? " is-invalid" : ""}`}
                 type="number"
                 min="1"
-                required
                 value={form.maximumMarks}
-                onChange={(event) => setForm({ ...form, maximumMarks: event.target.value })}
+                onChange={(event) => {
+                  setFieldErrors((prev) => clearFieldError(prev, "maximumMarks"));
+                  setForm({ ...form, maximumMarks: event.target.value });
+                }}
               />
+              <FieldError error={fieldErrors.maximumMarks} />
             </label>
             <label>
               <span className="nx-label">
                 Min Marks <span className="text-rose-500">*</span>
               </span>
               <input
-                className="nx-input"
+                className={`nx-input${fieldErrors.minimumMarks ? " is-invalid" : ""}`}
                 type="number"
                 min="0"
-                required
                 value={form.minimumMarks}
-                onChange={(event) => setForm({ ...form, minimumMarks: event.target.value })}
+                onChange={(event) => {
+                  setFieldErrors((prev) => clearFieldError(prev, "minimumMarks"));
+                  setForm({ ...form, minimumMarks: event.target.value });
+                }}
               />
+              <FieldError error={fieldErrors.minimumMarks} />
             </label>
             {!editing ? (
               <label>

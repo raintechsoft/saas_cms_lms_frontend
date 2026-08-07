@@ -19,6 +19,12 @@ import { useState, type FormEvent } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import { isPlatformUser } from "../../components/AppShell";
+import {
+  applyApiFieldErrors,
+  clearFieldError,
+  type FieldErrors,
+  validateEmail,
+} from "../../lib/formErrors";
 import { notifyError, notifySuccess } from "../../lib/notify";
 import { saColors } from "../../theme/superAdminTheme";
 import { SuperAdminThemeProvider } from "./SuperAdminThemeProvider";
@@ -37,6 +43,7 @@ function SuperAdminLoginInner() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [submitting, setSubmitting] = useState(false);
 
   if (isAuthenticated && user && isPlatformUser(user.permissions)) {
@@ -46,13 +53,22 @@ function SuperAdminLoginInner() {
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
+    const next: FieldErrors = {};
+    const emailErr = validateEmail(email);
+    if (emailErr) next.email = emailErr;
+    if (!password.trim()) next.password = "Password is required";
+    setFieldErrors(next);
+    if (Object.keys(next).length) return;
+
     setSubmitting(true);
     try {
       await login({ email: email.trim(), password });
       notifySuccess("Signed in to Super Admin");
       navigate("/admin/dashboard", { replace: true });
     } catch (cause) {
-      notifyError(cause instanceof Error ? cause.message : "Unable to sign in");
+      if (!applyApiFieldErrors(cause, setFieldErrors)) {
+        notifyError(cause instanceof Error ? cause.message : "Unable to sign in");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -123,9 +139,13 @@ function SuperAdminLoginInner() {
             autoComplete="username"
             placeholder="admin@your-platform.com"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            sx={{ mb: 2 }}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              setFieldErrors((prev) => clearFieldError(prev, "email"));
+            }}
+            error={Boolean(fieldErrors.email)}
+            helperText={fieldErrors.email}
+            sx={{ mb: fieldErrors.email ? 1 : 2 }}
           />
 
           <Stack direction="row" justifyContent="space-between" alignItems="center" mb={0.5}>
@@ -148,8 +168,12 @@ function SuperAdminLoginInner() {
             autoComplete="current-password"
             type={showPassword ? "text" : "password"}
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
+            onChange={(e) => {
+              setPassword(e.target.value);
+              setFieldErrors((prev) => clearFieldError(prev, "password"));
+            }}
+            error={Boolean(fieldErrors.password)}
+            helperText={fieldErrors.password}
             placeholder="Enter your password"
             InputProps={{
               endAdornment: (
@@ -174,7 +198,7 @@ function SuperAdminLoginInner() {
             fullWidth
             variant="contained"
             size="large"
-            disabled={submitting || !email.trim() || !password}
+            disabled={submitting}
             startIcon={<LockOutlined />}
             sx={{
               py: 1.35,

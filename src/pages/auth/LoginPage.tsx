@@ -11,6 +11,14 @@ import { isPlatformUser, isPortalUser } from "../../components/AppShell";
 import { getAuthConfig, loginWithMsg91Otp, requestLoginOtp, verifyLoginOtp } from "../../lib/api";
 import { verifyWithMsg91Widget } from "../../lib/msg91Otp";
 import { notifyError, notifyInfo, notifySuccess } from "../../lib/notify";
+import {
+  applyApiFieldErrors,
+  clearFieldError,
+  type FieldErrors,
+  validateEmail,
+  validateRequired,
+} from "../../lib/formErrors";
+import { FieldError } from "../../components/forms/Field";
 
 
 
@@ -117,6 +125,8 @@ export function LoginPage() {
 
   const [showPassword, setShowPassword] = useState(false);
 
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+
   const [tenantSlug, setTenantSlug] = useState(searchParams.get("tenant") ?? "demo-school");
 
   const [otpCode, setOtpCode] = useState("");
@@ -196,6 +206,40 @@ export function LoginPage() {
 
     event.preventDefault();
 
+    const emailErr = validateEmail(email);
+
+    const next = validateRequired(
+
+      { tenantSlug: tenantSlug.trim(), email: email.trim(), password },
+
+      [
+
+        { key: "tenantSlug", label: "Workspace slug" },
+
+        {
+
+          key: "email",
+
+          label: "Email",
+
+          test: () => !emailErr,
+
+          message: emailErr ?? "Email is required",
+
+        },
+
+        { key: "password", label: "Password" },
+
+      ],
+
+    );
+
+    if (emailErr) next.email = emailErr;
+
+    setFieldErrors(next);
+
+    if (Object.keys(next).length) return;
+
     setSubmitting(true);
 
     try {
@@ -216,7 +260,11 @@ export function LoginPage() {
 
     } catch (cause) {
 
-      notifyError(cause instanceof Error ? cause.message : "Unable to sign in");
+      if (!applyApiFieldErrors(cause, setFieldErrors)) {
+
+        notifyError(cause instanceof Error ? cause.message : "Unable to sign in");
+
+      }
 
     } finally {
 
@@ -409,6 +457,8 @@ export function LoginPage() {
 
     setPassword("");
 
+    setFieldErrors({});
+
     setTenantSlug("demo-school");
 
     setAuthMethod("password");
@@ -597,19 +647,27 @@ export function LoginPage() {
 
                   <input
 
-                    className="field"
+                    className={`field${fieldErrors.tenantSlug ? " is-invalid" : ""}`}
 
                     value={tenantSlug}
 
-                    onChange={(event) => setTenantSlug(event.target.value)}
+                    onChange={(event) => {
+
+                      setTenantSlug(event.target.value);
+
+                      setFieldErrors((prev) => clearFieldError(prev, "tenantSlug"));
+
+                    }}
 
                     placeholder="your-school-slug"
 
                     autoComplete="organization"
 
-                    required
-
                   />
+
+                  <FieldError error={fieldErrors.tenantSlug} />
+
+                  {!fieldErrors.tenantSlug ? (
 
                   <span className="mt-2 block text-xs text-slate-500">
 
@@ -621,6 +679,8 @@ export function LoginPage() {
 
                   </span>
 
+                  ) : null}
+
                 </label>
 
                 <label className="block">
@@ -629,23 +689,29 @@ export function LoginPage() {
 
                   <input
 
-                    className="field"
+                    className={`field${fieldErrors.email ? " is-invalid" : ""}`}
 
                     type="email"
 
                     value={email}
 
-                    onChange={(event) => setEmail(event.target.value)}
+                    onChange={(event) => {
+
+                      setEmail(event.target.value);
+
+                      setFieldErrors((prev) => clearFieldError(prev, "email"));
+
+                    }}
 
                     placeholder={selectedLogin.email}
 
                     autoComplete="username"
 
-                    required
-
                     autoFocus
 
                   />
+
+                  <FieldError error={fieldErrors.email} />
 
                 </label>
 
@@ -727,21 +793,27 @@ export function LoginPage() {
 
                       <input
 
-                        className="field"
+                        className={`field${fieldErrors.password ? " is-invalid" : ""}`}
 
                         type={showPassword ? "text" : "password"}
 
                         value={password}
 
-                        onChange={(event) => setPassword(event.target.value)}
+                        onChange={(event) => {
+
+                          setPassword(event.target.value);
+
+                          setFieldErrors((prev) => clearFieldError(prev, "password"));
+
+                        }}
 
                         autoComplete="current-password"
 
                         minLength={8}
 
-                        required
-
                       />
+
+                      <FieldError error={fieldErrors.password} />
 
                     </label>
 

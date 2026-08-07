@@ -10,8 +10,15 @@ import {
   LayersOutlined,
 } from "@mui/icons-material";
 import { ListPagination, paginateItems } from "../../../components/ListPagination";
+import { FieldError } from "../../../components/forms/Field";
 import { confirmDelete } from "../../../lib/confirm";
 import { apiRequest } from "../../../lib/api";
+import {
+  applyApiFieldErrors,
+  clearFieldError,
+  type FieldErrors,
+  validateRequired,
+} from "../../../lib/formErrors";
 import { notifySuccess } from "../../../lib/notify";
 import type {
   FeeGroup,
@@ -85,6 +92,7 @@ export function SetupPanel({
 }) {
   const [subTab, setSubTab] = useState<"types" | "groups" | "masters" | "books">("types");
   const [saving, setSaving] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
 
   const [typeName, setTypeName] = useState("");
   const [typeCode, setTypeCode] = useState("");
@@ -176,10 +184,14 @@ export function SetupPanel({
     setGroupTypeIds((current) =>
       current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
     );
+    setFieldErrors((prev) => clearFieldError(prev, "feeTypeIds"));
   }
 
   async function addFeeType(event: FormEvent) {
     event.preventDefault();
+    const errors = validateRequired({ typeName }, [{ key: "typeName", label: "Fee name" }]);
+    setFieldErrors(errors);
+    if (Object.keys(errors).length) return;
     setSaving(true);
     try {
       await apiRequest("/fees/types", token, {
@@ -188,10 +200,13 @@ export function SetupPanel({
       });
       setTypeName("");
       setTypeCode("");
+      setFieldErrors({});
       notifySuccess("Fee type created");
       await onSaved();
     } catch (cause) {
-      onError(cause instanceof Error ? cause.message : "Unable to create fee type");
+      if (!applyApiFieldErrors(cause, setFieldErrors, { name: "typeName" })) {
+        onError(cause instanceof Error ? cause.message : "Unable to create fee type");
+      }
     } finally {
       setSaving(false);
     }
@@ -219,11 +234,12 @@ export function SetupPanel({
 
   async function saveGroup(event: FormEvent) {
     event.preventDefault();
-    if (!groupName.trim()) return;
+    const errors = validateRequired({ groupName }, [{ key: "groupName", label: "Class group name" }]);
     if (!groupTypeIds.length) {
-      onError("Select at least one fee type");
-      return;
+      errors.feeTypeIds = "Select at least one fee type";
     }
+    setFieldErrors(errors);
+    if (Object.keys(errors).length) return;
     setSaving(true);
     try {
       const payload = { name: groupName.trim(), feeTypeIds: groupTypeIds };
@@ -239,11 +255,14 @@ export function SetupPanel({
         });
       }
       resetGroupForm();
+      setFieldErrors({});
       setGroupPage(1);
       notifySuccess(editingGroupId ? "Fees class group updated" : "Fees class group saved");
       await onSaved();
     } catch (cause) {
-      onError(cause instanceof Error ? cause.message : "Unable to save fees class group");
+      if (!applyApiFieldErrors(cause, setFieldErrors, { name: "groupName", feeTypeIds: "feeTypeIds" })) {
+        onError(cause instanceof Error ? cause.message : "Unable to save fees class group");
+      }
     } finally {
       setSaving(false);
     }
@@ -382,26 +401,36 @@ export function SetupPanel({
       onError("No current academic session configured");
       return;
     }
-    if (!master.feeGroupId || !master.feeTypeId) {
-      onError("Select fees class group and fee type");
-      return;
-    }
+    const errors = validateRequired(
+      { feeGroupId: master.feeGroupId, feeTypeId: master.feeTypeId, amount: master.amount },
+      [
+        { key: "feeGroupId", label: "Fees class group" },
+        { key: "feeTypeId", label: "Fee type" },
+        {
+          key: "amount",
+          label: "Amount",
+          test: (value) => value != null && Number(value) > 0,
+          message: "Enter a valid amount",
+        },
+      ],
+    );
     if (master.fineUi === "FIXED") {
       if (!finePenalties.length) {
-        onError("Add at least one fine range or every-day penalty");
-        return;
+        errors.finePenalties = "Add at least one fine range or every-day penalty";
       }
       for (const row of finePenalties) {
         if (!row.amount || Number(row.amount) < 0) {
-          onError("Enter a valid fine amount for each penalty row");
-          return;
+          errors.finePenalties = "Enter a valid fine amount for each penalty row";
+          break;
         }
         if (!row.startDate || (row.kind === "RANGE" && !row.endDate) || (row.kind === "EVERY_DAY" && !row.endDate)) {
-          onError("Complete dates for each fine penalty row");
-          return;
+          errors.finePenalties = "Complete dates for each fine penalty row";
+          break;
         }
       }
     }
+    setFieldErrors(errors);
+    if (Object.keys(errors).length) return;
     setSaving(true);
     try {
       const fineRanges =
@@ -438,11 +467,14 @@ export function SetupPanel({
         });
       }
       resetMasterForm();
+      setFieldErrors({});
       setMasterPage(1);
       notifySuccess(editingMasterId ? "Fee master updated" : "Fee master saved");
       await onSaved();
     } catch (cause) {
-      onError(cause instanceof Error ? cause.message : "Unable to save fee master");
+      if (!applyApiFieldErrors(cause, setFieldErrors)) {
+        onError(cause instanceof Error ? cause.message : "Unable to save fee master");
+      }
     } finally {
       setSaving(false);
     }
@@ -569,10 +601,15 @@ export function SetupPanel({
   async function saveBook(event: FormEvent) {
     event.preventDefault();
     const nextNumber = Number(bookForm.nextNumber);
-    if (!bookForm.name.trim() || !bookForm.prefix.trim() || !Number.isInteger(nextNumber) || nextNumber < 1) {
-      onError("Enter a valid name, prefix, and starting number");
-      return;
+    const errors = validateRequired({ bookName: bookForm.name, prefix: bookForm.prefix }, [
+      { key: "bookName", label: "Book name" },
+      { key: "prefix", label: "Prefix" },
+    ]);
+    if (!Number.isInteger(nextNumber) || nextNumber < 1) {
+      errors.nextNumber = "Enter a valid starting number (1 or greater)";
     }
+    setFieldErrors(errors);
+    if (Object.keys(errors).length) return;
     setSaving(true);
     try {
       const body = {
@@ -595,9 +632,12 @@ export function SetupPanel({
         notifySuccess("Receipt book created");
       }
       resetBookForm();
+      setFieldErrors({});
       await onSaved();
     } catch (cause) {
-      onError(cause instanceof Error ? cause.message : "Unable to save receipt book");
+      if (!applyApiFieldErrors(cause, setFieldErrors, { name: "bookName" })) {
+        onError(cause instanceof Error ? cause.message : "Unable to save receipt book");
+      }
     } finally {
       setSaving(false);
     }
@@ -635,7 +675,10 @@ export function SetupPanel({
             key={key}
             type="button"
             className={`px-3.5 text-[13.5px] font-semibold transition-colors ${subTabClass(subTab === key)}`}
-            onClick={() => setSubTab(key)}
+            onClick={() => {
+              setSubTab(key);
+              setFieldErrors({});
+            }}
           >
             {label}
           </button>
@@ -651,12 +694,15 @@ export function SetupPanel({
             </p>
             <label className="nx-label mt-5">Fee name</label>
             <input
-              className="nx-input"
+              className={`nx-input${fieldErrors.typeName ? " is-invalid" : ""}`}
               placeholder="e.g. Tuition Fee"
-              required
               value={typeName}
-              onChange={(e) => setTypeName(e.target.value)}
+              onChange={(e) => {
+                setTypeName(e.target.value);
+                setFieldErrors((prev) => clearFieldError(prev, "typeName"));
+              }}
             />
+            <FieldError error={fieldErrors.typeName} />
             <label className="nx-label mt-4">Fee code</label>
             <input
               className="nx-input"
@@ -755,12 +801,15 @@ export function SetupPanel({
 
             <label className="nx-label mt-5">Class Group Name</label>
             <input
-              className="nx-input"
+              className={`nx-input${fieldErrors.groupName ? " is-invalid" : ""}`}
               placeholder="e.g. Class 10-New"
-              required
               value={groupName}
-              onChange={(e) => setGroupName(e.target.value)}
+              onChange={(e) => {
+                setGroupName(e.target.value);
+                setFieldErrors((prev) => clearFieldError(prev, "groupName"));
+              }}
             />
+            <FieldError error={fieldErrors.groupName} />
             <p className="mt-1.5 text-[12px] leading-5 text-slate-500">
               Use the same class name as Academics (e.g. Class 1). Add -New or -Old when fee
               structure differs (Class 1-New / Class 1-Old). Use -New when there is only one
@@ -768,7 +817,11 @@ export function SetupPanel({
             </p>
 
             <label className="nx-label mt-4">Select Fee Types</label>
-            <div className="mt-2 max-h-56 space-y-2 overflow-y-auto rounded-lg border border-slate-200 bg-white p-3">
+            <div
+              className={`mt-2 max-h-56 space-y-2 overflow-y-auto rounded-lg border bg-white p-3 ${
+                fieldErrors.feeTypeIds ? "border-rose-300" : "border-slate-200"
+              }`}
+            >
               {setup.types.map((item) => {
                 const checked = groupTypeIds.includes(item.id);
                 return (
@@ -787,6 +840,7 @@ export function SetupPanel({
                 <p className="text-[13px] text-slate-500">Create fee types first.</p>
               ) : null}
             </div>
+            <FieldError error={fieldErrors.feeTypeIds} />
 
             <button className="nx-btn-primary mt-5 w-full !py-2.5" type="submit" disabled={saving}>
               <AddOutlined sx={{ fontSize: 16 }} />
@@ -916,10 +970,12 @@ export function SetupPanel({
 
               <label className="nx-label mt-5">Fees Class Group</label>
               <select
-                className="nx-input"
+                className={`nx-input${fieldErrors.feeGroupId ? " is-invalid" : ""}`}
                 value={master.feeGroupId}
-                onChange={(e) => setMaster({ ...master, feeGroupId: e.target.value, feeTypeId: "" })}
-                required
+                onChange={(e) => {
+                  setMaster({ ...master, feeGroupId: e.target.value, feeTypeId: "" });
+                  setFieldErrors((prev) => clearFieldError(prev, "feeGroupId"));
+                }}
               >
                 <option value="">Select class group</option>
                 {setup.groups.map((group) => (
@@ -928,13 +984,16 @@ export function SetupPanel({
                   </option>
                 ))}
               </select>
+              <FieldError error={fieldErrors.feeGroupId} />
 
               <label className="nx-label mt-4">Fee Type</label>
               <select
-                className="nx-input"
+                className={`nx-input${fieldErrors.feeTypeId ? " is-invalid" : ""}`}
                 value={master.feeTypeId}
-                onChange={(e) => setMaster({ ...master, feeTypeId: e.target.value })}
-                required
+                onChange={(e) => {
+                  setMaster({ ...master, feeTypeId: e.target.value });
+                  setFieldErrors((prev) => clearFieldError(prev, "feeTypeId"));
+                }}
               >
                 <option value="">Select Fee Type</option>
                 {selectedGroupTypes.map((item) => (
@@ -943,6 +1002,7 @@ export function SetupPanel({
                   </option>
                 ))}
               </select>
+              <FieldError error={fieldErrors.feeTypeId} />
 
               <label className="nx-label mt-4">Class Section (optional)</label>
               <select
@@ -969,15 +1029,18 @@ export function SetupPanel({
 
               <label className="nx-label mt-4">Amount (₹)</label>
               <input
-                className="nx-input"
+                className={`nx-input${fieldErrors.amount ? " is-invalid" : ""}`}
                 type="number"
                 min="0.01"
                 step="0.01"
                 placeholder="0.00"
                 value={master.amount}
-                onChange={(e) => setMaster({ ...master, amount: e.target.value })}
-                required
+                onChange={(e) => {
+                  setMaster({ ...master, amount: e.target.value });
+                  setFieldErrors((prev) => clearFieldError(prev, "amount"));
+                }}
               />
+              <FieldError error={fieldErrors.amount} />
 
               <p className="nx-label mt-4">Fine Type</p>
               <div className="mt-2 grid gap-2 sm:grid-cols-2">
@@ -1015,6 +1078,7 @@ export function SetupPanel({
 
               {master.fineUi === "FIXED" ? (
                 <div className="mt-3 space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <FieldError error={fieldErrors.finePenalties} />
                   <p className="text-[12px] leading-5 text-slate-500">
                     Add Range (same fine between dates) and/or Every day (fine increases daily until a date).
                   </p>
@@ -1430,29 +1494,38 @@ export function SetupPanel({
             </p>
             <label className="nx-label mt-5">Book name</label>
             <input
-              className="nx-input"
-              required
+              className={`nx-input${fieldErrors.bookName ? " is-invalid" : ""}`}
               placeholder="Main"
               value={bookForm.name}
-              onChange={(e) => setBookForm({ ...bookForm, name: e.target.value })}
+              onChange={(e) => {
+                setBookForm({ ...bookForm, name: e.target.value });
+                setFieldErrors((prev) => clearFieldError(prev, "bookName"));
+              }}
             />
+            <FieldError error={fieldErrors.bookName} />
             <label className="nx-label mt-4">Prefix</label>
             <input
-              className="nx-input"
-              required
+              className={`nx-input${fieldErrors.prefix ? " is-invalid" : ""}`}
               placeholder="RCPT-"
               value={bookForm.prefix}
-              onChange={(e) => setBookForm({ ...bookForm, prefix: e.target.value })}
+              onChange={(e) => {
+                setBookForm({ ...bookForm, prefix: e.target.value });
+                setFieldErrors((prev) => clearFieldError(prev, "prefix"));
+              }}
             />
+            <FieldError error={fieldErrors.prefix} />
             <label className="nx-label mt-4">Next number</label>
             <input
-              className="nx-input"
+              className={`nx-input${fieldErrors.nextNumber ? " is-invalid" : ""}`}
               type="number"
               min={1}
-              required
               value={bookForm.nextNumber}
-              onChange={(e) => setBookForm({ ...bookForm, nextNumber: e.target.value })}
+              onChange={(e) => {
+                setBookForm({ ...bookForm, nextNumber: e.target.value });
+                setFieldErrors((prev) => clearFieldError(prev, "nextNumber"));
+              }}
             />
+            <FieldError error={fieldErrors.nextNumber} />
             <p className="mt-1 text-[12px] text-slate-500">
               Next receipt preview: {bookForm.prefix}
               {String(Number(bookForm.nextNumber) || 1).padStart(6, "0")}

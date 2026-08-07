@@ -32,7 +32,14 @@ import { useAuth } from "../../auth/AuthContext";
 import { CmsFooter, CmsPage, CmsPageHeader, CmsScrollBody } from "../../components/cms/CmsLayout";
 import { CmsIconTabs, type CmsIconTabItem } from "../../components/cms/CmsIconTabs";
 import { InitialsAvatar } from "../../components/InitialsAvatar";
+import { FieldError } from "../../components/forms/Field";
 import { apiRequest, assetUrl } from "../../lib/api";
+import {
+  applyApiFieldErrors,
+  clearFieldError,
+  type FieldErrors,
+  validateRequired,
+} from "../../lib/formErrors";
 import { notifyError, notifySuccess } from "../../lib/notify";
 
 type AttendanceStatus = "PRESENT" | "LATE" | "ABSENT" | "HALF_DAY" | "HOLIDAY";
@@ -1672,6 +1679,7 @@ function LeavePanel({
     fileName: "",
     attachmentUrl: "" as string,
   });
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
 
   const classes = useMemo(() => {
     const map = new Map<string, string>();
@@ -1805,14 +1813,27 @@ function LeavePanel({
 
   async function saveLeave(event: FormEvent) {
     event.preventDefault();
-    if (!form.studentEnrollmentId) {
-      onError("Select a student");
-      return;
-    }
-    if (form.reason.trim().length < 3) {
-      onError("Reason must be at least 3 characters");
-      return;
-    }
+    const next = validateRequired(
+      {
+        studentEnrollmentId: form.studentEnrollmentId,
+        fromDate: form.fromDate,
+        toDate: form.toDate,
+        reason: form.reason,
+      },
+      [
+        { key: "studentEnrollmentId", label: "Student" },
+        { key: "fromDate", label: "From date" },
+        { key: "toDate", label: "To date" },
+        {
+          key: "reason",
+          label: "Reason",
+          test: (value) => typeof value === "string" && value.trim().length >= 3,
+          message: "Reason must be at least 3 characters",
+        },
+      ],
+    );
+    setFieldErrors(next);
+    if (Object.keys(next).length) return;
     setSaving(true);
     try {
       await apiRequest("/attendance/leaves", token, {
@@ -1840,10 +1861,13 @@ function LeavePanel({
       });
       setStudentQuery("");
       setStudentResults([]);
+      setFieldErrors({});
       await loadLeaves(appliedStatus);
       await onSaved();
     } catch (cause) {
-      onError(cause instanceof Error ? cause.message : "Unable to create leave request");
+      if (!applyApiFieldErrors(cause, setFieldErrors)) {
+        onError(cause instanceof Error ? cause.message : "Unable to create leave request");
+      }
     } finally {
       setSaving(false);
     }
@@ -1888,7 +1912,10 @@ function LeavePanel({
           <button
             type="button"
             className="nx-btn-primary h-[42px]"
-            onClick={() => setDrawerOpen(true)}
+            onClick={() => {
+              setFieldErrors({});
+              setDrawerOpen(true);
+            }}
           >
             <AddOutlined sx={{ fontSize: 18 }} />
             Add leave manually
@@ -2079,15 +2106,17 @@ function LeavePanel({
                       className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-slate-400"
                     />
                     <input
-                      className="nx-input pl-10"
+                      className={`nx-input pl-10${fieldErrors.studentEnrollmentId ? " is-invalid" : ""}`}
                       placeholder="Search student by name or roll no."
                       value={form.studentLabel || studentQuery}
                       onChange={(e) => {
+                        setFieldErrors((prev) => clearFieldError(prev, "studentEnrollmentId"));
                         setForm((prev) => ({ ...prev, studentEnrollmentId: "", studentLabel: "" }));
                         void searchStudents(e.target.value);
                       }}
                     />
                   </div>
+                  <FieldError error={fieldErrors.studentEnrollmentId} />
                   {searchingStudents ? (
                     <p className="mt-1 text-[12px] text-slate-400">Searching…</p>
                   ) : null}
@@ -2099,6 +2128,7 @@ function LeavePanel({
                           type="button"
                           className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-slate-50"
                           onClick={() => {
+                            setFieldErrors((prev) => clearFieldError(prev, "studentEnrollmentId"));
                             setForm((prev) => ({
                               ...prev,
                               studentEnrollmentId: item.enrollmentId,
@@ -2125,20 +2155,27 @@ function LeavePanel({
                   </span>
                   <div className="mt-1 grid grid-cols-2 gap-2">
                     <input
-                      className="nx-input"
+                      className={`nx-input${fieldErrors.fromDate ? " is-invalid" : ""}`}
                       type="date"
                       required
                       value={form.fromDate}
-                      onChange={(e) => setForm({ ...form, fromDate: e.target.value })}
+                      onChange={(e) => {
+                        setFieldErrors((prev) => clearFieldError(prev, "fromDate"));
+                        setForm({ ...form, fromDate: e.target.value });
+                      }}
                     />
                     <input
-                      className="nx-input"
+                      className={`nx-input${fieldErrors.toDate ? " is-invalid" : ""}`}
                       type="date"
                       required
                       value={form.toDate}
-                      onChange={(e) => setForm({ ...form, toDate: e.target.value })}
+                      onChange={(e) => {
+                        setFieldErrors((prev) => clearFieldError(prev, "toDate"));
+                        setForm({ ...form, toDate: e.target.value });
+                      }}
                     />
                   </div>
+                  <FieldError error={fieldErrors.fromDate ?? fieldErrors.toDate} />
                 </div>
 
                 <label className="block">
@@ -2146,13 +2183,17 @@ function LeavePanel({
                     Reason <span className="text-rose-500">*</span>
                   </span>
                   <textarea
-                    className="nx-input min-h-[110px]"
+                    className={`nx-input min-h-[110px]${fieldErrors.reason ? " is-invalid" : ""}`}
                     required
                     maxLength={250}
                     placeholder="Enter leave reason"
                     value={form.reason}
-                    onChange={(e) => setForm({ ...form, reason: e.target.value })}
+                    onChange={(e) => {
+                      setFieldErrors((prev) => clearFieldError(prev, "reason"));
+                      setForm({ ...form, reason: e.target.value });
+                    }}
                   />
+                  <FieldError error={fieldErrors.reason} />
                   <p className="mt-1 text-right text-[11px] text-slate-400">{form.reason.length}/250</p>
                 </label>
 

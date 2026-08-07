@@ -64,12 +64,20 @@ export interface DashboardResult {
   };
 }
 
+import { ApiError, type ZodIssueLike } from "./formErrors";
+
+export { ApiError, isApiError } from "./formErrors";
+
 interface ApiEnvelope<T> {
   data: T;
 }
 
 interface ApiFailure {
-  error?: { message?: string };
+  error?: {
+    message?: string;
+    code?: string;
+    details?: ZodIssueLike[];
+  };
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -87,17 +95,21 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     try {
       body = JSON.parse(text) as ApiEnvelope<T> & ApiFailure;
     } catch {
-      throw new Error("Server returned an invalid response");
+      throw new ApiError("Server returned an invalid response", { status: response.status });
     }
   }
   if (!response.ok) {
-    throw new Error(body?.error?.message ?? `Request failed (${response.status})`);
+    throw new ApiError(body?.error?.message ?? `Request failed (${response.status})`, {
+      code: body?.error?.code,
+      details: body?.error?.details,
+      status: response.status,
+    });
   }
   if (response.status === 204 || !text) {
     return undefined as T;
   }
   if (!body?.data) {
-    throw new Error("Server returned an empty response");
+    throw new ApiError("Server returned an empty response", { status: response.status });
   }
   return body.data;
 }

@@ -14,8 +14,16 @@ import { useAuth } from "../../auth/AuthContext";
 import { CmsFooter, CmsPage, CmsPageHeader } from "../../components/cms/CmsLayout";
 import { CmsIconTabs } from "../../components/cms/CmsIconTabs";
 import { InitialsAvatar } from "../../components/InitialsAvatar";
+import { FieldError } from "../../components/forms/Field";
 import { confirmDelete } from "../../lib/confirm";
 import { apiRequest } from "../../lib/api";
+import {
+  applyApiFieldErrors,
+  clearFieldError,
+  type FieldErrors,
+  validateEmail,
+  validateRequired,
+} from "../../lib/formErrors";
 import { notifyError, notifySuccess } from "../../lib/notify";
 
 interface Permission {
@@ -506,8 +514,10 @@ function UserForm({
     status: initial?.status ?? "ACTIVE",
   });
   const [saving, setSaving] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
 
   useEffect(() => {
+    setFieldErrors({});
     setForm({
       firstName: initial?.firstName ?? "",
       lastName: initial?.lastName ?? "",
@@ -521,10 +531,25 @@ function UserForm({
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (form.phone.replace(/\D/g, "").length < 10) {
-      onError("A valid mobile number is required");
-      return;
-    }
+    const emailErr = validateEmail(form.email);
+    const rules = [
+      { key: "firstName", label: "First name" },
+      { key: "roleId", label: "Role" },
+      ...(isEdit
+        ? []
+        : [
+            {
+              key: "password",
+              label: "Password",
+              test: (value: unknown) => typeof value === "string" && value.trim().length >= 8,
+              message: "Password must be at least 8 characters",
+            },
+          ]),
+    ];
+    const next = validateRequired(form, rules);
+    if (emailErr) next.email = emailErr;
+    setFieldErrors(next);
+    if (Object.keys(next).length) return;
     setSaving(true);
     try {
       if (isEdit && initial) {
@@ -557,7 +582,9 @@ function UserForm({
       notifySuccess(isEdit ? "User updated" : "User created");
       await onSaved();
     } catch (cause) {
-      onError(cause instanceof Error ? cause.message : `Unable to ${isEdit ? "update" : "create"} user`);
+      if (!applyApiFieldErrors(cause, setFieldErrors, { roleIds: "roleId" })) {
+        onError(cause instanceof Error ? cause.message : `Unable to ${isEdit ? "update" : "create"} user`);
+      }
     } finally {
       setSaving(false);
     }
@@ -574,17 +601,19 @@ function UserForm({
       <label>
         <span className="nx-label">First name</span>
         <input
-          className="nx-input"
-          required
+          className={`nx-input${fieldErrors.firstName ? " is-invalid" : ""}`}
           value={form.firstName}
-          onChange={(e) => setForm({ ...form, firstName: e.target.value })}
+          onChange={(e) => {
+            setFieldErrors((prev) => clearFieldError(prev, "firstName"));
+            setForm({ ...form, firstName: e.target.value });
+          }}
         />
+        <FieldError error={fieldErrors.firstName} />
       </label>
       <label>
         <span className="nx-label">Last name</span>
         <input
           className="nx-input"
-          required
           value={form.lastName}
           onChange={(e) => setForm({ ...form, lastName: e.target.value })}
         />
@@ -592,19 +621,20 @@ function UserForm({
       <label>
         <span className="nx-label">Email</span>
         <input
-          className="nx-input"
+          className={`nx-input${fieldErrors.email ? " is-invalid" : ""}`}
           type="email"
-          required
           value={form.email}
-          onChange={(e) => setForm({ ...form, email: e.target.value })}
+          onChange={(e) => {
+            setFieldErrors((prev) => clearFieldError(prev, "email"));
+            setForm({ ...form, email: e.target.value });
+          }}
         />
+        <FieldError error={fieldErrors.email} />
       </label>
       <label>
         <span className="nx-label">Mobile</span>
         <input
           className="nx-input"
-          required
-          minLength={10}
           value={form.phone}
           onChange={(e) => setForm({ ...form, phone: e.target.value })}
         />
@@ -612,21 +642,25 @@ function UserForm({
       <label>
         <span className="nx-label">{isEdit ? "New password (optional)" : "Password"}</span>
         <input
-          className="nx-input"
+          className={`nx-input${fieldErrors.password ? " is-invalid" : ""}`}
           type="password"
-          minLength={isEdit ? undefined : 8}
-          required={!isEdit}
           value={form.password}
-          onChange={(e) => setForm({ ...form, password: e.target.value })}
+          onChange={(e) => {
+            setFieldErrors((prev) => clearFieldError(prev, "password"));
+            setForm({ ...form, password: e.target.value });
+          }}
         />
+        <FieldError error={fieldErrors.password} />
       </label>
       <label>
         <span className="nx-label">Role</span>
         <select
-          className="nx-input"
-          required
+          className={`nx-input${fieldErrors.roleId ? " is-invalid" : ""}`}
           value={form.roleId}
-          onChange={(e) => setForm({ ...form, roleId: e.target.value })}
+          onChange={(e) => {
+            setFieldErrors((prev) => clearFieldError(prev, "roleId"));
+            setForm({ ...form, roleId: e.target.value });
+          }}
         >
           <option value="">Select role</option>
           {roles.map((role) => (
@@ -635,6 +669,7 @@ function UserForm({
             </option>
           ))}
         </select>
+        <FieldError error={fieldErrors.roleId} />
       </label>
       {isEdit ? (
         <label>

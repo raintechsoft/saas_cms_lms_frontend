@@ -8,7 +8,14 @@ import {
   UndoOutlined,
 } from "@mui/icons-material";
 import { InitialsAvatar } from "../../../components/InitialsAvatar";
+import { FieldError } from "../../../components/forms/Field";
 import { apiRequest, assetUrl } from "../../../lib/api";
+import {
+  applyApiFieldErrors,
+  clearFieldError,
+  type FieldErrors,
+  validateRequired,
+} from "../../../lib/formErrors";
 import { notifySuccess } from "../../../lib/notify";
 import type {
   FeeSetup,
@@ -87,6 +94,8 @@ export function CollectPanel({
   });
   const [submitting, setSubmitting] = useState(false);
   const [revertingId, setRevertingId] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [multiFieldErrors, setMultiFieldErrors] = useState<FieldErrors>({});
 
   const classOptions = useMemo(
     () => [...new Set(setup.classSections.map((cs) => cs.academicClass.name))].sort(),
@@ -187,6 +196,7 @@ export function CollectPanel({
   }
 
   function openCollectModal(assignment: CollectAssignment) {
+    setFieldErrors({});
     setModalAssignment(assignment);
     setModal({
       paymentDate: today,
@@ -202,16 +212,24 @@ export function CollectPanel({
 
   async function submitCollect(event: FormEvent) {
     event.preventDefault();
-    if (!setup.currentSession || !studentId || !modalAssignment) return;
+    if (!setup.currentSession || !modalAssignment) return;
+    const errors: FieldErrors = {
+      ...validateRequired(
+        { studentId, paymentMode: modal.paymentMode },
+        [
+          { key: "studentId", label: "Student" },
+          { key: "paymentMode", label: "Payment mode" },
+        ],
+      ),
+    };
     const amount = Number(modal.amount);
     if (!(amount > 0)) {
-      onError("Enter a valid amount");
-      return;
+      errors.amount = "Enter a valid amount";
+    } else if (amount > modalAssignment.totals.balance + 0.001) {
+      errors.amount = "Amount cannot exceed the outstanding balance";
     }
-    if (amount > modalAssignment.totals.balance + 0.001) {
-      onError("Amount cannot exceed the outstanding balance");
-      return;
-    }
+    setFieldErrors(errors);
+    if (Object.keys(errors).length) return;
     setSubmitting(true);
     try {
       if (modal.discountId && modal.discountId !== (modalAssignment.discount?.id ?? "")) {
@@ -242,10 +260,13 @@ export function CollectPanel({
         }),
       });
       setModalAssignment(null);
+      setFieldErrors({});
       notifySuccess("Fees collected");
       await onSaved(payment);
     } catch (cause) {
-      onError(cause instanceof Error ? cause.message : "Unable to collect payment");
+      if (!applyApiFieldErrors(cause, setFieldErrors)) {
+        onError(cause instanceof Error ? cause.message : "Unable to collect payment");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -264,6 +285,7 @@ export function CollectPanel({
       note: "",
       receiptBookId: defaultReceiptBookId,
     });
+    setMultiFieldErrors({});
     setShowMultiModal(true);
   }
 
@@ -296,7 +318,19 @@ export function CollectPanel({
 
   async function submitMultiCollect(event: FormEvent) {
     event.preventDefault();
-    if (!setup.currentSession || !studentId || !selectedOutstanding.length) return;
+    if (!setup.currentSession || !selectedOutstanding.length) return;
+    const errors = validateRequired(
+      { studentId, paymentMode: multiModal.paymentMode },
+      [
+        { key: "studentId", label: "Student" },
+        { key: "paymentMode", label: "Payment mode" },
+      ],
+    );
+    setMultiFieldErrors(errors);
+    if (errors.studentId) {
+      setFieldErrors({ studentId: errors.studentId });
+    }
+    if (Object.keys(errors).length) return;
     setSubmitting(true);
     try {
       if (multiModal.discountId) {
@@ -351,10 +385,13 @@ export function CollectPanel({
       });
       setShowMultiModal(false);
       setSelectedIds({});
+      setMultiFieldErrors({});
       notifySuccess(`Collected ${items.length} fee head(s) — opening receipt`);
       await onSaved(payment);
     } catch (cause) {
-      onError(cause instanceof Error ? cause.message : "Unable to collect selected fees");
+      if (!applyApiFieldErrors(cause, setMultiFieldErrors)) {
+        onError(cause instanceof Error ? cause.message : "Unable to collect selected fees");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -558,9 +595,12 @@ export function CollectPanel({
           </label>
           <select
             id="collect-student"
-            className="nx-input max-w-lg"
+            className={`nx-input max-w-lg${fieldErrors.studentId ? " is-invalid" : ""}`}
             value={studentId}
-            onChange={(e) => void onStudentChange(e.target.value)}
+            onChange={(e) => {
+              void onStudentChange(e.target.value);
+              setFieldErrors((prev) => clearFieldError(prev, "studentId"));
+            }}
           >
             <option value="">Choose a student to collect fees</option>
             {students.map((student) => (
@@ -569,6 +609,7 @@ export function CollectPanel({
               </option>
             ))}
           </select>
+          <FieldError error={fieldErrors.studentId} />
         </div>
       )}
 
@@ -787,15 +828,18 @@ export function CollectPanel({
               <label>
                 <span className="nx-label">Amount (₹) — partial allowed</span>
                 <input
-                  className="nx-input"
+                  className={`nx-input${fieldErrors.amount ? " is-invalid" : ""}`}
                   type="number"
                   min="0.01"
                   step="0.01"
                   max={modalAssignment.totals.balance}
-                  required
                   value={modal.amount}
-                  onChange={(e) => setModal({ ...modal, amount: e.target.value })}
+                  onChange={(e) => {
+                    setModal({ ...modal, amount: e.target.value });
+                    setFieldErrors((prev) => clearFieldError(prev, "amount"));
+                  }}
                 />
+                <FieldError error={fieldErrors.amount} />
               </label>
               <label>
                 <span className="nx-label">Discount Group</span>
@@ -844,12 +888,12 @@ export function CollectPanel({
               <label>
                 <span className="nx-label">Payment Mode</span>
                 <select
-                  className="nx-input"
-                  required
+                  className={`nx-input${fieldErrors.paymentMode ? " is-invalid" : ""}`}
                   value={modal.paymentMode}
-                  onChange={(e) =>
-                    setModal({ ...modal, paymentMode: e.target.value as PaymentMode })
-                  }
+                  onChange={(e) => {
+                    setModal({ ...modal, paymentMode: e.target.value as PaymentMode });
+                    setFieldErrors((prev) => clearFieldError(prev, "paymentMode"));
+                  }}
                 >
                   {PAYMENT_MODES.map((mode) => (
                     <option key={mode} value={mode}>
@@ -857,6 +901,7 @@ export function CollectPanel({
                     </option>
                   ))}
                 </select>
+                <FieldError error={fieldErrors.paymentMode} />
               </label>
               <label>
                 <span className="nx-label">Receipt book</span>
@@ -979,15 +1024,15 @@ export function CollectPanel({
               <label>
                 <span className="nx-label">Payment Mode</span>
                 <select
-                  className="nx-input"
-                  required
+                  className={`nx-input${multiFieldErrors.paymentMode ? " is-invalid" : ""}`}
                   value={multiModal.paymentMode}
-                  onChange={(e) =>
+                  onChange={(e) => {
                     setMultiModal({
                       ...multiModal,
                       paymentMode: e.target.value as PaymentMode,
-                    })
-                  }
+                    });
+                    setMultiFieldErrors((prev) => clearFieldError(prev, "paymentMode"));
+                  }}
                 >
                   {PAYMENT_MODES.map((mode) => (
                     <option key={mode} value={mode}>
@@ -995,6 +1040,7 @@ export function CollectPanel({
                     </option>
                   ))}
                 </select>
+                <FieldError error={multiFieldErrors.paymentMode} />
               </label>
               <label>
                 <span className="nx-label">Note</span>

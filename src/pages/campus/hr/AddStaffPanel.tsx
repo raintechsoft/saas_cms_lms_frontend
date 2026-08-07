@@ -7,6 +7,14 @@ import {
   KeyOutlined,
 } from "@mui/icons-material";
 import { apiRequest } from "../../../lib/api";
+import { FieldError as FormFieldError } from "../../../components/forms/Field";
+import {
+  applyApiFieldErrors,
+  clearFieldError,
+  type FieldErrors,
+  validateEmail,
+  validateRequired,
+} from "../../../lib/formErrors";
 import { notifyInfo, notifySuccess } from "../../../lib/notify";
 import type { HrSetup } from "./types";
 
@@ -149,6 +157,7 @@ export function AddStaffPanel({
   const [docs, setDocs] = useState<Record<string, FilePayload>>({});
   const [draftSaved, setDraftSaved] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [credentials, setCredentials] = useState<{ email: string; password: string } | null>(
     null,
   );
@@ -185,6 +194,7 @@ export function AddStaffPanel({
   }, [form]);
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
+    setFieldErrors((prev) => clearFieldError(prev, key));
     setForm((current) => ({ ...current, [key]: value }));
   }
 
@@ -236,18 +246,24 @@ export function AddStaffPanel({
   }, [form.basicSalary, payRows]);
 
   async function save() {
-    if (!form.firstName.trim() || !form.lastName.trim() || !form.email.trim()) {
-      onError("First name, last name, and email are required");
-      return;
-    }
-    if (!form.roleCode) {
-      onError("Select a role for the staff member");
-      return;
-    }
-    if (!autoId && !form.employeeNumber.trim()) {
-      onError("Staff ID is required (auto numbering is off)");
-      return;
-    }
+    const emailErr = validateEmail(form.email);
+    const next = validateRequired(
+      {
+        firstName: form.firstName,
+        roleCode: form.roleCode,
+        designationId: form.designationId,
+        employeeNumber: autoId ? "ok" : form.employeeNumber,
+      },
+      [
+        { key: "firstName", label: "First name" },
+        { key: "roleCode", label: "Role" },
+        { key: "designationId", label: "Designation" },
+        ...(autoId ? [] : [{ key: "employeeNumber", label: "Staff ID" as const }]),
+      ],
+    );
+    if (emailErr) next.email = emailErr;
+    setFieldErrors(next);
+    if (Object.keys(next).length) return;
     setBusy(true);
     try {
       const created = await apiRequest<{
@@ -311,7 +327,9 @@ export function AddStaffPanel({
         await onSaved();
       }
     } catch (cause) {
-      onError(cause instanceof Error ? cause.message : "Unable to save staff");
+      if (!applyApiFieldErrors(cause, setFieldErrors)) {
+        onError(cause instanceof Error ? cause.message : "Unable to save staff");
+      }
     } finally {
       setBusy(false);
     }
@@ -352,18 +370,18 @@ export function AddStaffPanel({
         <div className="space-y-4">
           <SectionCard title="Basic details">
             <FieldGrid>
-              <Field label="Staff ID">
+              <Field label="Staff ID" error={fieldErrors.employeeNumber}>
                 <input
-                  className="nx-input w-full disabled:bg-slate-100 disabled:text-slate-500"
+                  className={`nx-input w-full${fieldErrors.employeeNumber ? " is-invalid" : ""}`}
                   value={autoId ? previewId : form.employeeNumber}
                   disabled={autoId}
                   placeholder={autoId ? previewId : "Enter staff ID"}
                   onChange={(e) => set("employeeNumber", e.target.value)}
                 />
               </Field>
-              <Field label="Role">
+              <Field label="Role" error={fieldErrors.roleCode}>
                 <select
-                  className="nx-input w-full"
+                  className={`nx-input w-full${fieldErrors.roleCode ? " is-invalid" : ""}`}
                   value={form.roleCode}
                   onChange={(e) => set("roleCode", e.target.value)}
                 >
@@ -375,9 +393,9 @@ export function AddStaffPanel({
                   ))}
                 </select>
               </Field>
-              <Field label="Designation">
+              <Field label="Designation" error={fieldErrors.designationId}>
                 <select
-                  className="nx-input w-full"
+                  className={`nx-input w-full${fieldErrors.designationId ? " is-invalid" : ""}`}
                   value={form.designationId}
                   onChange={(e) => set("designationId", e.target.value)}
                 >
@@ -403,9 +421,9 @@ export function AddStaffPanel({
                   ))}
                 </select>
               </Field>
-              <Field label="First Name">
+              <Field label="First Name" error={fieldErrors.firstName}>
                 <input
-                  className="nx-input w-full"
+                  className={`nx-input w-full${fieldErrors.firstName ? " is-invalid" : ""}`}
                   placeholder="Enter first name"
                   value={form.firstName}
                   onChange={(e) => set("firstName", e.target.value)}
@@ -475,9 +493,9 @@ export function AddStaffPanel({
                   onChange={(e) => set("emergencyContact", e.target.value)}
                 />
               </Field>
-              <Field label="Email">
+              <Field label="Email" error={fieldErrors.email}>
                 <input
-                  className="nx-input w-full"
+                  className={`nx-input w-full${fieldErrors.email ? " is-invalid" : ""}`}
                   type="email"
                   placeholder="Enter email address"
                   value={form.email}
@@ -884,10 +902,12 @@ function FieldGrid({ children }: { children: ReactNode }) {
 function Field({
   label,
   hint,
+  error,
   children,
 }: {
   label: string;
   hint?: string;
+  error?: string | null;
   children: ReactNode;
 }) {
   return (
@@ -895,7 +915,11 @@ function Field({
       <span className="text-[12.5px] font-medium text-slate-500">{label}</span>
       <div className="min-w-0">
         {children}
-        {hint ? <p className="mt-1 text-[11px] text-slate-400">{hint}</p> : null}
+        {error ? (
+          <FormFieldError error={error} />
+        ) : hint ? (
+          <p className="mt-1 text-[11px] text-slate-400">{hint}</p>
+        ) : null}
       </div>
     </div>
   );

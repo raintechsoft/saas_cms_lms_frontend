@@ -14,6 +14,13 @@ import {
 import { useAuth } from "../../../auth/AuthContext";
 import { CmsFooter, CmsPage, CmsPageHeader, CmsScrollBody } from "../../../components/cms/CmsLayout";
 import { apiRequest } from "../../../lib/api";
+import {
+  applyApiFieldErrors,
+  clearFieldError,
+  type FieldErrors,
+  validateEmail,
+  validateRequired,
+} from "../../../lib/formErrors";
 import { notifyError, notifySuccess } from "../../../lib/notify";
 import type { Setup } from "./types";
 
@@ -141,10 +148,12 @@ const INITIAL_FORM: FormState = {
 function Field({
   label,
   required,
+  error,
   children,
 }: {
   label: string;
   required?: boolean;
+  error?: string | null;
   children: ReactNode;
 }) {
   return (
@@ -153,9 +162,28 @@ function Field({
         {label}
         {required && <span className="ml-0.5 text-rose-500">*</span>}
       </span>
-      {children}
+      <div className={error ? "field-control-invalid" : undefined}>{children}</div>
+      {error ? <p className="field-error">{error}</p> : null}
     </label>
   );
+}
+
+function validateOptionalEmail(value: string, label: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+    return `Enter a valid ${label.toLowerCase()}`;
+  }
+  return null;
+}
+
+function validateOptionalPhone(value: string, label: string): string | null {
+  const digits = value.replace(/\D/g, "");
+  if (!value.trim()) return null;
+  if (digits.length < 10 || digits.length > 15) {
+    return `Enter a valid ${label.toLowerCase()}`;
+  }
+  return null;
 }
 
 function Toggle({
@@ -226,6 +254,7 @@ export function AddStudentPage() {
   const [openSection, setOpenSection] = useState<"transport" | "hostel" | "misc" | "">("");
   const [photoPreview, setPhotoPreview] = useState("");
   const [documents, setDocuments] = useState<PendingDocument[]>([]);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
 
   useEffect(() => {
     void apiRequest<Setup>("/students/setup", accessToken)
@@ -235,33 +264,69 @@ export function AddStudentPage() {
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((current) => ({ ...current, [key]: value }));
+    setFieldErrors((prev) => clearFieldError(prev, key));
   }
 
-  function validateStep(target: StepKey) {
+  function validateStepFields(target: StepKey): FieldErrors {
+    const errors: FieldErrors = {};
+
     if (target === "basic") {
-      if (!form.firstName.trim()) return "First name is required";
-      if (!form.lastName.trim()) return "Last name is required";
-      if (!form.admissionDate) return "Admission date is required";
-      if (!form.classSectionId) return "Section is required";
-      if (!form.dateOfBirth) return "Date of birth is required";
-      if (!form.gender) return "Gender is required";
-      if (!form.mobile.trim()) return "Mobile number is required";
-      if (!form.email.trim()) return "Email address is required";
+      Object.assign(
+        errors,
+        validateRequired(form as unknown as Record<string, unknown>, [
+          { key: "firstName", label: "First name" },
+          { key: "lastName", label: "Last name" },
+          { key: "admissionDate", label: "Admission date" },
+          { key: "classSectionId", label: "Section" },
+          { key: "dateOfBirth", label: "Date of birth" },
+          { key: "gender", label: "Gender" },
+          { key: "mobile", label: "Mobile number" },
+          { key: "email", label: "Email address" },
+        ]),
+      );
+      if (form.email.trim() && !errors.email) {
+        const emailErr = validateEmail(form.email, "Email address");
+        if (emailErr) errors.email = emailErr;
+      }
+      if (form.mobile.trim() && !errors.mobile) {
+        const phoneErr = validateOptionalPhone(form.mobile, "Mobile number");
+        if (phoneErr) errors.mobile = phoneErr;
+      }
     }
-    return "";
+
+    if (target === "guardian") {
+      for (const { key, label } of [
+        { key: "fatherPhone", label: "Father phone" },
+        { key: "motherPhone", label: "Mother phone" },
+        ...(form.guardianDifferent ? [{ key: "guardianPhone", label: "Guardian phone" }] : []),
+      ]) {
+        const phoneErr = validateOptionalPhone(form[key as keyof FormState] as string, label);
+        if (phoneErr) errors[key] = phoneErr;
+      }
+      for (const { key, label } of [
+        { key: "fatherEmail", label: "Father email" },
+        { key: "motherEmail", label: "Mother email" },
+        ...(form.guardianDifferent ? [{ key: "guardianEmail", label: "Guardian email" }] : []),
+      ]) {
+        const emailErr = validateOptionalEmail(form[key as keyof FormState] as string, label);
+        if (emailErr) errors[key] = emailErr;
+      }
+    }
+
+    return errors;
   }
 
   function goNext() {
-    const issue = validateStep(step);
-    if (issue) {
-      notifyError(issue);
-      return;
-    }
+    const errors = validateStepFields(step);
+    setFieldErrors(errors);
+    if (Object.keys(errors).length) return;
+    setFieldErrors({});
     const index = STEPS.findIndex((item) => item.key === step);
     if (index < STEPS.length - 1) setStep(STEPS[index + 1].key);
   }
 
   function goBack() {
+    setFieldErrors({});
     const index = STEPS.findIndex((item) => item.key === step);
     if (index > 0) setStep(STEPS[index - 1].key);
   }
@@ -340,10 +405,16 @@ export function AddStudentPage() {
 
   async function createStudent() {
     if (busy) return;
-    const issue = validateStep("basic");
-    if (issue) {
-      notifyError(issue);
+    const basicErrors = validateStepFields("basic");
+    const guardianErrors = validateStepFields("guardian");
+    const errors = { ...basicErrors, ...guardianErrors };
+    setFieldErrors(errors);
+    if (Object.keys(basicErrors).length) {
       setStep("basic");
+      return;
+    }
+    if (Object.keys(guardianErrors).length) {
+      setStep("guardian");
       return;
     }
     setBusy(true);
@@ -427,7 +498,9 @@ export function AddStudentPage() {
         state: { justCreated: true, credentials: created.credentials ?? [] },
       });
     } catch (cause) {
-      notifyError(cause instanceof Error ? cause.message : "Unable to add student");
+      if (!applyApiFieldErrors(cause, setFieldErrors)) {
+        notifyError(cause instanceof Error ? cause.message : "Unable to add student");
+      }
     } finally {
       setBusy(false);
     }
@@ -475,17 +548,17 @@ export function AddStudentPage() {
             <div className="grid gap-x-5 gap-y-4 lg:grid-cols-3">
               {/* Left column */}
               <div className="space-y-4">
-                <Field label="First Name" required>
+                <Field label="First Name" required error={fieldErrors.firstName}>
                   <input
-                    className="nx-input"
+                    className={`nx-input${fieldErrors.firstName ? " is-invalid" : ""}`}
                     placeholder="Enter first name"
                     value={form.firstName}
                     onChange={(e) => update("firstName", e.target.value)}
                   />
                 </Field>
-                <Field label="Last Name" required>
+                <Field label="Last Name" required error={fieldErrors.lastName}>
                   <input
-                    className="nx-input"
+                    className={`nx-input${fieldErrors.lastName ? " is-invalid" : ""}`}
                     placeholder="Enter last name"
                     value={form.lastName}
                     onChange={(e) => update("lastName", e.target.value)}
@@ -507,17 +580,18 @@ export function AddStudentPage() {
                     onChange={(e) => update("admissionNumber", e.target.value)}
                   />
                 </Field>
-                <Field label="Gender" required>
-                  <select className="nx-input" value={form.gender} onChange={(e) => update("gender", e.target.value)}>
+                <Field label="Gender" required error={fieldErrors.gender}>
+                  <select
+                    className={`nx-input${fieldErrors.gender ? " is-invalid" : ""}`} value={form.gender} onChange={(e) => update("gender", e.target.value)}>
                     <option value="">Select Gender</option>
                     <option value="MALE">Male</option>
                     <option value="FEMALE">Female</option>
                     <option value="OTHER">Other</option>
                   </select>
                 </Field>
-                <Field label="Date of Birth" required>
+                <Field label="Date of Birth" required error={fieldErrors.dateOfBirth}>
                   <input
-                    className="nx-input"
+                    className={`nx-input${fieldErrors.dateOfBirth ? " is-invalid" : ""}`}
                     type="date"
                     value={form.dateOfBirth}
                     onChange={(e) => update("dateOfBirth", e.target.value)}
@@ -570,9 +644,9 @@ export function AddStudentPage() {
                     onChange={(e) => update("caste", e.target.value)}
                   />
                 </Field>
-                <Field label="Section" required>
+                <Field label="Section" required error={fieldErrors.classSectionId}>
                   <select
-                    className="nx-input"
+                    className={`nx-input${fieldErrors.classSectionId ? " is-invalid" : ""}`}
                     value={form.classSectionId}
                     onChange={(e) => update("classSectionId", e.target.value)}
                   >
@@ -584,9 +658,9 @@ export function AddStudentPage() {
                     ))}
                   </select>
                 </Field>
-                <Field label="Email Address" required>
+                <Field label="Email Address" required error={fieldErrors.email}>
                   <input
-                    className="nx-input"
+                    className={`nx-input${fieldErrors.email ? " is-invalid" : ""}`}
                     type="email"
                     placeholder="Student login email (e.g. anwin7x@gmail.com)"
                     value={form.email}
@@ -596,9 +670,9 @@ export function AddStudentPage() {
                     This becomes the student portal login email.
                   </p>
                 </Field>
-                <Field label="Mobile Number" required>
+                <Field label="Mobile Number" required error={fieldErrors.mobile}>
                   <input
-                    className="nx-input"
+                    className={`nx-input${fieldErrors.mobile ? " is-invalid" : ""}`}
                     placeholder="Mobile Number"
                     value={form.mobile}
                     onChange={(e) => update("mobile", e.target.value)}
@@ -650,9 +724,9 @@ export function AddStudentPage() {
                     />
                   </div>
                 </div>
-                <Field label="Admission Date" required>
+                <Field label="Admission Date" required error={fieldErrors.admissionDate}>
                   <input
-                    className="nx-input"
+                    className={`nx-input${fieldErrors.admissionDate ? " is-invalid" : ""}`}
                     type="date"
                     value={form.admissionDate}
                     onChange={(e) => update("admissionDate", e.target.value)}
@@ -707,17 +781,17 @@ export function AddStudentPage() {
                       onChange={(e) => update("fatherName", e.target.value)}
                     />
                   </Field>
-                  <Field label="Phone">
+                  <Field label="Phone" error={fieldErrors.fatherPhone}>
                     <input
-                      className="nx-input"
+                      className={`nx-input${fieldErrors.fatherPhone ? " is-invalid" : ""}`}
                       placeholder="Phone"
                       value={form.fatherPhone}
                       onChange={(e) => update("fatherPhone", e.target.value)}
                     />
                   </Field>
-                  <Field label="Email">
+                  <Field label="Email" error={fieldErrors.fatherEmail}>
                     <input
-                      className="nx-input"
+                      className={`nx-input${fieldErrors.fatherEmail ? " is-invalid" : ""}`}
                       type="email"
                       placeholder="Parent login email"
                       value={form.fatherEmail}
@@ -748,17 +822,17 @@ export function AddStudentPage() {
                       onChange={(e) => update("motherName", e.target.value)}
                     />
                   </Field>
-                  <Field label="Phone">
+                  <Field label="Phone" error={fieldErrors.motherPhone}>
                     <input
-                      className="nx-input"
+                      className={`nx-input${fieldErrors.motherPhone ? " is-invalid" : ""}`}
                       placeholder="Phone"
                       value={form.motherPhone}
                       onChange={(e) => update("motherPhone", e.target.value)}
                     />
                   </Field>
-                  <Field label="Email">
+                  <Field label="Email" error={fieldErrors.motherEmail}>
                     <input
-                      className="nx-input"
+                      className={`nx-input${fieldErrors.motherEmail ? " is-invalid" : ""}`}
                       type="email"
                       placeholder="Email"
                       value={form.motherEmail}
@@ -787,14 +861,14 @@ export function AddStudentPage() {
                       onChange={(e) => update("guardianName", e.target.value)}
                     />
                   </Field>
-                  <Field label="Phone">
+                  <Field label="Phone" error={fieldErrors.guardianPhone}>
                     <div className="relative">
                       <PhoneOutlined
                         sx={{ fontSize: 16 }}
                         className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
                       />
                       <input
-                        className="nx-input pl-9"
+                        className={`nx-input pl-9${fieldErrors.guardianPhone ? " is-invalid" : ""}`}
                         placeholder="Phone"
                         disabled={!form.guardianDifferent}
                         value={form.guardianPhone}
@@ -802,9 +876,9 @@ export function AddStudentPage() {
                       />
                     </div>
                   </Field>
-                  <Field label="Email">
+                  <Field label="Email" error={fieldErrors.guardianEmail}>
                     <input
-                      className="nx-input"
+                      className={`nx-input${fieldErrors.guardianEmail ? " is-invalid" : ""}`}
                       type="email"
                       placeholder="Email"
                       disabled={!form.guardianDifferent}

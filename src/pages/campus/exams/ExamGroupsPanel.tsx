@@ -19,6 +19,13 @@ import {
 } from "@mui/icons-material";
 import { apiRequest } from "../../../lib/api";
 import { confirmDelete } from "../../../lib/confirm";
+import { FieldError } from "../../../components/forms/Field";
+import {
+  applyApiFieldErrors,
+  clearFieldError,
+  type FieldErrors,
+  validateRequired,
+} from "../../../lib/formErrors";
 import { notifySuccess } from "../../../lib/notify";
 import type { Exam, ExamGroup, ExamResultType, Result, Setup } from "./types";
 import {
@@ -128,6 +135,8 @@ export function ExamGroupsPanel({
     endDate: today,
   });
   const [saving, setSaving] = useState(false);
+  const [groupFieldErrors, setGroupFieldErrors] = useState<FieldErrors>({});
+  const [editGroupFieldErrors, setEditGroupFieldErrors] = useState<FieldErrors>({});
   const [viewStudents, setViewStudents] = useState<{
     examId: string;
     examName: string;
@@ -211,6 +220,7 @@ export function ExamGroupsPanel({
 
   useEffect(() => {
     if (!createGroupOpen) return;
+    setGroupFieldErrors({});
     setGroupForm({
       academicSessionId: setup.currentSession?.id ?? "",
       name: "",
@@ -221,6 +231,15 @@ export function ExamGroupsPanel({
 
   async function createGroup(event: FormEvent) {
     event.preventDefault();
+    const next = validateRequired(
+      { academicSessionId: groupForm.academicSessionId, name: groupForm.name },
+      [
+        { key: "academicSessionId", label: "Academic session" },
+        { key: "name", label: "Exam group name" },
+      ],
+    );
+    setGroupFieldErrors(next);
+    if (Object.keys(next).length) return;
     setSaving(true);
     try {
       await apiRequest("/exams/groups", token, {
@@ -242,13 +261,16 @@ export function ExamGroupsPanel({
       notifySuccess("Exam group created.");
       await onSaved();
     } catch (cause) {
-      onError(cause instanceof Error ? cause.message : "Unable to create exam group");
+      if (!applyApiFieldErrors(cause, setGroupFieldErrors)) {
+        onError(cause instanceof Error ? cause.message : "Unable to create exam group");
+      }
     } finally {
       setSaving(false);
     }
   }
 
   function openEditGroup(group: ExamGroup) {
+    setEditGroupFieldErrors({});
     setEditingGroup(group);
     setEditGroupForm({
       name: group.name,
@@ -261,6 +283,11 @@ export function ExamGroupsPanel({
   async function saveEditGroup(event: FormEvent) {
     event.preventDefault();
     if (!editingGroup) return;
+    const next = validateRequired({ name: editGroupForm.name }, [
+      { key: "name", label: "Exam group name" },
+    ]);
+    setEditGroupFieldErrors(next);
+    if (Object.keys(next).length) return;
     setSaving(true);
     try {
       await apiRequest(`/exams/groups/${editingGroup.id}`, token, {
@@ -275,7 +302,9 @@ export function ExamGroupsPanel({
       notifySuccess("Exam group updated.");
       await onSaved();
     } catch (cause) {
-      onError(cause instanceof Error ? cause.message : "Unable to update exam group");
+      if (!applyApiFieldErrors(cause, setEditGroupFieldErrors)) {
+        onError(cause instanceof Error ? cause.message : "Unable to update exam group");
+      }
     } finally {
       setSaving(false);
     }
@@ -936,12 +965,12 @@ export function ExamGroupsPanel({
             <label className="block">
               <span className="nx-label">Academic session</span>
               <select
-                className="nx-input"
-                required
+                className={`nx-input${groupFieldErrors.academicSessionId ? " is-invalid" : ""}`}
                 value={groupForm.academicSessionId}
-                onChange={(event) =>
-                  setGroupForm({ ...groupForm, academicSessionId: event.target.value })
-                }
+                onChange={(event) => {
+                  setGroupFieldErrors((prev) => clearFieldError(prev, "academicSessionId"));
+                  setGroupForm({ ...groupForm, academicSessionId: event.target.value });
+                }}
               >
                 <option value="">Select session</option>
                 {setup.sessions.map((session) => (
@@ -950,16 +979,20 @@ export function ExamGroupsPanel({
                   </option>
                 ))}
               </select>
+              <FieldError error={groupFieldErrors.academicSessionId} />
             </label>
             <label className="block">
               <span className="nx-label">Exam group name</span>
               <input
-                className="nx-input"
-                required
+                className={`nx-input${groupFieldErrors.name ? " is-invalid" : ""}`}
                 placeholder="Annual Examination 2024-25"
                 value={groupForm.name}
-                onChange={(event) => setGroupForm({ ...groupForm, name: event.target.value })}
+                onChange={(event) => {
+                  setGroupFieldErrors((prev) => clearFieldError(prev, "name"));
+                  setGroupForm({ ...groupForm, name: event.target.value });
+                }}
               />
+              <FieldError error={groupFieldErrors.name} />
             </label>
             <label className="block">
               <span className="nx-label">Description</span>
@@ -999,13 +1032,14 @@ export function ExamGroupsPanel({
             <label className="block">
               <span className="nx-label">Exam group name</span>
               <input
-                className="nx-input"
-                required
+                className={`nx-input${editGroupFieldErrors.name ? " is-invalid" : ""}`}
                 value={editGroupForm.name}
-                onChange={(event) =>
-                  setEditGroupForm({ ...editGroupForm, name: event.target.value })
-                }
+                onChange={(event) => {
+                  setEditGroupFieldErrors((prev) => clearFieldError(prev, "name"));
+                  setEditGroupForm({ ...editGroupForm, name: event.target.value });
+                }}
               />
+              <FieldError error={editGroupFieldErrors.name} />
             </label>
             <label className="block">
               <span className="nx-label">Description</span>
