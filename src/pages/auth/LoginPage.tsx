@@ -115,6 +115,8 @@ export function LoginPage() {
 
   const [password, setPassword] = useState("");
 
+  const [showPassword, setShowPassword] = useState(false);
+
   const [tenantSlug, setTenantSlug] = useState(searchParams.get("tenant") ?? "demo-school");
 
   const [otpCode, setOtpCode] = useState("");
@@ -473,7 +475,7 @@ export function LoginPage() {
 
             <>
 
-              <p className="text-sm font-medium text-indigo-400">Welcome to SaaS CMS LMS</p>
+              <p className="text-sm font-medium text-indigo-400">Institute login</p>
 
               <h2 className="mt-2 text-3xl font-semibold tracking-tight text-white">
 
@@ -483,7 +485,7 @@ export function LoginPage() {
 
               <p className="mt-3 text-sm text-slate-400">
 
-                Select your role to open the correct secure workspace.
+                For school admin, staff, students, and parents. Use your workspace slug.
 
               </p>
 
@@ -528,6 +530,18 @@ export function LoginPage() {
                 ))}
 
               </div>
+
+              <p className="mt-8 text-center text-sm text-slate-500">
+
+                Platform Super Admin?{" "}
+
+                <a href="#/admin/login" className="font-semibold text-indigo-400 hover:text-indigo-300">
+
+                  Go to admin login
+
+                </a>
+
+              </p>
 
             </>
 
@@ -691,13 +705,31 @@ export function LoginPage() {
 
                     <label className="block">
 
-                      <span className="mb-2 block text-sm font-medium text-slate-200">Password</span>
+                      <span className="mb-2 flex items-center justify-between text-sm font-medium text-slate-200">
+
+                        <span>Password</span>
+
+                        <button
+
+                          type="button"
+
+                          className="text-xs font-semibold text-indigo-400 hover:text-indigo-300"
+
+                          onClick={() => setShowPassword((value) => !value)}
+
+                        >
+
+                          {showPassword ? "Hide" : "Show"}
+
+                        </button>
+
+                      </span>
 
                       <input
 
                         className="field"
 
-                        type="password"
+                        type={showPassword ? "text" : "password"}
 
                         value={password}
 
