@@ -1,272 +1,222 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import {
-  AssignmentOutlined,
-  BarChartRounded,
   CheckCircleRounded,
-  CancelRounded,
   EmojiEventsOutlined,
-  MenuBookOutlined,
+  PlayArrowOutlined,
   QuizOutlined,
   ScheduleRounded,
   TrackChangesOutlined,
-  TrendingUpRounded,
 } from "@mui/icons-material";
 import { Link, Navigate } from "react-router-dom";
+import { apiRequest } from "../../lib/api";
 import { isProductBucketAllowed } from "../../lib/productMode";
+import { notifyError, notifySuccess } from "../../lib/notify";
 import { usePortal } from "./PortalContext";
 
 const PRIMARY = "#534AB7";
 const BORDER = "#E5E7EB";
 
-type Difficulty = "Easy" | "Medium" | "Hard";
-
-type RecommendedTest = {
+type PortalExam = {
   id: string;
   title: string;
-  chapter: string;
-  subject: string;
-  difficulty: Difficulty;
-  questions: number;
-  durationMin: number;
-  color: string;
-  glyph: string;
+  description: string | null;
+  durationMinutes: number;
+  maxAttempts: number;
+  passMarks: number;
+  questionCount: number;
+  attemptsUsed: number;
+  attemptsRemaining: number;
+  canAttempt: boolean;
+  latestAttempt: {
+    id: string;
+    status: string;
+    score: string | number | null;
+    maxScore: string | number | null;
+    rank: number | null;
+  } | null;
+  inProgressAttempt: { id: string; status: string } | null;
 };
 
-type SeriesCard = {
+type PortalQuestion = {
   id: string;
-  title: string;
-  completed: number;
-  total: number;
-  color: string;
-  Icon: typeof QuizOutlined;
+  type: "MCQ" | "SUBJECTIVE";
+  prompt: string;
+  options: string[] | null;
+  marks: number;
+  sortOrder: number;
 };
 
-type Attempt = {
+type PortalPaper = {
   id: string;
   title: string;
-  subject: string;
-  when: string;
-  scorePct: number;
-  correct: number;
-  total: number;
-  passed: boolean;
+  description: string | null;
+  durationMinutes: number;
+  passMarks: number;
+  questions: PortalQuestion[];
+};
+
+type PortalAttemptRow = {
+  id: string;
+  attemptNo: number;
+  status: string;
+  score: string | number | null;
+  maxScore: string | number | null;
+  rank: number | null;
+  startedAt: string;
+  submittedAt: string | null;
+  passed: boolean | null;
+  resultPending?: boolean;
+  exam: { id: string; title: string; passMarks: number };
 };
 
 function Card({
   children,
   className = "",
-  style,
 }: {
   children: React.ReactNode;
   className?: string;
-  style?: React.CSSProperties;
 }) {
   return (
     <section
       className={`rounded-[20px] border bg-white p-5 shadow-[0_4px_18px_rgba(28,27,60,0.04)] ${className}`}
-      style={{ borderColor: BORDER, ...style }}
+      style={{ borderColor: BORDER }}
     >
       {children}
     </section>
   );
 }
 
-function difficultyTone(level: Difficulty) {
-  if (level === "Easy") return { bg: "#ECFDF5", fg: "#059669" };
-  if (level === "Medium") return { bg: "#FFF7ED", fg: "#D97706" };
-  return { bg: "#FEF2F2", fg: "#E11D48" };
-}
-
-const RECOMMENDED: RecommendedTest[] = [
-  {
-    id: "r1",
-    title: "Mathematics — Chapter Test",
-    chapter: "Real Numbers",
-    subject: "Mathematics",
-    difficulty: "Medium",
-    questions: 20,
-    durationMin: 30,
-    color: "#10B981",
-    glyph: "∑",
-  },
-  {
-    id: "r2",
-    title: "Science — Quick Quiz",
-    chapter: "Chemical Reactions and Equations",
-    subject: "Science",
-    difficulty: "Easy",
-    questions: 15,
-    durationMin: 20,
-    color: "#3B82F6",
-    glyph: "Sc",
-  },
-  {
-    id: "r3",
-    title: "English — Practice Paper",
-    chapter: "Grammar & Writing Skills",
-    subject: "English",
-    difficulty: "Medium",
-    questions: 25,
-    durationMin: 40,
-    color: "#F59E0B",
-    glyph: "En",
-  },
-  {
-    id: "r4",
-    title: "Social Science — Chapter Test",
-    chapter: "The Rise of Nationalism in Europe",
-    subject: "Social Science",
-    difficulty: "Hard",
-    questions: 30,
-    durationMin: 45,
-    color: "#6366F1",
-    glyph: "SS",
-  },
-];
-
-const SERIES: SeriesCard[] = [
-  {
-    id: "s1",
-    title: "Class 10 — Full Syllabus",
-    completed: 12,
-    total: 20,
-    color: PRIMARY,
-    Icon: QuizOutlined,
-  },
-  {
-    id: "s2",
-    title: "Chapter Wise Tests",
-    completed: 18,
-    total: 30,
-    color: "#10B981",
-    Icon: MenuBookOutlined,
-  },
-  {
-    id: "s3",
-    title: "Previous Year Papers",
-    completed: 5,
-    total: 10,
-    color: "#F59E0B",
-    Icon: AssignmentOutlined,
-  },
-  {
-    id: "s4",
-    title: "Daily Practice",
-    completed: 22,
-    total: 28,
-    color: "#3B82F6",
-    Icon: TrackChangesOutlined,
-  },
-];
-
-const ATTEMPTS: Attempt[] = [
-  {
-    id: "a1",
-    title: "Real Numbers — Quiz",
-    subject: "Mathematics",
-    when: "Today · 09:15 AM",
-    scorePct: 80,
-    correct: 16,
-    total: 20,
-    passed: true,
-  },
-  {
-    id: "a2",
-    title: "Acids Bases & Salts",
-    subject: "Science",
-    when: "Yesterday · 06:40 PM",
-    scorePct: 45,
-    correct: 9,
-    total: 20,
-    passed: false,
-  },
-  {
-    id: "a3",
-    title: "Formal Letter Writing",
-    subject: "English",
-    when: "28 May · 04:10 PM",
-    scorePct: 72,
-    correct: 18,
-    total: 25,
-    passed: true,
-  },
-];
-
-const PERF = {
-  correct: 241,
-  incorrect: 89,
-  skipped: 26,
-};
-
-function PerformanceDonut({ average }: { average: number }) {
-  const size = 160;
-  const r = 54;
-  const c = 2 * Math.PI * r;
-  const total = PERF.correct + PERF.incorrect + PERF.skipped;
-  const slices = [
-    { value: PERF.correct, color: "#10B981" },
-    { value: PERF.incorrect, color: PRIMARY },
-    { value: PERF.skipped, color: "#F59E0B" },
-  ];
-  let offset = 0;
-
-  return (
-    <div className="relative mx-auto size-[160px]">
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#F1F2F6" strokeWidth="16" />
-        {slices.map((slice, index) => {
-          const len = (slice.value / total) * c;
-          const el = (
-            <circle
-              key={index}
-              cx={size / 2}
-              cy={size / 2}
-              r={r}
-              fill="none"
-              stroke={slice.color}
-              strokeWidth="16"
-              strokeDasharray={`${len} ${c - len}`}
-              strokeDashoffset={-offset}
-              strokeLinecap="butt"
-            />
-          );
-          offset += len;
-          return el;
-        })}
-      </svg>
-      <div className="absolute inset-0 grid place-items-center text-center">
-        <div>
-          <p className="text-[22px] font-bold text-[#1A1A1A]">{average}%</p>
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-[#9CA3AF]">Average</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export function PortalTestSeriesPage() {
-  const { child, basePath, productMode } = usePortal();
-  const [subjectFilter, setSubjectFilter] = useState("ALL");
-  const [period, setPeriod] = useState("This Month");
-  const [startedId, setStartedId] = useState<string | null>(null);
-  const [showAllAttempts, setShowAllAttempts] = useState(false);
-  const showLms = isProductBucketAllowed(productMode, "LMS");
+  const { child, basePath, productMode, accessToken, role } = usePortal();
+  const [exams, setExams] = useState<PortalExam[]>([]);
+  const [attempts, setAttempts] = useState<PortalAttemptRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [activeAttemptId, setActiveAttemptId] = useState<string | null>(null);
+  const [paper, setPaper] = useState<PortalPaper | null>(null);
+  const [answers, setAnswers] = useState<
+    Record<string, { selectedOption?: string; textAnswer?: string }>
+  >({});
+  const [endsAtMs, setEndsAtMs] = useState<number | null>(null);
+  const [nowMs, setNowMs] = useState(Date.now());
 
+  const showCms = isProductBucketAllowed(productMode, "CMS");
+  const isStudent = role === "STUDENT";
   const firstName = child?.student.firstName ?? "Student";
+  const studentId = child?.student.id;
 
-  const subjects = useMemo(() => {
-    return [...new Set(RECOMMENDED.map((t) => t.subject))].sort((a, b) => a.localeCompare(b));
-  }, []);
+  const remainingSec = useMemo(() => {
+    if (!endsAtMs) return null;
+    return Math.max(0, Math.floor((endsAtMs - nowMs) / 1000));
+  }, [endsAtMs, nowMs]);
 
-  const recommended = useMemo(() => {
-    if (subjectFilter === "ALL") return RECOMMENDED;
-    return RECOMMENDED.filter((t) => t.subject === subjectFilter);
-  }, [subjectFilter]);
+  const load = useCallback(async () => {
+    if (!studentId || !accessToken) return;
+    setLoading(true);
+    try {
+      const [examRows, attemptRows] = await Promise.all([
+        apiRequest<PortalExam[]>(`/portal/children/${studentId}/online-exams`, accessToken),
+        apiRequest<PortalAttemptRow[]>(
+          `/portal/children/${studentId}/online-exams/attempts`,
+          accessToken,
+        ),
+      ]);
+      setExams(Array.isArray(examRows) ? examRows : []);
+      setAttempts(Array.isArray(attemptRows) ? attemptRows : []);
+    } catch (cause) {
+      notifyError(cause instanceof Error ? cause.message : "Unable to load online exams");
+    } finally {
+      setLoading(false);
+    }
+  }, [studentId, accessToken]);
 
-  const attempts = showAllAttempts ? ATTEMPTS : ATTEMPTS.slice(0, 3);
-  const perfTotal = PERF.correct + PERF.incorrect + PERF.skipped;
+  useEffect(() => {
+    void load();
+  }, [load]);
 
-  if (!showLms) {
+  useEffect(() => {
+    if (!activeAttemptId || endsAtMs == null) return;
+    const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [activeAttemptId, endsAtMs]);
+
+  async function startExam(examId: string) {
+    if (!studentId || !accessToken || !isStudent) return;
+    setSubmitting(true);
+    try {
+      const data = await apiRequest<{
+        attempt: { id: string; startedAt: string };
+        paper: PortalPaper;
+      }>(`/portal/children/${studentId}/online-exams/${examId}/attempts`, accessToken, {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+      setActiveAttemptId(data.attempt.id);
+      setPaper(data.paper);
+      setAnswers({});
+      setEndsAtMs(
+        new Date(data.attempt.startedAt).getTime() + data.paper.durationMinutes * 60_000,
+      );
+      notifySuccess("Exam started — answer and submit before time ends");
+    } catch (cause) {
+      notifyError(cause instanceof Error ? cause.message : "Unable to start exam");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function submitExam(event?: FormEvent) {
+    event?.preventDefault();
+    if (!studentId || !accessToken || !activeAttemptId || !paper) return;
+    setSubmitting(true);
+    try {
+      const payload = {
+        answers: paper.questions.map((question) => ({
+          questionId: question.id,
+          selectedOption:
+            answers[question.id]?.selectedOption != null &&
+            answers[question.id]?.selectedOption !== ""
+              ? Number(answers[question.id]?.selectedOption)
+              : null,
+          textAnswer: answers[question.id]?.textAnswer ?? null,
+        })),
+      };
+      const result = await apiRequest<{
+        score: string | number | null;
+        maxScore: string | number | null;
+        status: string;
+        resultPending?: boolean;
+      }>(
+        `/portal/children/${studentId}/online-exams/attempts/${activeAttemptId}/submit`,
+        accessToken,
+        { method: "POST", body: JSON.stringify(payload) },
+      );
+      if (result.resultPending || result.status === "SUBMITTED") {
+        notifySuccess("Submitted. Result will appear after teacher grades subjective answers.");
+      } else {
+        notifySuccess(
+          `Result ready · ${result.score ?? "—"} / ${result.maxScore ?? "—"}`,
+        );
+      }
+      setActiveAttemptId(null);
+      setPaper(null);
+      setEndsAtMs(null);
+      await load();
+    } catch (cause) {
+      notifyError(cause instanceof Error ? cause.message : "Unable to submit exam");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  useEffect(() => {
+    if (remainingSec === 0 && activeAttemptId && paper && !submitting) {
+      void submitExam();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [remainingSec]);
+
+  if (!showCms) {
     return <Navigate to={basePath} replace />;
   }
 
@@ -274,297 +224,229 @@ export function PortalTestSeriesPage() {
     return <p className="text-sm text-[#6B7280]">No student profile linked.</p>;
   }
 
+  const timerLabel =
+    remainingSec == null
+      ? null
+      : `${String(Math.floor(remainingSec / 60)).padStart(2, "0")}:${String(remainingSec % 60).padStart(2, "0")}`;
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-[26px] font-bold tracking-tight text-[#1A1A1A]">Test Series & Practice</h1>
+          <h1 className="text-[26px] font-bold tracking-tight text-[#1A1A1A]">Online Exams</h1>
           <p className="mt-1 text-[12px] text-[#9CA3AF]">
             <Link to={basePath} className="hover:text-[#6B7280]">
               Dashboard
             </Link>
             <span className="mx-1.5">›</span>
-            <span className="font-medium text-[#6B7280]">Test Series & Practice</span>
+            <span className="font-medium text-[#6B7280]">Online Exams</span>
           </p>
         </div>
-        <select
-          className="rounded-xl border border-[#E5E7EB] bg-white px-3 py-2 text-[13px] font-semibold text-[#1A1A1A] outline-none"
-          value={subjectFilter}
-          onChange={(e) => setSubjectFilter(e.target.value)}
-        >
-          <option value="ALL">All Subjects</option>
-          {subjects.map((subject) => (
-            <option key={subject} value={subject}>
-              {subject}
-            </option>
-          ))}
-        </select>
       </div>
 
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 className="text-[22px] font-bold text-[#1A1A1A]">Hi, {firstName}!</h2>
-          <p className="mt-1 text-[13px] text-[#6B7280]">Practice more, perform better. Keep it up!</p>
-        </div>
-      </div>
-
-      {startedId ? (
-        <p className="rounded-xl border border-[#EEF0FD] bg-[#EEF0FD]/70 px-3 py-2 text-[12px] font-medium text-[#534AB7]">
-          Test launch will open here when the LMS practice engine is connected.
+      <div>
+        <h2 className="text-[22px] font-bold text-[#1A1A1A]">Hi, {firstName}!</h2>
+        <p className="mt-1 text-[13px] text-[#6B7280]">
+          {isStudent
+            ? "Take published online exams and track your attempts."
+            : "View published exams and your child’s attempt history."}
         </p>
+      </div>
+
+      {paper && activeAttemptId ? (
+        <Card>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-lg font-bold text-[#1A1A1A]">{paper.title}</h3>
+              <p className="text-[12px] text-[#6B7280]">
+                {paper.questions.length} questions · pass {paper.passMarks}
+              </p>
+            </div>
+            {timerLabel ? (
+              <span className="inline-flex items-center gap-1.5 rounded-xl bg-[#EEF0FD] px-3 py-2 text-sm font-bold text-[#534AB7]">
+                <ScheduleRounded sx={{ fontSize: 18 }} />
+                {timerLabel}
+              </span>
+            ) : null}
+          </div>
+          <form className="space-y-4" onSubmit={submitExam}>
+            {paper.questions.map((question, index) => (
+              <div key={question.id} className="rounded-2xl border border-[#E5E7EB] p-4">
+                <p className="text-sm font-semibold text-[#1A1A1A]">
+                  Q{index + 1}. {question.prompt}
+                </p>
+                <p className="mt-1 text-[11px] text-[#9CA3AF]">
+                  {question.type} · {question.marks} mark{question.marks === 1 ? "" : "s"}
+                </p>
+                {question.type === "MCQ" ? (
+                  <div className="mt-3 grid gap-2">
+                    {(question.options ?? []).map((option, optIndex) => (
+                      <label key={`${question.id}-${optIndex}`} className="flex items-center gap-2 text-sm">
+                        <input
+                          type="radio"
+                          name={`q-${question.id}`}
+                          checked={answers[question.id]?.selectedOption === String(optIndex)}
+                          onChange={() =>
+                            setAnswers((prev) => ({
+                              ...prev,
+                              [question.id]: { selectedOption: String(optIndex) },
+                            }))
+                          }
+                        />
+                        {option}
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <textarea
+                    className="mt-3 w-full rounded-xl border border-[#E5E7EB] px-3 py-2 text-sm outline-none focus:border-[#534AB7]"
+                    rows={3}
+                    placeholder="Write your answer"
+                    value={answers[question.id]?.textAnswer ?? ""}
+                    onChange={(e) =>
+                      setAnswers((prev) => ({
+                        ...prev,
+                        [question.id]: { textAnswer: e.target.value },
+                      }))
+                    }
+                  />
+                )}
+              </div>
+            ))}
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="submit"
+                disabled={submitting}
+                className="rounded-xl px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+                style={{ background: PRIMARY }}
+              >
+                Submit exam
+              </button>
+              <button
+                type="button"
+                className="rounded-xl border border-[#E5E7EB] px-4 py-2.5 text-sm font-semibold text-[#6B7280]"
+                onClick={() => {
+                  setActiveAttemptId(null);
+                  setPaper(null);
+                  setEndsAtMs(null);
+                }}
+              >
+                Close (keep in progress)
+              </button>
+            </div>
+          </form>
+        </Card>
       ) : null}
 
-      <p className="text-[11px] font-medium text-[#9CA3AF]">
-        Preview practice data — will sync with real test series when the LMS module is connected.
-      </p>
-
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {[
-              {
-                label: "Tests Attempted",
-                value: "24",
-                sub: "↑ 12% this month",
-                subColor: "#059669",
-                Icon: AssignmentOutlined,
-                bg: "#EEF0FD",
-                fg: PRIMARY,
-              },
-              {
-                label: "Average Score",
-                value: "68%",
-                sub: "↑ 8% this month",
-                subColor: "#059669",
-                Icon: BarChartRounded,
-                bg: "#ECFDF5",
-                fg: "#059669",
-              },
-              {
-                label: "Best Score",
-                value: "92%",
-                sub: "In Mathematics",
-                subColor: "#D97706",
-                Icon: EmojiEventsOutlined,
-                bg: "#FFF7ED",
-                fg: "#D97706",
-              },
-              {
-                label: "Questions Solved",
-                value: "356",
-                sub: "↑ 15% this month",
-                subColor: "#059669",
-                Icon: TrackChangesOutlined,
-                bg: "#E0F2FE",
-                fg: "#0284C7",
-              },
-            ].map((card) => (
-              <Card key={card.label} className="flex items-center gap-3 !p-4">
-                <span
-                  className="grid size-11 shrink-0 place-items-center rounded-2xl"
-                  style={{ background: card.bg, color: card.fg }}
-                >
-                  <card.Icon sx={{ fontSize: 22 }} />
-                </span>
-                <div className="min-w-0">
-                  <p className="text-[11px] font-medium text-[#9CA3AF]">{card.label}</p>
-                  <p className="text-[22px] font-bold leading-tight text-[#1A1A1A]">{card.value}</p>
-                  <p className="truncate text-[11px] font-semibold" style={{ color: card.subColor }}>
-                    {card.sub}
-                  </p>
-                </div>
-              </Card>
-            ))}
+      <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
+        <Card>
+          <div className="mb-4 flex items-center gap-2">
+            <TrackChangesOutlined sx={{ fontSize: 20, color: PRIMARY }} />
+            <h3 className="text-base font-bold text-[#1A1A1A]">Available exams</h3>
           </div>
-
-          <Card className="!p-0 overflow-hidden">
-            <div className="border-b border-[#E5E7EB] px-5 py-4">
-              <h3 className="text-[15px] font-bold text-[#1A1A1A]">Recommended for You</h3>
+          {loading ? (
+            <p className="text-sm text-[#6B7280]">Loading…</p>
+          ) : !exams.length ? (
+            <div className="rounded-2xl bg-[#F8F9FC] px-4 py-10 text-center">
+              <QuizOutlined sx={{ fontSize: 28, color: "#9CA3AF" }} />
+              <p className="mt-2 text-sm font-semibold text-[#1A1A1A]">No published exams yet</p>
+              <p className="mt-1 text-xs text-[#6B7280]">
+                When your school publishes an online exam, it will appear here.
+              </p>
             </div>
-            {recommended.length === 0 ? (
-              <p className="px-5 py-10 text-center text-[13px] text-[#6B7280]">No tests for this subject.</p>
-            ) : (
-              <div className="divide-y divide-[#F1F2F6]">
-                {recommended.map((test) => {
-                  const tone = difficultyTone(test.difficulty);
-                  return (
-                    <div
-                      key={test.id}
-                      className="flex flex-wrap items-center gap-3 px-5 py-4 sm:flex-nowrap"
-                    >
-                      <span
-                        className="grid size-11 shrink-0 place-items-center rounded-2xl text-[13px] font-bold text-white"
-                        style={{ background: test.color }}
-                      >
-                        {test.glyph}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-[14px] font-bold text-[#1A1A1A]">{test.title}</p>
-                        <p className="truncate text-[12px] text-[#9CA3AF]">{test.chapter}</p>
-                      </div>
-                      <span
-                        className="rounded-full px-2.5 py-1 text-[11px] font-bold"
-                        style={{ background: tone.bg, color: tone.fg }}
-                      >
-                        {test.difficulty}
-                      </span>
-                      <div className="flex items-center gap-3 text-[12px] text-[#6B7280]">
-                        <span className="inline-flex items-center gap-1 font-semibold">
-                          <QuizOutlined sx={{ fontSize: 16 }} />
-                          {test.questions} Questions
-                        </span>
-                        <span className="inline-flex items-center gap-1 font-semibold">
-                          <ScheduleRounded sx={{ fontSize: 16 }} />
-                          {test.durationMin} min
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        className="rounded-xl border px-3.5 py-2 text-[12px] font-bold transition hover:bg-[#EEF0FD]"
-                        style={{ borderColor: PRIMARY, color: PRIMARY }}
-                        onClick={() => setStartedId(test.id)}
-                      >
-                        Start Test
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </Card>
-
-          <div>
-            <h3 className="mb-3 text-[15px] font-bold text-[#1A1A1A]">Test Series</h3>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              {SERIES.map((series) => {
-                const pct = Math.round((series.completed / series.total) * 100);
-                return (
-                  <Card key={series.id} className="!p-4">
-                    <span
-                      className="mb-3 grid size-11 place-items-center rounded-2xl text-white"
-                      style={{ background: series.color }}
-                    >
-                      <series.Icon sx={{ fontSize: 22 }} />
-                    </span>
-                    <p className="min-h-[40px] text-[13px] font-bold leading-snug text-[#1A1A1A]">
-                      {series.title}
-                    </p>
-                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#F1F2F6]">
-                      <div
-                        className="h-full rounded-full transition-all"
-                        style={{ width: `${pct}%`, background: series.color }}
-                      />
-                    </div>
-                    <div className="mt-2 flex items-center justify-between gap-2 text-[11px]">
-                      <span className="font-bold" style={{ color: series.color }}>
-                        {pct}%
-                      </span>
-                      <span className="font-semibold text-[#9CA3AF]">
-                        {series.completed} / {series.total} Tests
-                      </span>
-                    </div>
-                  </Card>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-4">
-          <Card>
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <h3 className="text-[15px] font-bold text-[#1A1A1A]">Performance Overview</h3>
-              <select
-                className="rounded-lg border border-[#E5E7EB] bg-white px-2 py-1 text-[11px] font-semibold text-[#6B7280] outline-none"
-                value={period}
-                onChange={(e) => setPeriod(e.target.value)}
-              >
-                <option>This Month</option>
-                <option>Last Month</option>
-                <option>This Term</option>
-              </select>
-            </div>
-            <PerformanceDonut average={68} />
-            <div className="mt-4 space-y-2">
-              {[
-                { label: "Correct", value: PERF.correct, color: "#10B981" },
-                { label: "Incorrect", value: PERF.incorrect, color: PRIMARY },
-                { label: "Skipped", value: PERF.skipped, color: "#F59E0B" },
-              ].map((row) => {
-                const pct = Math.round((row.value / perfTotal) * 100);
-                return (
-                  <div key={row.label} className="flex items-center justify-between gap-2 text-[12px]">
-                    <span className="inline-flex items-center gap-2 font-semibold text-[#6B7280]">
-                      <span className="size-2.5 rounded-full" style={{ background: row.color }} />
-                      {row.label}
-                    </span>
-                    <span className="font-bold text-[#1A1A1A]">
-                      {row.value}{" "}
-                      <span className="font-semibold text-[#9CA3AF]">({pct}%)</span>
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-            <div
-              className="mt-4 flex items-start gap-2 rounded-xl px-3 py-2.5 text-[12px] font-medium leading-relaxed text-white"
-              style={{ background: `linear-gradient(145deg, ${PRIMARY} 0%, #3F3A9A 100%)` }}
-            >
-              <TrendingUpRounded sx={{ fontSize: 18, marginTop: "1px" }} />
-              <p>You are doing better than last month! Keep practicing to improve more.</p>
-            </div>
-          </Card>
-
-          <Card>
-            <h3 className="mb-4 text-[15px] font-bold text-[#1A1A1A]">Recent Test Attempts</h3>
+          ) : (
             <div className="space-y-3">
-              {attempts.map((attempt) => (
-                <button
-                  key={attempt.id}
-                  type="button"
-                  className="flex w-full items-center gap-3 rounded-2xl border border-[#F1F2F6] bg-[#FBFBFC] px-3 py-3 text-left transition hover:bg-[#F6F7F9]"
-                  onClick={() => setStartedId(attempt.id)}
+              {exams.map((exam) => (
+                <div
+                  key={exam.id}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#E5E7EB] p-4"
                 >
-                  <span
-                    className={`grid size-9 shrink-0 place-items-center rounded-full ${
-                      attempt.passed ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"
-                    }`}
-                  >
-                    {attempt.passed ? (
-                      <CheckCircleRounded sx={{ fontSize: 20 }} />
-                    ) : (
-                      <CancelRounded sx={{ fontSize: 20 }} />
-                    )}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-[13px] font-bold text-[#1A1A1A]">{attempt.title}</p>
-                    <p className="truncate text-[11px] text-[#9CA3AF]">
-                      {attempt.subject} · {attempt.when}
+                  <div className="min-w-0">
+                    <p className="font-semibold text-[#1A1A1A]">{exam.title}</p>
+                    <p className="mt-1 text-[12px] text-[#6B7280]">
+                      {exam.questionCount} Q · {exam.durationMinutes} min · pass {exam.passMarks} ·{" "}
+                      {exam.attemptsRemaining} attempt(s) left
                     </p>
+                    {exam.latestAttempt ? (
+                      <p className="mt-1 text-[11px] font-medium text-[#534AB7]">
+                        Latest: {exam.latestAttempt.status}
+                        {exam.latestAttempt.status === "GRADED" && exam.latestAttempt.score != null
+                          ? ` · ${exam.latestAttempt.score}/${exam.latestAttempt.maxScore ?? "—"}`
+                          : exam.latestAttempt.status === "SUBMITTED"
+                            ? " · result pending teacher grade"
+                            : ""}
+                      </p>
+                    ) : null}
                   </div>
-                  <div className="shrink-0 text-right">
-                    <p
-                      className="text-[13px] font-bold"
-                      style={{ color: attempt.passed ? "#059669" : "#E11D48" }}
+                  {isStudent ? (
+                    <button
+                      type="button"
+                      disabled={submitting || (!exam.canAttempt && !exam.inProgressAttempt)}
+                      onClick={() => void startExam(exam.id)}
+                      className="inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                      style={{ background: PRIMARY }}
                     >
-                      {attempt.scorePct}%
-                    </p>
-                    <p className="text-[10px] font-semibold text-[#9CA3AF]">
-                      {attempt.correct}/{attempt.total}
-                    </p>
-                  </div>
-                </button>
+                      <PlayArrowOutlined sx={{ fontSize: 18 }} />
+                      {exam.inProgressAttempt ? "Continue" : "Start"}
+                    </button>
+                  ) : (
+                    <span className="text-[11px] font-semibold text-[#9CA3AF]">View only</span>
+                  )}
+                </div>
               ))}
             </div>
-            <button
-              type="button"
-              className="mt-4 w-full text-center text-[12px] font-bold text-[#534AB7] hover:underline"
-              onClick={() => setShowAllAttempts((v) => !v)}
-            >
-              {showAllAttempts ? "Show Less" : "View All Attempts →"}
-            </button>
-          </Card>
-        </div>
+          )}
+        </Card>
+
+        <Card>
+          <div className="mb-4 flex items-center gap-2">
+            <EmojiEventsOutlined sx={{ fontSize: 20, color: PRIMARY }} />
+            <h3 className="text-base font-bold text-[#1A1A1A]">My attempts</h3>
+          </div>
+          {!attempts.length ? (
+            <p className="text-sm text-[#6B7280]">No attempts yet.</p>
+          ) : (
+            <div className="space-y-2">
+              {attempts.slice(0, 12).map((row) => (
+                <div
+                  key={row.id}
+                  className="rounded-xl border border-[#E5E7EB] px-3 py-2.5"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-semibold text-[#1A1A1A]">{row.exam.title}</p>
+                      <p className="text-[11px] text-[#6B7280]">
+                        Attempt #{row.attemptNo} · {row.status}
+                      </p>
+                    </div>
+                    {row.status === "GRADED" && row.passed != null ? (
+                      row.passed ? (
+                        <CheckCircleRounded sx={{ fontSize: 18, color: "#059669" }} />
+                      ) : (
+                        <span className="text-[10px] font-bold uppercase text-[#E11D48]">Fail</span>
+                      )
+                    ) : row.status === "SUBMITTED" ? (
+                      <span className="text-[10px] font-bold uppercase text-amber-700">Pending</span>
+                    ) : null}
+                  </div>
+                  {row.status === "GRADED" ? (
+                    <p className="mt-1 text-[12px] font-medium text-[#534AB7]">
+                      Score {row.score ?? "—"} / {row.maxScore ?? "—"}
+                      {row.rank != null ? ` · Rank #${row.rank}` : ""}
+                      {row.passed == null ? "" : row.passed ? " · Pass" : " · Fail"}
+                    </p>
+                  ) : row.status === "SUBMITTED" ? (
+                    <p className="mt-1 text-[11px] font-medium text-amber-700">
+                      Submitted. Score and Pass/Fail will show after teacher grades.
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-[11px] text-[#6B7280]">In progress</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
       </div>
     </div>
   );

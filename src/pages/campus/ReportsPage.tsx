@@ -423,18 +423,18 @@ const OPS_REPORT_STYLE: Record<string, { icon: ComponentType<{ sx?: object }>; t
 };
 
 const MORE_REPORT_STYLE: Record<string, { icon: ComponentType<{ sx?: object }>; tone: string }> = {
-  book_issue: { icon: MenuBookOutlined, tone: "bg-slate-100 text-slate-600" },
-  book_due: { icon: MenuBookOutlined, tone: "bg-slate-100 text-slate-600" },
-  book_inventory: { icon: MenuBookOutlined, tone: "bg-slate-100 text-slate-600" },
-  book_return: { icon: MenuBookOutlined, tone: "bg-slate-100 text-slate-600" },
-  stock: { icon: InventoryOutlined, tone: "bg-slate-100 text-slate-600" },
-  add_item: { icon: InventoryOutlined, tone: "bg-slate-100 text-slate-600" },
-  issue_item: { icon: InventoryOutlined, tone: "bg-slate-100 text-slate-600" },
-  online_exam_wise: { icon: QuizOutlined, tone: "bg-slate-100 text-slate-600" },
-  online_exams: { icon: QuizOutlined, tone: "bg-slate-100 text-slate-600" },
-  online_attempt: { icon: QuizOutlined, tone: "bg-slate-100 text-slate-600" },
-  online_rank: { icon: QuizOutlined, tone: "bg-slate-100 text-slate-600" },
-  subjective_marks: { icon: QuizOutlined, tone: "bg-slate-100 text-slate-600" },
+  book_issue: { icon: MenuBookOutlined, tone: "bg-cyan-100 text-cyan-700" },
+  book_due: { icon: MenuBookOutlined, tone: "bg-amber-100 text-amber-700" },
+  book_inventory: { icon: MenuBookOutlined, tone: "bg-sky-100 text-sky-700" },
+  book_return: { icon: MenuBookOutlined, tone: "bg-emerald-100 text-emerald-700" },
+  stock: { icon: InventoryOutlined, tone: "bg-stone-100 text-stone-700" },
+  add_item: { icon: InventoryOutlined, tone: "bg-emerald-100 text-emerald-700" },
+  issue_item: { icon: InventoryOutlined, tone: "bg-indigo-100 text-indigo-700" },
+  online_exam_wise: { icon: QuizOutlined, tone: "bg-violet-100 text-violet-700" },
+  online_exams: { icon: QuizOutlined, tone: "bg-indigo-100 text-indigo-700" },
+  online_attempt: { icon: QuizOutlined, tone: "bg-sky-100 text-sky-700" },
+  online_rank: { icon: QuizOutlined, tone: "bg-amber-100 text-amber-700" },
+  subjective_marks: { icon: QuizOutlined, tone: "bg-fuchsia-100 text-fuchsia-700" },
   syllabus_status: { icon: AutoStoriesOutlined, tone: "bg-slate-100 text-slate-600" },
   subject_lesson_plan: { icon: AutoStoriesOutlined, tone: "bg-slate-100 text-slate-600" },
 };
@@ -626,8 +626,19 @@ export function ReportsPage() {
 
   const moreCatalog = useMemo(() => {
     const map = new Map<string, CatalogReportItem>();
+    for (const item of hub?.extraReports ?? []) {
+      if (
+        item.section === "library" ||
+        item.section === "inventory" ||
+        item.section === "onlineExam"
+      ) {
+        map.set(item.key, item);
+      }
+    }
     for (const group of Object.values(hub?.unavailableReports ?? {})) {
-      for (const item of group) map.set(item.key, item);
+      for (const item of group) {
+        if (!item.available) map.set(item.key, item);
+      }
     }
     for (const item of hub?.extraReports ?? []) {
       if (!item.available) map.set(item.key, item);
@@ -1239,7 +1250,7 @@ export function ReportsPage() {
                               : tab === "ops"
                                 ? "Choose operations report"
                                 : tab === "more"
-                                  ? "Coming soon reports"
+                                  ? "Library, inventory, online exam & upcoming"
                                   : "Choose core report"}
                 </p>
                 <p className="text-xs text-slate-500">
@@ -1686,9 +1697,15 @@ export function ReportsPage() {
                                       {item.description}
                                     </span>
                                   </span>
-                                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase text-slate-500">
-                                    Soon
-                                  </span>
+                                  {item.available === false ? (
+                                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase text-slate-500">
+                                      Soon
+                                    </span>
+                                  ) : (
+                                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-700">
+                                      Ready
+                                    </span>
+                                  )}
                                   {isSelected ? (
                                     <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-bold uppercase text-indigo-700">
                                       Active

@@ -1,11 +1,14 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   EmojiEventsOutlined,
   LeaderboardOutlined,
   MilitaryTechOutlined,
+  PlayArrowOutlined,
+  QuizOutlined,
   TrendingUpRounded,
 } from "@mui/icons-material";
 import { Link, Navigate } from "react-router-dom";
+import { apiRequest } from "../../lib/api";
 import { isProductBucketAllowed } from "../../lib/productMode";
 import { usePortal } from "./PortalContext";
 import type { PortalExamItem } from "./portalTypes";
@@ -13,6 +16,22 @@ import type { PortalExamItem } from "./portalTypes";
 const PRIMARY = "#534AB7";
 const PRIMARY_SOFT = "#EEF0FD";
 const BORDER = "#E5E7EB";
+
+type OnlineExamCard = {
+  id: string;
+  title: string;
+  durationMinutes: number;
+  questionCount: number;
+  passMarks: number;
+  attemptsRemaining: number;
+  canAttempt: boolean;
+  inProgressAttempt: { id: string } | null;
+  latestAttempt: {
+    status: string;
+    score: string | number | null;
+    maxScore: string | number | null;
+  } | null;
+};
 
 const SUBJECT_COLORS = [
   "#534AB7",
@@ -192,13 +211,32 @@ function ExamDetailModal({
 }
 
 export function PortalExamsPage() {
-  const { child, overview, activeChild, setActiveChild, basePath, productMode } = usePortal();
+  const { child, overview, activeChild, setActiveChild, basePath, productMode, accessToken } = usePortal();
   const [groupTab, setGroupTab] = useState<GroupTab>("ALL");
   const [subjectFilter, setSubjectFilter] = useState("ALL");
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [onlineExams, setOnlineExams] = useState<OnlineExamCard[]>([]);
   const showCms = isProductBucketAllowed(productMode, "CMS");
 
   const exams = child?.exams ?? [];
+  const studentId = child?.student.id;
+
+  const loadOnlineExams = useCallback(async () => {
+    if (!studentId || !accessToken) return;
+    try {
+      const rows = await apiRequest<OnlineExamCard[]>(
+        `/portal/children/${studentId}/online-exams`,
+        accessToken,
+      );
+      setOnlineExams(Array.isArray(rows) ? rows : []);
+    } catch {
+      setOnlineExams([]);
+    }
+  }, [studentId, accessToken]);
+
+  useEffect(() => {
+    void loadOnlineExams();
+  }, [loadOnlineExams]);
 
   const groupTabs = useMemo(() => {
     const names = [...new Set(exams.map((exam) => exam.groupName))];
@@ -316,9 +354,60 @@ export function PortalExamsPage() {
         )}
       </div>
 
+      <Card className="!p-4" style={{ background: PRIMARY_SOFT, borderColor: "#D9DCF8" }}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <span className="grid size-10 place-items-center rounded-xl bg-white text-[#534AB7]">
+              <QuizOutlined sx={{ fontSize: 22 }} />
+            </span>
+            <div>
+              <p className="text-sm font-bold text-[#1A1A1A]">Online Exams</p>
+              <p className="mt-0.5 text-[12px] text-[#6B7280]">
+                {onlineExams.length
+                  ? `${onlineExams.length} published exam${onlineExams.length === 1 ? "" : "s"} available to attempt`
+                  : "Take MCQ / subjective exams published by your school"}
+              </p>
+            </div>
+          </div>
+          <Link
+            to={`${basePath}/test-series`}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-[#534AB7] px-3.5 py-2 text-[13px] font-semibold text-white"
+          >
+            <PlayArrowOutlined sx={{ fontSize: 18 }} />
+            Open Online Exams
+          </Link>
+        </div>
+        {onlineExams.length ? (
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            {onlineExams.slice(0, 4).map((exam) => (
+              <div key={exam.id} className="rounded-xl border border-white/80 bg-white/90 px-3 py-2.5">
+                <p className="text-[13px] font-semibold text-[#1A1A1A]">{exam.title}</p>
+                <p className="mt-0.5 text-[11px] text-[#6B7280]">
+                  {exam.questionCount} Q · {exam.durationMinutes} min
+                  {exam.latestAttempt
+                    ? exam.latestAttempt.status === "GRADED" && exam.latestAttempt.score != null
+                      ? ` · ${exam.latestAttempt.status} ${exam.latestAttempt.score}/${exam.latestAttempt.maxScore ?? "—"}`
+                      : ` · ${exam.latestAttempt.status}${
+                          exam.latestAttempt.status === "SUBMITTED" ? " (result pending)" : ""
+                        }`
+                    : ` · ${exam.attemptsRemaining} attempt(s) left`}
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </Card>
+
       {exams.length === 0 ? (
         <Card>
-          <p className="text-sm text-[#6B7280]">No published results yet.</p>
+          <p className="text-sm font-semibold text-[#1A1A1A]">No published marksheet results yet.</p>
+          <p className="mt-1 text-[12px] text-[#6B7280]">
+            This section shows offline exam results. For online attempts, use{" "}
+            <Link to={`${basePath}/test-series`} className="font-semibold text-[#534AB7]">
+              Online Exams
+            </Link>
+            .
+          </p>
         </Card>
       ) : (
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">

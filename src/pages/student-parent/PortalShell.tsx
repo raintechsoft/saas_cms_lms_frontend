@@ -93,10 +93,10 @@ function getNavItems(basePath: string, _productMode: PortalOverview["productMode
     { to: `${basePath}/ai-tutor`, label: "AI Tutor", icon: AutoAwesomeOutlined, end: false, bucket: "LMS" as const },
     {
       to: `${basePath}/test-series`,
-      label: "Test Series & Practice",
+      label: "Online Exams",
       icon: TrackChangesOutlined,
       end: false,
-      bucket: "LMS" as const,
+      bucket: "CMS" as const,
     },
     {
       to: `${basePath}/documents`,

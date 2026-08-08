@@ -62,6 +62,8 @@ export const CMS_MODULE_OPTIONS: Array<{ key: string; label: string }> = [
   { key: "transport", label: "Transport" },
   { key: "hostel", label: "Hostel" },
   { key: "library", label: "Library" },
+  { key: "inventory", label: "Inventory" },
+  { key: "onlineExam", label: "Online Exam" },
   { key: "reports", label: "Reports" },
 ];
 
