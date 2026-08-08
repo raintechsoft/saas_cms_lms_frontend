@@ -41,7 +41,7 @@ export const CAMPUS_NAV: Array<{
   { to: "/library", label: "Library", permission: "library.view", moduleKey: "library", bucket: "CMS", section: "cms" },
   { to: "/inventory", label: "Inventory", permission: "inventory.view", moduleKey: "inventory", bucket: "CMS", section: "cms" },
   { to: "/online-exams", label: "Online Exam", permission: "online_exam.view", moduleKey: "onlineExam", bucket: "CMS", section: "cms" },
-  { to: "/erp", label: "ERP control center", permission: "erp.view", moduleKey: "erp", bucket: "CMS", section: "cms" },
+  { to: "/erp", label: "ERP Settings", permission: "erp.view", moduleKey: "erp", bucket: "CMS", section: "cms" },
   { to: "/timetable", label: "Timetable", permission: "timetable.view", moduleKey: "timetable", bucket: "LMS", section: "lms" },
   { to: "/reports", label: "Reports", permission: "reports.view", moduleKey: "reports", bucket: "SHARED", section: "management" },
   { to: "/users", label: "Users & roles", permission: "users.view", moduleKey: null, bucket: "SHARED", section: "management" },

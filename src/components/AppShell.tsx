@@ -263,6 +263,7 @@ function NavGroup({
               <NavLink
                 key={to}
                 to={to}
+                end={to !== "/erp" && to !== "/students" && to !== "/hostel"}
                 className={({ isActive }) =>
                   `relative flex items-center gap-2.5 rounded-xl px-2 py-2 text-[13px] font-medium transition ${
                     isActive
@@ -517,7 +518,7 @@ export function AppShell() {
 
   return (
     <div className="flex h-screen min-h-0 bg-[#f6f7f9] text-[#1d1f23] lg:flex">
-      <aside className="border-b border-indigo-100/80 bg-gradient-to-b from-[#eef1fb] via-[#f3f5fb] to-[#f7f8fc] lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col lg:border-b-0 lg:border-r lg:border-indigo-100/80">
+      <aside className="flex flex-col border-b border-indigo-100/80 bg-gradient-to-b from-[#eef1fb] via-[#f3f5fb] to-[#f7f8fc] lg:fixed lg:inset-y-0 lg:h-screen lg:w-64 lg:border-b-0 lg:border-r lg:border-indigo-100/80">
         <div className="flex h-16 items-center gap-2.5 border-b border-indigo-100/70 px-4">
           {branding.logoUrl ? (
             <img src={branding.logoUrl} alt="" className="size-9 rounded-lg object-cover" />
@@ -784,7 +785,7 @@ export function AppShell() {
             </div>
           </div>
         </header>
-        <div className="min-h-0 flex-1 overflow-hidden">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <Outlet />
         </div>
       </div>

@@ -29,7 +29,8 @@ import { FeeReceiptPrintPage } from "./pages/campus/FeeReceiptPrintPage";
 import { FeeInvoicePrintPage } from "./pages/campus/FeeInvoicePrintPage";
 import { TimetablePage } from "./pages/campus/TimetablePage";
 import { HomeworkPage } from "./pages/campus/HomeworkPage";
-import { ErpSettingsPage } from "./pages/campus/ErpSettingsPage";
+import { ErpSettingsLayout } from "./pages/campus/erp-settings/ErpSettingsLayout";
+import { ErpSettingsPageRouter } from "./pages/campus/erp-settings/ErpSettingsPageRouter";
 import { NoticesPage } from "./pages/campus/NoticesPage";
 import { NotificationsPage } from "./pages/campus/NotificationsPage";
 import { OnlineAdmissionPage } from "./pages/public/OnlineAdmissionPage";
@@ -266,7 +267,17 @@ export function App() {
         <Route path="/library" element={<RequireProductBucket bucket="CMS"><LibraryPage /></RequireProductBucket>} />
         <Route path="/inventory" element={<RequireProductBucket bucket="CMS"><InventoryPage /></RequireProductBucket>} />
         <Route path="/online-exams" element={<RequireProductBucket bucket="CMS"><OnlineExamPage /></RequireProductBucket>} />
-        <Route path="/erp" element={<RequireProductBucket bucket="CMS"><ErpSettingsPage /></RequireProductBucket>} />
+        <Route
+          path="/erp"
+          element={
+            <RequireProductBucket bucket="CMS">
+              <ErpSettingsLayout />
+            </RequireProductBucket>
+          }
+        >
+          <Route index element={<Navigate to="school-profile" replace />} />
+          <Route path=":slug" element={<ErpSettingsPageRouter />} />
+        </Route>
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/users" element={<UsersPage />} />
         <Route path="/settings" element={<SettingsPage />} />
