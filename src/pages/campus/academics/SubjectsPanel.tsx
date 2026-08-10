@@ -137,7 +137,7 @@ export function SubjectsPanel({
             <fieldset className="mt-5">
               <legend className="nx-label !normal-case !tracking-normal">Subject Type</legend>
               <div className="mt-2 flex items-center gap-7">
-                {(["THEORY", "PRACTICAL"] as const).map((deliveryType) => (
+                {(["THEORY", "PRACTICAL", "BOTH"] as const).map((deliveryType) => (
                   <label
                     key={deliveryType}
                     className="flex cursor-pointer items-center gap-2 text-[12px] font-medium text-slate-700"
@@ -149,7 +149,11 @@ export function SubjectsPanel({
                       checked={form.deliveryType === deliveryType}
                       onChange={() => setForm({ ...form, deliveryType })}
                     />
-                    {deliveryType === "THEORY" ? "Theory" : "Practical"}
+                    {deliveryType === "THEORY"
+                      ? "Theory"
+                      : deliveryType === "PRACTICAL"
+                        ? "Practical"
+                        : "Both"}
                   </label>
                 ))}
               </div>
@@ -230,6 +234,7 @@ export function SubjectsPanel({
                           >
                             <option value="THEORY">Theory</option>
                             <option value="PRACTICAL">Practical</option>
+                            <option value="BOTH">Both</option>
                           </select>
                         </td>
                         <td>
@@ -288,10 +293,16 @@ export function SubjectsPanel({
                           className={`nx-pill ${
                             item.deliveryType === "PRACTICAL"
                               ? "border border-emerald-100 bg-emerald-50 text-emerald-700"
-                              : "border border-blue-100 bg-blue-50 text-blue-700"
+                              : item.deliveryType === "BOTH"
+                                ? "border border-orange-100 bg-orange-50 text-orange-700"
+                                : "border border-blue-100 bg-blue-50 text-blue-700"
                           }`}
                         >
-                          {item.deliveryType === "PRACTICAL" ? "Practical" : "Theory"}
+                          {item.deliveryType === "PRACTICAL"
+                            ? "Practical"
+                            : item.deliveryType === "BOTH"
+                              ? "Both"
+                              : "Theory"}
                         </span>
                       </td>
                       <td className="font-medium text-slate-700">{item.code || "—"}</td>

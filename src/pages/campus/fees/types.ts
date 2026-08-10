@@ -3,9 +3,15 @@ export interface Named {
   name: string;
 }
 
+export type FeeHeadKind = "MANDATORY" | "ONE_TIME" | "OPTIONAL" | "REFUNDABLE";
+
 export interface FeeType extends Named {
   code: string | null;
   description?: string | null;
+  kind?: FeeHeadKind;
+  applicableTo?: string;
+  gstApplicable?: boolean;
+  defaultAmount?: number | string;
   isActive?: boolean;
   canDelete?: boolean;
   masterCount?: number;
@@ -13,6 +19,8 @@ export interface FeeType extends Named {
 }
 
 export interface FeeGroup extends Named {
+  description?: string | null;
+  isActive?: boolean;
   items: Array<{ feeType: FeeType }>;
   canDelete?: boolean;
   masterCount?: number;
@@ -129,6 +137,10 @@ export interface FeeReminderStep {
 }
 
 export interface FeeSetting {
+  allowDuplicateInvoice?: boolean;
+  allowCustomFeeReceipt?: boolean;
+  dueDateWiseFeeOrdering?: boolean;
+  feesDueDays?: number;
   autoReminder: boolean;
   reminderDaysBefore: number;
   reminderDaysAfter: number;

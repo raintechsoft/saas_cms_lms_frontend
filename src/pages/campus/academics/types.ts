@@ -10,7 +10,7 @@ export interface Person {
   email?: string;
 }
 
-export type SubjectDeliveryType = "THEORY" | "PRACTICAL";
+export type SubjectDeliveryType = "THEORY" | "PRACTICAL" | "BOTH";
 export type SubjectType = "CORE" | "ELECTIVE";
 
 export interface ElectiveCategoryRef {
@@ -23,8 +23,13 @@ export interface SubjectItem extends Named {
   code?: string | null;
   type: SubjectType;
   deliveryType: SubjectDeliveryType;
+  maxMarks?: number | null;
+  passMarks?: number | null;
+  sortOrder?: number;
+  isActive?: boolean;
   electiveCategoryId?: string | null;
   electiveCategory?: ElectiveCategoryRef | null;
+  applicableClasses?: Array<{ id: string; name: string; sortOrder?: number }>;
 }
 
 export interface ClassItem extends Named {
@@ -48,6 +53,8 @@ export interface ClassSection {
   academicClass: ClassItem;
   section: SectionItem;
   classTeacher: Person | null;
+  roomNo?: string | null;
+  capacity?: number | null;
   subjects: ClassSubjectItem[];
   _count: { enrollments: number };
 }

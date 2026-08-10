@@ -5,23 +5,7 @@ import { ERP_DEFAULT_SLUG, findErpNavItem } from "./erpNav";
 type OutletCtx = { activeLabel: string };
 
 /** Known deep-links into existing campus modules for settings that already have a home. */
-const EXTERNAL_LINKS: Record<string, { to: string; label: string }> = {
-  "class-section": { to: "/academics", label: "Open Academics" },
-  "subject-setup": { to: "/academics", label: "Open Academics" },
-  "timetable-period": { to: "/timetable", label: "Open Timetable" },
-  "fee-heads-groups": { to: "/fees", label: "Open Fees" },
-  "fees-settings": { to: "/fees", label: "Open Fees" },
-  "staff-roles": { to: "/users", label: "Open Users & roles" },
-  "leave-types": { to: "/hr", label: "Open HR & payroll" },
-  "payroll-settings": { to: "/hr", label: "Open HR & payroll" },
-  "student-docs-folders": { to: "/documents", label: "Open Documents" },
-  "transport-settings": { to: "/transport", label: "Open Transport" },
-  "library-settings": { to: "/library", label: "Open Library" },
-  "homework-settings": { to: "/homework", label: "Open Homework" },
-  "online-admission": { to: "/students", label: "Open Students" },
-  "attendance-type": { to: "/settings", label: "Open legacy Settings" },
-  "id-numbering": { to: "/settings", label: "Open legacy Settings" },
-};
+const EXTERNAL_LINKS: Record<string, { to: string; label: string }> = {};
 
 export function ErpSettingsPlaceholderPage() {
   const { slug = ERP_DEFAULT_SLUG } = useParams<{ slug: string }>();
@@ -34,6 +18,190 @@ export function ErpSettingsPlaceholderPage() {
 
   if (slug === "school-profile") {
     return <Navigate to="/erp/school-profile" replace />;
+  }
+
+  if (slug === "academic-session") {
+    return <Navigate to="/erp/academic-session" replace />;
+  }
+
+  if (slug === "attendance-type") {
+    return <Navigate to="/erp/attendance-type" replace />;
+  }
+
+  if (slug === "regional-language") {
+    return <Navigate to="/erp/regional-language" replace />;
+  }
+
+  if (slug === "id-numbering") {
+    return <Navigate to="/erp/id-numbering" replace />;
+  }
+
+  if (slug === "fees-settings") {
+    return <Navigate to="/erp/fees-settings" replace />;
+  }
+
+  if (slug === "academic-rules") {
+    return <Navigate to="/erp/academic-rules" replace />;
+  }
+
+  if (slug === "exam-settings") {
+    return <Navigate to="/erp/exam-settings" replace />;
+  }
+
+  if (slug === "online-admission") {
+    return <Navigate to="/erp/online-admission" replace />;
+  }
+
+  if (slug === "online-class-live") {
+    return <Navigate to="/erp/online-class-live" replace />;
+  }
+
+  if (slug === "class-section") {
+    return <Navigate to="/erp/class-section" replace />;
+  }
+
+  if (slug === "subject-setup") {
+    return <Navigate to="/erp/subject-setup" replace />;
+  }
+
+  if (slug === "timetable-period") {
+    return <Navigate to="/erp/timetable-period" replace />;
+  }
+
+  if (slug === "grading-scale") {
+    return <Navigate to="/erp/grading-scale" replace />;
+  }
+
+  if (slug === "question-bank-settings") {
+    return <Navigate to="/erp/question-bank-settings" replace />;
+  }
+
+  if (slug === "fee-heads-groups") {
+    return <Navigate to="/erp/fee-heads-groups" replace />;
+  }
+
+  if (slug === "multi-fees-book") {
+    return <Navigate to="/erp/multi-fees-book" replace />;
+  }
+
+  if (slug === "homework-settings") {
+    return <Navigate to="/erp/homework-settings" replace />;
+  }
+
+  if (slug === "staff-roles") {
+    return <Navigate to="/erp/staff-roles" replace />;
+  }
+
+  if (slug === "staff-attendance") {
+    return <Navigate to="/erp/staff-attendance" replace />;
+  }
+
+  if (slug === "leave-types") {
+    return <Navigate to="/erp/leave-types" replace />;
+  }
+
+  if (slug === "payroll-settings") {
+    return <Navigate to="/erp/payroll-settings" replace />;
+  }
+
+  if (slug === "student-access") {
+    return <Navigate to="/erp/student-access" replace />;
+  }
+
+  if (slug === "system-fields") {
+    return <Navigate to="/erp/system-fields" replace />;
+  }
+
+  if (slug === "shortcut-keys") {
+    return <Navigate to="/erp/shortcut-keys" replace />;
+  }
+
+  if (slug === "id-card-designer") {
+    return <Navigate to="/erp/id-card-designer" replace />;
+  }
+
+  if (slug === "certificate-template") {
+    return <Navigate to="/erp/certificate-template" replace />;
+  }
+
+  if (slug === "report-card-template") {
+    return <Navigate to="/erp/report-card-template" replace />;
+  }
+
+  if (slug === "admit-card-template") {
+    return <Navigate to="/erp/admit-card-template" replace />;
+  }
+
+  if (slug === "student-docs-folders") {
+    return <Navigate to="/erp/student-docs-folders" replace />;
+  }
+
+  if (slug === "theme-branding") {
+    return <Navigate to="/erp/theme-branding" replace />;
+  }
+
+  if (slug === "website-cms") {
+    return <Navigate to="/erp/website-cms" replace />;
+  }
+
+  if (slug === "sms-gateway") {
+    return <Navigate to="/erp/sms-gateway" replace />;
+  }
+
+  if (slug === "email-gateway") {
+    return <Navigate to="/erp/email-gateway" replace />;
+  }
+
+  if (slug === "whatsapp-gateway") {
+    return <Navigate to="/erp/whatsapp-gateway" replace />;
+  }
+
+  if (slug === "push-gateway") {
+    return <Navigate to="/erp/push-gateway" replace />;
+  }
+
+  if (slug === "notification-triggers") {
+    return <Navigate to="/erp/notification-triggers" replace />;
+  }
+
+  if (slug === "message-notice-templates") {
+    return <Navigate to="/erp/message-notice-templates" replace />;
+  }
+
+  if (slug === "payment-methods") {
+    return <Navigate to="/erp/payment-methods" replace />;
+  }
+
+  if (slug === "backup-restore") {
+    return <Navigate to="/erp/backup-restore" replace />;
+  }
+
+  if (slug === "modules") {
+    return <Navigate to="/erp/modules" replace />;
+  }
+
+  if (slug === "data-import-export") {
+    return <Navigate to="/erp/data-import-export" replace />;
+  }
+
+  if (slug === "two-factor") {
+    return <Navigate to="/erp/two-factor" replace />;
+  }
+
+  if (slug === "holidays-calendar") {
+    return <Navigate to="/erp/holidays-calendar" replace />;
+  }
+
+  if (slug === "session-login-policy") {
+    return <Navigate to="/erp/session-login-policy" replace />;
+  }
+
+  if (slug === "transport-settings") {
+    return <Navigate to="/erp/transport-settings" replace />;
+  }
+
+  if (slug === "library-settings") {
+    return <Navigate to="/erp/library-settings" replace />;
   }
 
   const external = EXTERNAL_LINKS[slug];
