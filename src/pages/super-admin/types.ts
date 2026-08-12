@@ -51,6 +51,7 @@ export interface TenantRow {
 export const CMS_MODULE_OPTIONS: Array<{ key: string; label: string }> = [
   { key: "students", label: "Student Management" },
   { key: "academics", label: "Academics" },
+  { key: "timetable", label: "Timetable" },
   { key: "attendance", label: "Attendance" },
   { key: "notices", label: "Notices" },
   { key: "examinations", label: "Examination" },
@@ -67,8 +68,19 @@ export const CMS_MODULE_OPTIONS: Array<{ key: string; label: string }> = [
   { key: "reports", label: "Reports" },
 ];
 
-export const LMS_MODULE_OPTIONS: Array<{ key: string; label: string }> = [
-  { key: "timetable", label: "Timetable" },
+export const LMS_MODULE_OPTIONS: Array<{ key: string; label: string; unlicensed?: boolean }> = [
+  { key: "academicCalendar", label: "Academic Calendar" },
+  { key: "lessonPlanning", label: "Lesson Planning" },
+  { key: "liveClasses", label: "Live Classes" },
+  { key: "classroomManagement", label: "Classroom Management (manual)", unlicensed: true },
+  { key: "videoGallery", label: "Video Gallery (manual)", unlicensed: true },
+  { key: "aiTutor", label: "AI Tutor" },
+  { key: "voiceAiAgent", label: "Voice AI Agent (manual)", unlicensed: true },
+  { key: "ncertLibrary", label: "NCERT Content" },
+  { key: "questionBank", label: "Question Bank" },
+  { key: "testSeries", label: "Test Series" },
+  { key: "resultsPerformance", label: "Results & Performance (manual)", unlicensed: true },
+  { key: "preparationPractice", label: "Preparation & Practice (manual)", unlicensed: true },
 ];
 
 export interface TenantDetail extends TenantRow {

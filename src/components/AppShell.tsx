@@ -1,37 +1,54 @@
 import type { ComponentType } from "react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
+  AccessTimeOutlined,
   AssignmentOutlined,
+  AutoAwesomeOutlined,
   BadgeOutlined,
+  BarChartOutlined,
   CalendarMonthOutlined,
   CampaignOutlined,
   DashboardOutlined,
+  DescriptionOutlined,
+  FactCheckOutlined,
   DirectionsBusOutlined,
   ExpandMoreOutlined,
-  EventNoteOutlined,
+  EventAvailableOutlined,
   GridViewRounded,
   GroupsOutlined,
+  HelpOutlineOutlined,
   HomeWorkOutlined,
   Inventory2Outlined,
+  LibraryBooksOutlined,
   LogoutOutlined,
+  MailOutlined,
   MenuBookOutlined,
+  MicOutlined,
   NotificationsActiveOutlined,
   NotificationsOutlined,
   PaymentsOutlined,
   PersonOutlined,
+  PlayCircleOutlined,
+  PresentToAllOutlined,
   QuizOutlined,
   SchoolOutlined,
   SearchOutlined,
   SettingsOutlined,
-  SummarizeOutlined,
+  TrackChangesOutlined,
+  TrendingUpOutlined,
   TuneOutlined,
+  VideocamOutlined,
   WorkOutlineOutlined,
 } from "@mui/icons-material";
 import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { applyBrandingToDocument, parseBranding } from "../lib/branding";
 import { apiRequest, assetUrl } from "../lib/api";
-import { CAMPUS_NAV, getCampusNavForMode, type NavSection } from "../lib/productMode";
+import {
+  CAMPUS_NAV,
+  NAV_SECTION_LABEL,
+  isCampusNavItemVisible,
+} from "../lib/productMode";
 import { InitialsAvatar } from "./InitialsAvatar";
 
 type HeaderSearchStudent = {
@@ -74,36 +91,25 @@ function staffPanelTitle(roles: string[] = []) {
   return "Staff";
 }
 
-const SECTION_LABEL: Record<Extract<NavSection, "cms" | "lms" | "management">, string> = {
-  cms: "CMS Modules",
-  lms: "LMS Modules",
-  management: "Management",
-};
-
 function useBreadcrumb() {
   const location = useLocation();
   const { user } = useAuth();
   return useMemo(() => {
     const path = location.pathname;
-    if (path === "/dashboard") {
-      const mode = user?.tenant?.productMode;
-      if (mode === "LMS") return ["Dashboard", "LMS", "Overview"];
-      return ["Dashboard", "Overview"];
-    }
-    if (path === "/cms") return ["Dashboard", "CMS", "Overview"];
-    if (path === "/lms") return ["Dashboard", "LMS", "Overview"];
+    if (path === "/cms") return ["Dashboard", "CMS"];
+    if (path === "/lms") return ["Dashboard", "LMS"];
 
     const match = [...CAMPUS_NAV]
-      .filter((item) => item.to !== "/dashboard" && (path === item.to || path.startsWith(`${item.to}/`)))
+      .filter((item) => path === item.to || path.startsWith(`${item.to}/`))
       .sort((a, b) => b.to.length - a.to.length)[0];
 
-    if (!match) return ["Dashboard"];
+    if (!match) return ["Overview"];
 
-    const trail = ["Dashboard"];
-    if (match.section === "cms" || match.section === "lms" || match.section === "management") {
-      trail.push(SECTION_LABEL[match.section]);
+    if (match.section === "top") {
+      return match.to === "/dashboard" ? ["Overview"] : ["Dashboard", match.label];
     }
-    trail.push(match.label);
+
+    const trail = ["Dashboard", NAV_SECTION_LABEL[match.section], match.label];
 
     if (match.to === "/students") {
       if (path === "/students/new") trail.push("Add Student");
@@ -114,175 +120,172 @@ function useBreadcrumb() {
 }
 
 const navIcons: Record<string, NavIcon> = {
-  "/dashboard": DashboardOutlined,
-  "/profile": PersonOutlined,
+  "/dashboard": GridViewRounded,
+  "/results-performance": TrendingUpOutlined,
   "/students": SchoolOutlined,
   "/academics": MenuBookOutlined,
-  "/attendance": EventNoteOutlined,
-  "/notices": CampaignOutlined,
-  "/notifications": NotificationsOutlined,
-  "/exams": QuizOutlined,
-  "/timetable": CalendarMonthOutlined,
-  "/homework": AssignmentOutlined,
+  "/timetable": AccessTimeOutlined,
+  "/attendance": EventAvailableOutlined,
   "/fees": PaymentsOutlined,
-  "/hr": WorkOutlineOutlined,
   "/documents": BadgeOutlined,
+  "/academic-calendar": CalendarMonthOutlined,
+  "/lesson-planning": AssignmentOutlined,
+  "/homework": DescriptionOutlined,
+  "/live-classes": VideocamOutlined,
+  "/classroom-management": PresentToAllOutlined,
+  "/video-gallery": PlayCircleOutlined,
+  "/ai-tutor": AutoAwesomeOutlined,
+  "/voice-ai-agent": MicOutlined,
+  "/ncert-content": LibraryBooksOutlined,
+  "/question-bank": HelpOutlineOutlined,
+  "/test-series": BarChartOutlined,
+  "/exams": QuizOutlined,
+  "/online-exams": FactCheckOutlined,
+  "/preparation-practice": TrackChangesOutlined,
   "/transport": DirectionsBusOutlined,
   "/hostel": HomeWorkOutlined,
   "/library": MenuBookOutlined,
   "/inventory": Inventory2Outlined,
-  "/online-exams": QuizOutlined,
-  "/erp": TuneOutlined,
-  "/reports": SummarizeOutlined,
   "/users": GroupsOutlined,
+  "/hr": WorkOutlineOutlined,
+  "/notices": CampaignOutlined,
+  "/erp/message-notice-templates": MailOutlined,
+  "/erp": TuneOutlined,
+  "/lms-settings": TuneOutlined,
+  "/profile": PersonOutlined,
+  "/notifications": NotificationsOutlined,
   "/settings": SettingsOutlined,
 };
 
-/** Soft tinted chips so each module is easy to spot at a glance. */
 const navIconTone: Record<string, string> = {
-  "/dashboard": "bg-indigo-100 text-indigo-600",
-  "/notifications": "bg-violet-100 text-violet-600",
-  "/students": "bg-sky-100 text-sky-700",
-  "/academics": "bg-blue-100 text-blue-700",
-  "/attendance": "bg-amber-100 text-amber-700",
-  "/notices": "bg-orange-100 text-orange-700",
-  "/exams": "bg-fuchsia-100 text-fuchsia-700",
-  "/timetable": "bg-cyan-100 text-cyan-700",
-  "/homework": "bg-teal-100 text-teal-700",
-  "/fees": "bg-emerald-100 text-emerald-700",
-  "/hr": "bg-slate-200 text-slate-700",
-  "/documents": "bg-rose-100 text-rose-700",
-  "/transport": "bg-lime-100 text-lime-700",
-  "/hostel": "bg-orange-100 text-orange-700",
-  "/library": "bg-cyan-100 text-cyan-700",
-  "/inventory": "bg-stone-100 text-stone-700",
-  "/online-exams": "bg-violet-100 text-violet-700",
-  "/erp": "bg-purple-100 text-purple-700",
-  "/reports": "bg-indigo-100 text-indigo-700",
-  "/users": "bg-blue-100 text-blue-700",
-  "/settings": "bg-slate-200 text-slate-600",
-  "/profile": "bg-slate-100 text-slate-600",
+  "/dashboard": "bg-[#EEF2FF] text-[#6366F1]",
+  "/results-performance": "bg-[#FFEDD5] text-[#F97316]",
+  "/students": "bg-[#DBEAFE] text-[#3B82F6]",
+  "/academics": "bg-[#DBEAFE] text-[#3B82F6]",
+  "/timetable": "bg-[#DBEAFE] text-[#3B82F6]",
+  "/attendance": "bg-[#FEF3C7] text-[#F59E0B]",
+  "/fees": "bg-[#CCFBF1] text-[#14B8A6]",
+  "/documents": "bg-[#FEE2E2] text-[#EF4444]",
+  "/academic-calendar": "bg-[#EEF2FF] text-[#6366F1]",
+  "/lesson-planning": "bg-[#DBEAFE] text-[#3B82F6]",
+  "/homework": "bg-[#D1FAE5] text-[#10B981]",
+  "/live-classes": "bg-[#FEE2E2] text-[#EF4444]",
+  "/classroom-management": "bg-[#FEE2E2] text-[#EF4444]",
+  "/video-gallery": "bg-[#FEE2E2] text-[#EF4444]",
+  "/ai-tutor": "bg-[#F3E8FF] text-[#8B5CF6]",
+  "/voice-ai-agent": "bg-[#F3E8FF] text-[#8B5CF6]",
+  "/ncert-content": "bg-[#D1FAE5] text-[#10B981]",
+  "/question-bank": "bg-[#CCFBF1] text-[#14B8A6]",
+  "/test-series": "bg-[#FFEDD5] text-[#F97316]",
+  "/exams": "bg-[#FCE7F3] text-[#EC4899]",
+  "/online-exams": "bg-[#F3E8FF] text-[#8B5CF6]",
+  "/preparation-practice": "bg-[#FFEDD5] text-[#F97316]",
+  "/transport": "bg-[#ECFCCB] text-[#84CC16]",
+  "/hostel": "bg-[#FFEDD5] text-[#F97316]",
+  "/library": "bg-[#CCFBF1] text-[#14B8A6]",
+  "/inventory": "bg-[#F3F4F6] text-[#6B7280]",
+  "/users": "bg-[#F3F4F6] text-[#6B7280]",
+  "/hr": "bg-[#F3F4F6] text-[#6B7280]",
+  "/notices": "bg-[#FFEDD5] text-[#F97316]",
+  "/erp/message-notice-templates": "bg-[#F3E8FF] text-[#8B5CF6]",
+  "/erp": "bg-[#EDE9FE] text-[#534AB7]",
+  "/lms-settings": "bg-[#EDE9FE] text-[#534AB7]",
+  "/profile": "bg-[#F3F4F6] text-[#6B7280]",
+  "/notifications": "bg-[#F3E8FF] text-[#8B5CF6]",
+  "/settings": "bg-[#F3F4F6] text-[#6B7280]",
 };
 
-const sectionTone: Record<string, string> = {
-  "CMS Modules": "bg-indigo-100 text-indigo-700",
-  "LMS Modules": "bg-cyan-100 text-cyan-700",
-};
-
-function NavIconBadge({
-  to,
-  Icon,
-  active = false,
-  solidActive = false,
-  size = "md",
-}: {
-  to: string;
-  Icon: NavIcon;
-  active?: boolean;
-  /** Filled primary row (Overview) — white icon on solid bg */
-  solidActive?: boolean;
-  size?: "sm" | "md";
-}) {
-  const box = size === "md" ? "size-8" : "size-7";
-  const font = size === "md" ? 20 : 18;
-  if (solidActive && active) {
-    return (
-      <span className={`inline-grid ${box} shrink-0 place-items-center rounded-lg bg-white/20 text-white`}>
-        <Icon sx={{ fontSize: font }} />
-      </span>
-    );
-  }
-  const tone = navIconTone[to] ?? "bg-slate-100 text-slate-600";
+function ModuleIconChip({ to, Icon }: { to: string; Icon: NavIcon }) {
+  const tone = navIconTone[to] ?? "bg-[#F3F4F6] text-[#6B7280]";
   return (
-    <span
-      className={`inline-grid ${box} shrink-0 place-items-center rounded-lg ${tone} ${
-        active ? "ring-2 ring-indigo-200/80" : ""
-      }`}
-    >
-      <Icon sx={{ fontSize: font }} />
+    <span className={`inline-grid size-5 shrink-0 place-items-center rounded-md ${tone}`}>
+      <Icon sx={{ fontSize: 13 }} />
     </span>
   );
 }
 
-function NavGroup({
+function SidebarNavLink({
+  to,
+  label,
+  size,
+  unreadCount = 0,
+}: {
+  to: string;
+  label: string;
+  size: "dashboard" | "child";
+  unreadCount?: number;
+}) {
+  const Icon = navIcons[to] ?? DashboardOutlined;
+  const isNotifications = to === "/notifications";
+  return (
+    <NavLink
+      to={to}
+      end={to !== "/students" && to !== "/hostel"}
+      className={({ isActive }) =>
+        `flex items-center gap-2 rounded-lg px-4 transition ${
+          size === "dashboard" ? "h-10 text-[14px]" : "h-9 text-[13px]"
+        } ${
+          isActive
+            ? "bg-[#EEF2FF] font-semibold text-[#4F46E5]"
+            : "font-medium text-[#374151] hover:bg-[#F6F7F9]"
+        }`
+      }
+    >
+      <span className="relative inline-flex">
+        <ModuleIconChip to={to} Icon={Icon} />
+        {isNotifications && unreadCount > 0 ? (
+          <span className="absolute -right-1 -top-1 size-2 rounded-full bg-rose-500 ring-2 ring-white" />
+        ) : null}
+      </span>
+      <span className="truncate">{label}</span>
+    </NavLink>
+  );
+}
+
+function ModuleAccordion({
   label,
   items,
   active,
-  navIcons: icons,
-  to,
+  headerIcon: HeaderIcon,
+  headerTone,
 }: {
   label: string;
   items: Array<{ to: string; label: string }>;
   active: boolean;
-  navIcons: Record<string, NavIcon>;
-  /** Optional dashboard route opened when the group header is clicked. */
-  to?: string;
+  headerIcon: NavIcon;
+  headerTone: string;
 }) {
-  const [open, setOpen] = useState(active);
-  const navigate = useNavigate();
-  const location = useLocation();
+  const [open, setOpen] = useState(true);
+
   useEffect(() => {
     if (active) setOpen(true);
   }, [active]);
-  if (!items.length) return null;
-  const GroupIcon = icons[items[0].to] ?? GridViewRounded;
-  const groupTone = sectionTone[label] ?? "bg-slate-100 text-slate-600";
-
-  const handleHeaderClick = () => {
-    if (to && location.pathname !== to) {
-      setOpen(true);
-      navigate(to);
-      return;
-    }
-    setOpen((current) => !current);
-  };
 
   return (
     <div>
       <button
         type="button"
-        onClick={handleHeaderClick}
-        className={`flex w-full items-center gap-2.5 rounded-xl px-2 py-2 text-[13px] font-semibold transition ${
-          active ? "bg-white/80 text-indigo-800 shadow-sm" : "text-slate-600 hover:bg-white/60 hover:text-slate-800"
+        onClick={() => setOpen((current) => !current)}
+        className={`flex h-10 w-full items-center gap-2 rounded-lg px-4 text-left text-[14px] font-semibold text-[#1A1A1A] transition ${
+          open ? "bg-[#F6F7F9]" : "hover:bg-[#F6F7F9]"
         }`}
       >
-        <span className={`inline-grid size-8 shrink-0 place-items-center rounded-lg ${groupTone}`}>
-          <GroupIcon sx={{ fontSize: 20 }} />
+        <span className={`inline-grid size-5 shrink-0 place-items-center rounded-md ${headerTone}`}>
+          <HeaderIcon sx={{ fontSize: 13 }} />
         </span>
-        <span className="flex-1 text-left">{label}</span>
+        <span className="min-w-0 flex-1 truncate">{label}</span>
         <ExpandMoreOutlined
           sx={{ fontSize: 18 }}
-          className={`shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
+          className={`shrink-0 text-[#9CA3AF] transition-transform ${open ? "rotate-180" : ""}`}
         />
       </button>
-      {open && (
-        <div className="ml-3 mt-1 space-y-1 border-l-2 border-indigo-100 pl-2.5">
-          {items.map(({ to, label: itemLabel }) => {
-            const Icon = icons[to] ?? GridViewRounded;
-            return (
-              <NavLink
-                key={to}
-                to={to}
-                end={to !== "/erp" && to !== "/students" && to !== "/hostel"}
-                className={({ isActive }) =>
-                  `relative flex items-center gap-2.5 rounded-xl px-2 py-2 text-[13px] font-medium transition ${
-                    isActive
-                      ? "bg-white text-[#4b41e1] shadow-sm before:absolute before:inset-y-1.5 before:left-0 before:w-[3px] before:rounded-full before:bg-[#4b41e1]"
-                      : "text-slate-600 hover:bg-white/70 hover:text-slate-900"
-                  }`
-                }
-              >
-                {({ isActive }) => (
-                  <>
-                    <NavIconBadge to={to} Icon={Icon} active={isActive} size="md" />
-                    <span className="truncate">{itemLabel}</span>
-                  </>
-                )}
-              </NavLink>
-            );
-          })}
+      {open ? (
+        <div className="mt-0.5 space-y-0.5 pl-4">
+          {items.map((item) => (
+            <SidebarNavLink key={item.to} to={item.to} label={item.label} size="child" />
+          ))}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -497,110 +500,103 @@ export function AppShell() {
     : user.roles.includes("PARENT")
       ? "parentEnabled"
       : "adminEnabled";
-  const links = getCampusNavForMode(user.tenant?.productMode).filter(
-    ({ permission, moduleKey }) =>
-      (!permission || user.permissions?.includes(permission))
-      && (!moduleKey || user.moduleSettings.find((item) => item.moduleKey === moduleKey)?.[panelField] !== false),
+  const links = CAMPUS_NAV.filter((item) =>
+    isCampusNavItemVisible(item, {
+      productMode: user.tenant?.productMode,
+      permissions: user.permissions ?? [],
+      moduleSettings: user.moduleSettings ?? [],
+      panelField,
+    }),
   );
 
-  const topLinks = links.filter((item) => item.section === "top" && item.to !== "/profile");
+  const topLinks = links.filter((item) => item.section === "top");
   const cmsLinks = links.filter((item) => item.section === "cms");
   const lmsLinks = links.filter((item) => item.section === "lms");
-  const managementLinks = links.filter((item) => item.section === "management");
-  const isCmsActive =
-    location.pathname === "/cms" || cmsLinks.some((item) => location.pathname.startsWith(item.to));
-  const isLmsActive =
-    location.pathname === "/lms" || lmsLinks.some((item) => location.pathname.startsWith(item.to));
+  const isCmsActive = cmsLinks.some(
+    (item) => location.pathname === item.to || location.pathname.startsWith(`${item.to}/`),
+  );
+  const isLmsActive = lmsLinks.some(
+    (item) => location.pathname === item.to || location.pathname.startsWith(`${item.to}/`),
+  );
 
   const panelTitle = staffPanelTitle(user.roles);
-  const schoolName = branding.logoText || user.tenant?.name || "SaaS CMS LMS";
+  const schoolName = branding.logoText || user.tenant?.name || "vsop";
   const fullName = `${user.firstName} ${user.lastName ?? ""}`.trim();
+  const initials = (fullName || "AU")
+    .split(/\s+/)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
 
   return (
-    <div className="flex h-screen min-h-0 bg-[#f6f7f9] text-[#1d1f23] lg:flex">
-      <aside className="flex flex-col border-b border-indigo-100/80 bg-gradient-to-b from-[#eef1fb] via-[#f3f5fb] to-[#f7f8fc] lg:fixed lg:inset-y-0 lg:h-screen lg:w-64 lg:border-b-0 lg:border-r lg:border-indigo-100/80">
-        <div className="flex h-16 items-center gap-2.5 border-b border-indigo-100/70 px-4">
+    <div className="flex h-screen min-h-0 bg-[#F6F7F9] text-[#1A1A1A] lg:flex">
+      <aside className="flex w-full flex-col border-b border-[#E5E7EB] bg-white lg:fixed lg:inset-y-0 lg:h-screen lg:w-[260px] lg:border-b-0 lg:border-r lg:border-[#E5E7EB]">
+        {/* Header — 72px */}
+        <div className="flex h-[72px] shrink-0 items-center gap-3 border-b border-[#E5E7EB] px-4">
           {branding.logoUrl ? (
-            <img src={branding.logoUrl} alt="" className="size-9 rounded-lg object-cover" />
+            <img src={branding.logoUrl} alt="" className="size-8 rounded-lg object-cover" />
           ) : (
-            <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-primary text-white shadow-sm shadow-indigo-200">
-              <GridViewRounded sx={{ fontSize: 20 }} />
+            <div className="grid size-8 shrink-0 place-items-center rounded-lg bg-[#534AB7] text-white">
+              <GridViewRounded sx={{ fontSize: 18 }} />
             </div>
           )}
           <div className="min-w-0">
-            <p className="truncate text-[14px] font-bold leading-tight text-[#1d1f23]">{schoolName}</p>
-            <p className="truncate text-[10px] font-medium text-indigo-400/90">{panelTitle} panel</p>
+            <p className="truncate text-[14px] font-bold leading-tight text-[#1A1A1A]">{schoolName}</p>
+            <p className="truncate text-[12px] leading-tight text-[#9CA3AF]">{panelTitle} panel</p>
           </div>
         </div>
 
-        <nav className="flex flex-1 flex-col gap-4 overflow-y-auto px-3 py-4">
-          <div className="space-y-0.5">
-            <p className="px-2.5 pb-1 text-[10px] font-bold uppercase tracking-wider text-indigo-400/80">Dashboard</p>
-            {topLinks.map(({ to, label }) => {
-              const Icon = navIcons[to] ?? DashboardOutlined;
-              return (
-                <NavLink
-                  key={to}
-                  to={to}
-                  className={({ isActive }) =>
-                    `relative flex items-center gap-2.5 rounded-xl px-2 py-2 text-[13px] font-semibold transition ${
-                      isActive
-                        ? "bg-primary text-white shadow-sm shadow-indigo-200"
-                        : "text-slate-700 hover:bg-white/70"
-                    }`
-                  }
-                >
-                  {({ isActive }) => (
-                    <>
-                      <NavIconBadge to={to} Icon={Icon} active={isActive} solidActive size="md" />
-                      {label}
-                    </>
-                  )}
-                </NavLink>
-              );
-            })}
+        {/* Scrollable nav body */}
+        <nav className="flex min-h-0 flex-1 flex-col overflow-y-auto py-2">
+          <p className="mt-3 px-4 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#9CA3AF]">
+            Dashboard
+          </p>
+          <div className="mt-1 space-y-0.5">
+            {topLinks.map((item) => (
+              <SidebarNavLink
+                key={item.to}
+                to={item.to}
+                label={item.label}
+                size="dashboard"
+                unreadCount={unreadCount}
+              />
+            ))}
           </div>
 
-          {cmsLinks.length > 0 && <NavGroup label="CMS Modules" items={cmsLinks} active={isCmsActive} navIcons={navIcons} to="/cms" />}
-          {lmsLinks.length > 0 && <NavGroup label="LMS Modules" items={lmsLinks} active={isLmsActive} navIcons={navIcons} to="/lms" />}
-
-          {managementLinks.length > 0 && (
-            <div className="space-y-0.5">
-              <p className="px-2.5 pb-1 text-[10px] font-bold uppercase tracking-wider text-indigo-400/80">Management</p>
-              {managementLinks.map(({ to, label }) => {
-                const Icon = navIcons[to] ?? SettingsOutlined;
-                return (
-                  <NavLink
-                    key={to}
-                    to={to}
-                    className={({ isActive }) =>
-                      `relative flex items-center gap-2.5 rounded-xl px-2 py-2 text-[13px] font-medium transition ${
-                        isActive
-                          ? "bg-white text-[#4b41e1] shadow-sm before:absolute before:inset-y-1.5 before:left-0 before:w-[3px] before:rounded-full before:bg-[#4b41e1]"
-                          : "text-slate-600 hover:bg-white/70 hover:text-slate-900"
-                      }`
-                    }
-                  >
-                    {({ isActive }) => (
-                      <>
-                        <NavIconBadge to={to} Icon={Icon} active={isActive} size="md" />
-                        {label}
-                      </>
-                    )}
-                  </NavLink>
-                );
-              })}
+          {cmsLinks.length > 0 ? (
+            <div className="mt-2">
+              <ModuleAccordion
+                label="CMS Modules"
+                items={cmsLinks}
+                active={isCmsActive}
+                headerIcon={SchoolOutlined}
+                headerTone="bg-[#EEF2FF] text-[#6366F1]"
+              />
             </div>
-          )}
+          ) : null}
+
+          {lmsLinks.length > 0 ? (
+            <div className="mt-2">
+              <ModuleAccordion
+                label="LMS Modules"
+                items={lmsLinks}
+                active={isLmsActive}
+                headerIcon={CalendarMonthOutlined}
+                headerTone="bg-[#CCFBF1] text-[#14B8A6]"
+              />
+            </div>
+          ) : null}
         </nav>
 
-        <div className="relative border-t border-indigo-100/70 bg-white/40 p-2.5 backdrop-blur-[2px]">
+        {/* Footer — fixed */}
+        <div className="relative shrink-0 border-t border-[#E5E7EB] p-3">
           {accountMenuOpen && (
-            <div className="absolute inset-x-2.5 bottom-[calc(100%+4px)] rounded-xl border border-slate-200 bg-white p-1.5 shadow-lg">
+            <div className="absolute inset-x-3 bottom-[calc(100%+4px)] rounded-xl border border-[#E5E7EB] bg-white p-1.5 shadow-lg">
               <Link
                 to="/profile"
                 onClick={() => setAccountMenuOpen(false)}
-                className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] font-medium text-slate-600 hover:bg-slate-50"
+                className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] font-medium text-[#374151] hover:bg-[#F6F7F9]"
               >
                 <PersonOutlined sx={{ fontSize: 17 }} /> My profile
               </Link>
@@ -616,29 +612,39 @@ export function AppShell() {
           <button
             type="button"
             onClick={() => setAccountMenuOpen((current) => !current)}
-            className="flex w-full items-center gap-2.5 rounded-lg px-1.5 py-1.5 text-left transition hover:bg-slate-50"
+            className="flex w-full items-center gap-2.5 rounded-lg px-1 py-1 text-left transition hover:bg-[#F6F7F9]"
           >
-            <InitialsAvatar name={fullName || "Admin User"} photoUrl={user.avatarUrl ? assetUrl(user.avatarUrl) : undefined} size={34} />
+            {user.avatarUrl ? (
+              <InitialsAvatar
+                name={fullName || "Admin User"}
+                photoUrl={assetUrl(user.avatarUrl)}
+                size={32}
+              />
+            ) : (
+              <span className="inline-grid size-8 shrink-0 place-items-center rounded-full bg-[#534AB7] text-[11px] font-bold text-white">
+                {initials || "AU"}
+              </span>
+            )}
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[12.5px] font-semibold text-slate-800">{fullName || "Admin User"}</p>
-              <p className="truncate text-[10.5px] text-slate-400">{user.email}</p>
+              <p className="truncate text-[12px] font-medium text-[#374151]">{user.email}</p>
+              <p className="truncate text-[11px] text-[#9CA3AF]">{schoolName}</p>
             </div>
-            <ExpandMoreOutlined sx={{ fontSize: 16 }} className="shrink-0 text-slate-400" />
+            <ExpandMoreOutlined sx={{ fontSize: 16 }} className="shrink-0 text-[#9CA3AF]" />
           </button>
         </div>
       </aside>
 
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden lg:ml-64">
-        <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center justify-between gap-3 border-b border-indigo-100/80 bg-gradient-to-r from-[#eef1fb] via-[#f3f5fb] to-[#f7f8fc] px-5 backdrop-blur-sm lg:px-6">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden lg:ml-[260px]">
+        <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center justify-between gap-3 border-b border-[#E5E7EB] bg-white px-5 lg:px-6">
           <div className="flex min-w-0 items-center gap-1.5 text-[13px]">
             {breadcrumb.map((crumb, index) => (
               <span key={`${crumb}-${index}`} className="flex items-center gap-1.5">
-                {index > 0 && <span className="text-indigo-300">&gt;</span>}
+                {index > 0 && <span className="text-[#D1D5DB]">/</span>}
                 <span
                   className={
                     index === breadcrumb.length - 1
-                      ? "font-semibold text-[#1d1f23]"
-                      : "font-medium text-indigo-400/90"
+                      ? "font-semibold text-[#1A1A1A]"
+                      : "font-medium text-[#9CA3AF]"
                   }
                 >
                   {crumb}
@@ -650,11 +656,11 @@ export function AppShell() {
             <div className="relative hidden sm:block" ref={searchRef}>
               <SearchOutlined
                 sx={{ fontSize: 18 }}
-                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-indigo-400"
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#9CA3AF]"
               />
               <input
-                className="nx-input w-72 !rounded-xl !border-indigo-100 !bg-white/80 pl-9 shadow-sm shadow-indigo-100/40 placeholder:text-slate-400"
-                placeholder="Search students, fees, logs..."
+                className="nx-input w-72 !rounded-xl !border-[#E5E7EB] !bg-[#F6F7F9] pl-9 placeholder:text-[#9CA3AF]"
+                placeholder="Search students, classes, subjects..."
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 onFocus={() => {
@@ -662,7 +668,7 @@ export function AppShell() {
                 }}
               />
               {searchOpen && (
-                <div className="absolute right-0 z-30 mt-2 w-80 overflow-hidden rounded-xl border border-indigo-100 bg-white shadow-lg shadow-indigo-100/50">
+                <div className="absolute right-0 z-30 mt-2 w-80 overflow-hidden rounded-xl border border-[#E5E7EB] bg-white shadow-lg">
                   {searchLoading ? (
                     <p className="px-3 py-3 text-center text-[12px] text-slate-500">Searching...</p>
                   ) : searchResults.students.length === 0 && searchResults.payments.length === 0 ? (

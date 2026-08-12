@@ -87,7 +87,7 @@ export function AdminTenantFormPage() {
     Object.fromEntries(CMS_MODULES.map((m) => [m.key, true])),
   );
   const [lmsOn, setLmsOn] = useState<Record<string, boolean>>(
-    Object.fromEntries(LMS_MODULES.map((m) => [m.key, true])),
+    Object.fromEntries(LMS_MODULES.map((m) => [m.key, !m.unlicensed])),
   );
   const [submitting, setSubmitting] = useState(false);
 
@@ -381,7 +381,8 @@ export function AdminTenantFormPage() {
                     Learning Management System (LMS)
                   </Typography>
                   <Typography variant="caption" color="text.secondary" display="block" mb={1}>
-                    Digital learning and engagement tools
+                    Digital learning and engagement tools. Items marked (manual) are not on any
+                    subscription plan — enable only to force-show them in the campus sidebar.
                   </Typography>
                   {LMS_MODULES.map((mod) => (
                     <FormControlLabel

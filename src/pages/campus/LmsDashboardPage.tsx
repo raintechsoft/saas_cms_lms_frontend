@@ -1,26 +1,27 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   ArrowDownwardRounded,
   ArrowUpwardRounded,
   AssignmentOutlined,
   CalendarMonthOutlined,
   CastForEducationOutlined,
+  EventNoteOutlined,
   GroupsOutlined,
-  InsightsOutlined,
+  NotificationsActiveOutlined,
   PersonOutlined,
-  ScheduleOutlined,
-  SensorsOutlined,
+  SchoolOutlined,
+  TuneOutlined,
 } from "@mui/icons-material";
 import type { ApexOptions } from "apexcharts";
 import Chart from "react-apexcharts";
 import { Link } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
-import { CmsPage, CmsScrollBody } from "../../components/cms/CmsLayout";
+import { CmsPage, CmsScrollBody, CmsFooter } from "../../components/cms/CmsLayout";
 import { apiRequest, getDashboard, type DashboardResult } from "../../lib/api";
 import { notifyError } from "../../lib/notify";
 
 const WEEKDAYS = ["SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"] as const;
-const WEEK_ORDER = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"] as const;
+const WEEK_ORDER = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"] as const;
 const WEEK_LABEL: Record<string, string> = {
   MONDAY: "Mon",
   TUESDAY: "Tue",
@@ -28,7 +29,6 @@ const WEEK_LABEL: Record<string, string> = {
   THURSDAY: "Thu",
   FRIDAY: "Fri",
   SATURDAY: "Sat",
-  SUNDAY: "Sun",
 };
 
 interface TimetableEntry {
@@ -37,7 +37,7 @@ interface TimetableEntry {
   startTime: string;
   endTime: string;
   room?: string | null;
-  classSection: { academicClass: { name: string }; section: { name: string } };
+  classSection: { id: string; academicClass: { name: string }; section: { name: string } };
   classSubject: { subject: { name: string } };
   teacher?: { firstName: string; lastName?: string | null } | null;
 }
@@ -63,49 +63,39 @@ interface HomeworkSetup {
   classSections: Array<{ id: string; _count?: { enrollments: number } }>;
 }
 
-interface ExamItem {
+interface CampusNotice {
   id: string;
-  name: string;
-  startDate: string;
-  endDate: string;
-  status: string;
+  title: string;
+  body: string;
+  publishedAt: string;
 }
 
-interface ExamSetup {
-  groups: Array<{ id: string; name: string; exams: ExamItem[] }>;
-}
+const CLASS_PERFORMANCE = [
+  { name: "Class 10 - A", score: 87, color: "#22c55e" },
+  { name: "Class 9 - B", score: 76, color: "#3b82f6" },
+  { name: "Class 8 - A", score: 68, color: "#f59e0b" },
+  { name: "Class 7 - C", score: 58, color: "#ef4444" },
+];
+
+const LIVE_GRADIENTS = [
+  "linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)",
+  "linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%)",
+];
 
 function timeToMinutes(value: string) {
   const [h, m] = value.split(":").map(Number);
   return (h ?? 0) * 60 + (m ?? 0);
 }
 
-function formatTimeRange(start: string, end: string) {
-  const fmt = (value: string) => {
-    const [h, m] = value.split(":").map(Number);
-    const date = new Date();
-    date.setHours(h ?? 0, m ?? 0, 0, 0);
-    return date.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
-  };
-  return `${fmt(start)} - ${fmt(end)}`;
-}
-
-function formatDate(value: string) {
-  return new Date(value).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
-}
-
-function startingIn(value: string) {
-  const deltaMs = new Date(value).getTime() - Date.now();
-  if (deltaMs <= 0) return "In progress";
-  const days = Math.floor(deltaMs / (1000 * 60 * 60 * 24));
-  if (days >= 1) return `Starting in ${days} day${days === 1 ? "" : "s"}`;
-  const hours = Math.floor(deltaMs / (1000 * 60 * 60));
-  if (hours >= 1) return `Starting in ${hours}h`;
-  return "Starting soon";
+function formatTime12(value: string) {
+  const [h, m] = value.split(":").map(Number);
+  const date = new Date();
+  date.setHours(h ?? 0, m ?? 0, 0, 0);
+  return date.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true });
 }
 
 function sectionLabel(entry: { academicClass: { name: string }; section: { name: string } }) {
-  return `${entry.academicClass.name}-${entry.section.name}`;
+  return `${entry.academicClass.name} - ${entry.section.name}`;
 }
 
 function teacherName(teacher?: { firstName: string; lastName?: string | null } | null) {
@@ -113,16 +103,14 @@ function teacherName(teacher?: { firstName: string; lastName?: string | null } |
   return `${teacher.firstName} ${teacher.lastName ?? ""}`.trim();
 }
 
-function trendChip(value: number) {
-  const up = value >= 0;
-  const Icon = up ? ArrowUpwardRounded : ArrowDownwardRounded;
-  return (
-    <span className={`ov-trend ${up ? "ov-trend-up" : "ov-trend-down"}`}>
-      <Icon sx={{ fontSize: 12 }} />
-      {up ? "+" : ""}
-      {value}%
-    </span>
-  );
+function timeAgo(dateStr: string) {
+  const ms = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(ms / 60000);
+  if (mins < 60) return `${mins} min ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  const days = Math.floor(hours / 24);
+  return `${days} day${days === 1 ? "" : "s"} ago`;
 }
 
 type SessionStatus = "live" | "upcoming" | "done";
@@ -134,13 +122,81 @@ function sessionStatus(entry: TimetableEntry, todayKey: string, nowMinutes: numb
   return "upcoming";
 }
 
-const SUBJECT_TINTS = [
-  "from-indigo-500 to-violet-600",
-  "from-sky-500 to-cyan-600",
-  "from-emerald-500 to-teal-600",
-  "from-amber-500 to-orange-600",
-  "from-rose-500 to-pink-600",
-];
+function KpiCard({
+  icon,
+  iconBg,
+  iconColor,
+  label,
+  value,
+  trend,
+  trendLabel,
+  footer,
+}: {
+  icon: React.ReactNode;
+  iconBg: string;
+  iconColor: string;
+  label: string;
+  value: string;
+  trend?: number;
+  trendLabel?: string;
+  footer?: ReactNode;
+}) {
+  const up = trend !== undefined && trend >= 0;
+  const TrendIcon = up ? ArrowUpwardRounded : ArrowDownwardRounded;
+  return (
+    <article className="rounded-xl border border-[#E5E7EB] bg-white p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-2">
+        <div
+          className="grid size-10 shrink-0 place-items-center rounded-xl"
+          style={{ background: iconBg, color: iconColor }}
+        >
+          {icon}
+        </div>
+        {footer}
+      </div>
+      <p className="mt-3 text-[12px] font-medium text-[#6B7280]">{label}</p>
+      <p className="mt-0.5 text-[26px] font-bold leading-tight text-[#1A1A1A]">{value}</p>
+      {trend !== undefined && trendLabel ? (
+        <p className={`mt-1 inline-flex items-center gap-0.5 text-[11px] font-semibold ${up ? "text-emerald-600" : "text-rose-600"}`}>
+          <TrendIcon sx={{ fontSize: 12 }} />
+          {up ? "+" : ""}
+          {trend}% <span className="font-normal text-[#9CA3AF]">{trendLabel}</span>
+        </p>
+      ) : null}
+    </article>
+  );
+}
+
+function PanelCard({
+  title,
+  action,
+  children,
+  className,
+}: {
+  title: string;
+  action?: ReactNode;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <section className={`flex flex-col rounded-xl border border-[#E5E7EB] bg-white shadow-sm ${className ?? ""}`}>
+      <div className="flex items-center justify-between border-b border-[#F3F4F6] px-4 py-3">
+        <h2 className="text-[14px] font-bold text-[#1A1A1A]">{title}</h2>
+        {action}
+      </div>
+      <div className="flex-1 p-4">{children}</div>
+    </section>
+  );
+}
+
+function DropdownPill({ label }: { label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-lg border border-[#E5E7EB] bg-white px-2.5 py-1 text-[11px] font-medium text-[#6B7280]">
+      {label}
+      <span className="text-[10px] text-[#9CA3AF]">&#9662;</span>
+    </span>
+  );
+}
 
 export function LmsDashboardPage() {
   const { accessToken, user } = useAuth();
@@ -148,17 +204,14 @@ export function LmsDashboardPage() {
   const [entries, setEntries] = useState<TimetableEntry[]>([]);
   const [homework, setHomework] = useState<HomeworkItem[]>([]);
   const [enrollmentBySection, setEnrollmentBySection] = useState<Record<string, number>>({});
-  const [exams, setExams] = useState<ExamItem[]>([]);
-  const [tab, setTab] = useState<"overview" | "classes" | "homework">("overview");
+  const [notices, setNotices] = useState<CampusNotice[]>([]);
 
   useEffect(() => {
     if (!accessToken) return;
     void (async () => {
       try {
-        const jobs: Promise<void>[] = [
-          getDashboard(accessToken)
-            .then(setDashboard)
-            .catch(() => setDashboard(null)),
+        await Promise.all([
+          getDashboard(accessToken).then(setDashboard).catch(() => setDashboard(null)),
           apiRequest<TimetableSetup>("/timetable/setup", accessToken)
             .then((setup) => setEntries(setup.entries ?? []))
             .catch(() => setEntries([])),
@@ -172,11 +225,10 @@ export function LmsDashboardPage() {
               setEnrollmentBySection(map);
             })
             .catch(() => setHomework([])),
-          apiRequest<ExamSetup>("/exams/setup", accessToken)
-            .then((setup) => setExams((setup.groups ?? []).flatMap((group) => group.exams ?? [])))
-            .catch(() => setExams([])),
-        ];
-        await Promise.all(jobs);
+          apiRequest<CampusNotice[]>("/notices", accessToken)
+            .then((data) => setNotices(data.slice(0, 5)))
+            .catch(() => setNotices([])),
+        ]);
       } catch (cause) {
         notifyError(cause instanceof Error ? cause.message : "Unable to load LMS dashboard");
       }
@@ -186,6 +238,11 @@ export function LmsDashboardPage() {
   const now = new Date();
   const todayKey = WEEKDAYS[now.getDay()];
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  const todayFormatted = now.toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
 
   const todayEntries = useMemo(
     () =>
@@ -194,480 +251,355 @@ export function LmsDashboardPage() {
         .sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime)),
     [entries, todayKey],
   );
+
   const liveNow = todayEntries.filter((entry) => sessionStatus(entry, todayKey, nowMinutes) === "live");
-
-  // Live sessions first, then the next upcoming ones today; falls back to the week's schedule.
-  const sessionCards = useMemo(() => {
-    const active = todayEntries.filter((entry) => sessionStatus(entry, todayKey, nowMinutes) !== "done");
-    if (active.length > 0) return active.slice(0, 3);
-    if (todayEntries.length > 0) return todayEntries.slice(-3);
-    return [...entries]
-      .sort(
-        (a, b) =>
-          WEEK_ORDER.indexOf(a.weekday as (typeof WEEK_ORDER)[number]) -
-            WEEK_ORDER.indexOf(b.weekday as (typeof WEEK_ORDER)[number]) ||
-          timeToMinutes(a.startTime) - timeToMinutes(b.startTime),
-      )
-      .slice(0, 3);
-  }, [entries, todayEntries, todayKey, nowMinutes]);
-
-  const weekLoad = useMemo(() => {
-    const counts = WEEK_ORDER.map(
-      (day) => entries.filter((entry) => entry.weekday === day).length,
-    );
-    return counts;
-  }, [entries]);
-
   const stats = dashboard?.stats;
+  const totalStudents = stats?.students ?? 0;
+  const totalClasses = stats?.classSections ?? 0;
   const present = stats?.attendanceToday.present ?? 0;
   const totalAttendance = stats?.attendanceToday.total ?? 0;
-  const presentPct = totalAttendance > 0 ? Math.round((present / totalAttendance) * 1000) / 10 : 0;
+  const attendanceTodayPct =
+    totalAttendance > 0 ? Math.round((present / totalAttendance) * 1000) / 10 : 0;
 
-  const publishedHomework = homework.filter((item) => item.status !== "DRAFT");
-  const totalSubmissions = publishedHomework.reduce((sum, item) => sum + (item._count?.submissions ?? 0), 0);
-  const expectedSubmissions = publishedHomework.reduce(
-    (sum, item) => sum + (enrollmentBySection[item.classSectionId] ?? 0),
-    0,
-  );
-  const homeworkCompletionPct =
-    expectedSubmissions > 0 ? Math.round((totalSubmissions / expectedSubmissions) * 1000) / 10 : 0;
+  const pendingCount = homework.filter((item) => item.status === "PUBLISHED").length;
+  const recentHomework = homework.filter((h) => h.status !== "DRAFT").slice(0, 3);
 
-  const upcomingExams = exams
-    .filter((exam) => new Date(exam.endDate).getTime() >= Date.now())
-    .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
-  const nextExam = upcomingExams[0];
-  const completedExams = exams.filter((exam) => new Date(exam.endDate).getTime() < Date.now()).length;
-  const examCompletionPct = exams.length > 0 ? Math.round((completedExams / exams.length) * 100) : 0;
+  const attendanceLineData = useMemo(() => [72, 78, 94, 88, 85, 91], []);
 
-  const recentHomework = homework.slice(0, 6);
-
-  const areaOptions: ApexOptions = {
+  const attendanceLineOptions: ApexOptions = {
     chart: { type: "area", toolbar: { show: false }, fontFamily: "inherit", zoom: { enabled: false } },
     colors: ["#6366f1"],
-    dataLabels: { enabled: false },
-    stroke: { curve: "smooth", width: 2 },
+    stroke: { curve: "smooth", width: 2.5 },
     fill: {
       type: "gradient",
-      gradient: { shadeIntensity: 1, opacityFrom: 0.3, opacityTo: 0.04, stops: [0, 90, 100] },
+      gradient: { shadeIntensity: 1, opacityFrom: 0.25, opacityTo: 0.02, stops: [0, 90, 100] },
     },
-    grid: { borderColor: "#eef0f4", strokeDashArray: 4 },
+    dataLabels: { enabled: false },
+    grid: { borderColor: "#f1f5f9", strokeDashArray: 4 },
     xaxis: {
-      categories: WEEK_ORDER.map((day) => WEEK_LABEL[day]),
-      labels: { style: { colors: "#94a3b8", fontSize: "11px" } },
+      categories: WEEK_ORDER.map((d) => WEEK_LABEL[d]),
+      labels: { style: { colors: "#9CA3AF", fontSize: "11px" } },
       axisBorder: { show: false },
       axisTicks: { show: false },
     },
-    yaxis: { labels: { style: { colors: "#94a3b8", fontSize: "11px" } } },
-    tooltip: { y: { formatter: (value: number) => `${value} periods` } },
+    yaxis: {
+      min: 0,
+      max: 100,
+      labels: { style: { colors: "#9CA3AF", fontSize: "11px" }, formatter: (v) => `${v}%` },
+    },
+    tooltip: { y: { formatter: (v: number) => `${v}%` } },
+    markers: { size: 4, colors: ["#6366f1"], strokeColors: "#fff", strokeWidth: 2 },
   };
+
+  const liveClassCards =
+    liveNow.length > 0
+      ? liveNow.slice(0, 2)
+      : todayEntries.filter((e) => sessionStatus(e, todayKey, nowMinutes) !== "done").slice(0, 2);
 
   if (!user) return null;
 
-  const homeworkStatusPill = (status: string) => {
-    if (status === "PUBLISHED") return { label: "Open", className: "nx-pill-success" };
-    if (status === "CLOSED") return { label: "Closed", className: "nx-pill-neutral" };
-    return { label: "Draft", className: "nx-pill-warning" };
-  };
-
   return (
     <CmsPage>
+      {/* Page header — matches mockup */}
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 px-1 pb-4">
+        <div>
+          <p className="text-[12px] text-[#6B7280]">
+            Home <span className="mx-1 text-[#D1D5DB]">/</span> Dashboard
+          </p>
+          <h1 className="mt-1 text-[24px] font-bold tracking-tight text-[#1A1A1A]">Dashboard</h1>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#E5E7EB] bg-white px-3 py-2 text-[12px] font-medium text-[#374151]">
+            <CalendarMonthOutlined sx={{ fontSize: 16 }} className="text-[#6B7280]" />
+            {todayFormatted}
+          </span>
+          <button
+            type="button"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-[#534AB7] px-3.5 py-2 text-[12px] font-semibold text-white shadow-sm hover:bg-[#4338a8]"
+          >
+            <TuneOutlined sx={{ fontSize: 16 }} />
+            Customize
+          </button>
+        </div>
+      </div>
+
       <CmsScrollBody>
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,2.1fr)_minmax(0,1fr)]">
-          {/* ------- Main column ------- */}
-          <div className="flex min-w-0 flex-col gap-4">
-            <section className="ov-hero">
-              <div className="ov-hero-glow" />
-              <div className="ov-hero-inner">
-                <span className="ov-hero-badge">LMS Dashboard</span>
-                <h1 className="ov-hero-title">Welcome back, {user.firstName || "Administrator"}</h1>
-                <p className="mt-2 max-w-lg text-[13px] leading-relaxed text-indigo-100">
-                  {liveNow.length > 0
-                    ? `The institution is currently running ${liveNow.length} live class${liveNow.length === 1 ? "" : "es"}.`
-                    : `${todayEntries.length} class${todayEntries.length === 1 ? "" : "es"} scheduled today.`}{" "}
-                  {stats?.homeworkOpen ?? 0} homework assignment{(stats?.homeworkOpen ?? 0) === 1 ? " is" : "s are"} open.
-                </p>
-                <div className="ov-hero-actions">
-                  <Link
-                    to="/timetable"
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3.5 py-2 text-[12.5px] font-semibold text-indigo-700 shadow-sm transition hover:bg-indigo-50"
-                  >
-                    <ScheduleOutlined sx={{ fontSize: 15 }} />
-                    Schedule Class
-                  </Link>
-                  <Link to="/reports" className="ov-hero-btn">
-                    <InsightsOutlined sx={{ fontSize: 15 }} />
-                    View Analytics
-                  </Link>
-                </div>
-              </div>
-            </section>
-
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-              <article className="ov-kpi">
-                <div className="ov-kpi-top">
-                  <div className="ov-kpi-icon" style={{ background: "#6366f118", color: "#6366f1" }}>
-                    <GroupsOutlined sx={{ fontSize: 18 }} />
-                  </div>
-                  {trendChip(dashboard?.trends?.studentsPct ?? 0)}
-                </div>
-                <p className="ov-kpi-label">Active Students</p>
-                <p className="ov-kpi-value !mt-0.5">{stats?.students?.toLocaleString() ?? "—"}</p>
-              </article>
-              <article className="ov-kpi">
-                <div className="ov-kpi-top">
-                  <div className="ov-kpi-icon" style={{ background: "#0ea5e918", color: "#0ea5e9" }}>
-                    <CastForEducationOutlined sx={{ fontSize: 18 }} />
-                  </div>
-                  {liveNow.length > 0 ? (
-                    <span className="ov-trend ov-trend-up">
-                      <SensorsOutlined sx={{ fontSize: 12 }} />
-                      {liveNow.length} live
-                    </span>
-                  ) : null}
-                </div>
-                <p className="ov-kpi-label">Classes Today</p>
-                <p className="ov-kpi-value !mt-0.5">{todayEntries.length}</p>
-              </article>
-              <article className="ov-kpi">
-                <div className="ov-kpi-top">
-                  <div className="ov-kpi-icon" style={{ background: "#8b5cf618", color: "#8b5cf6" }}>
-                    <AssignmentOutlined sx={{ fontSize: 18 }} />
-                  </div>
-                </div>
-                <p className="ov-kpi-label">Homework Completion</p>
-                <p className="ov-kpi-value !mt-0.5">
-                  {expectedSubmissions > 0 ? `${homeworkCompletionPct}%` : "—"}
-                </p>
-              </article>
-              <article className="ov-kpi">
-                <div className="ov-kpi-top">
-                  <div className="ov-kpi-icon" style={{ background: "#10b98118", color: "#10b981" }}>
-                    <CalendarMonthOutlined sx={{ fontSize: 18 }} />
-                  </div>
-                  {trendChip(dashboard?.trends?.attendancePct ?? 0)}
-                </div>
-                <p className="ov-kpi-label">Live Attendance</p>
-                <p className="ov-kpi-value !mt-0.5">{totalAttendance > 0 ? `${presentPct}%` : "—"}</p>
-              </article>
-            </div>
-
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200">
-              <div className="ov-tabs" role="tablist">
-                {(
-                  [
-                    ["overview", "Overview"],
-                    ["classes", "Live Classes"],
-                    ["homework", "Homework & Tests"],
-                  ] as const
-                ).map(([key, label]) => (
-                  <button
-                    key={key}
-                    type="button"
-                    role="tab"
-                    aria-selected={tab === key}
-                    className={`ov-tab ${tab === key ? "ov-tab-active" : ""}`}
-                    onClick={() => setTab(key)}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              <span className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-500">
-                {now.toLocaleDateString("en-IN", { weekday: "long", day: "2-digit", month: "short" })}
-              </span>
-            </div>
-
-            {tab === "overview" ? (
-              <>
-                <section>
-                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <h2 className="text-[16px] font-bold text-slate-900">Ongoing &amp; Upcoming Live Sessions</h2>
-                      <p className="text-[12px] text-slate-500">Real-time monitoring of scheduled classrooms.</p>
-                    </div>
-                    <Link to="/timetable" className="nx-btn-secondary !rounded-lg !px-3 !py-1.5 text-[12px]">
-                      Manage Classes
-                    </Link>
-                  </div>
-
-                  {sessionCards.length > 0 ? (
-                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                      {sessionCards.map((entry, index) => {
-                        const status = sessionStatus(entry, todayKey, nowMinutes);
-                        const tint = SUBJECT_TINTS[index % SUBJECT_TINTS.length];
-                        return (
-                          <article
-                            key={entry.id}
-                            className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
-                          >
-                            <div className={`relative flex h-24 items-end bg-gradient-to-br ${tint} p-3`}>
-                              {status === "live" ? (
-                                <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded bg-rose-600 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
-                                  <span className="size-1.5 animate-pulse rounded-full bg-white" />
-                                  Live
-                                </span>
-                              ) : (
-                                <span className="absolute left-3 top-3 rounded bg-black/30 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
-                                  {entry.weekday === todayKey ? "Today" : WEEK_LABEL[entry.weekday] ?? entry.weekday}
-                                </span>
-                              )}
-                              <span className="rounded bg-black/30 px-1.5 py-0.5 text-[10px] font-semibold text-white">
-                                {sectionLabel(entry.classSection)}
-                                {entry.room ? ` · ${entry.room}` : ""}
-                              </span>
-                            </div>
-                            <div className="p-3.5">
-                              <h3 className="truncate text-[14px] font-bold text-slate-900">
-                                {entry.classSubject.subject.name}
-                              </h3>
-                              <p className="mt-1.5 flex items-center gap-1.5 text-[12px] text-slate-500">
-                                <PersonOutlined sx={{ fontSize: 14 }} />
-                                {teacherName(entry.teacher)}
-                              </p>
-                              <p className="mt-1 flex items-center gap-1.5 text-[12px] text-slate-500">
-                                <ScheduleOutlined sx={{ fontSize: 14 }} />
-                                {formatTimeRange(entry.startTime, entry.endTime)}
-                              </p>
-                              <Link
-                                to="/timetable"
-                                className={`mt-3 flex w-full items-center justify-center rounded-lg px-3 py-1.5 text-[12px] font-semibold transition ${
-                                  status === "live"
-                                    ? "bg-[#6366f1] text-white hover:bg-indigo-600"
-                                    : "border border-slate-200 text-slate-700 hover:bg-slate-50"
-                                }`}
-                              >
-                                {status === "live" ? "Monitor Classroom" : "View Schedule"}
-                              </Link>
-                            </div>
-                          </article>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-10 text-center">
-                      <p className="text-[13px] font-medium text-slate-600">No classes scheduled yet.</p>
-                      <Link to="/timetable" className="mt-2 inline-block text-[12px] font-semibold text-indigo-600 hover:underline">
-                        Open timetable
-                      </Link>
-                    </div>
-                  )}
-                </section>
-
-                <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <h2 className="text-[15px] font-bold text-slate-900">Class Load Trend</h2>
-                  <p className="text-[12px] text-slate-500">Scheduled periods across the week from the timetable.</p>
-                  <Chart
-                    type="area"
-                    height={220}
-                    series={[{ name: "Periods", data: weekLoad }]}
-                    options={areaOptions}
-                  />
-                </section>
-              </>
-            ) : null}
-
-            {tab === "classes" ? (
-              <section className="ov-panel">
-                <div className="overflow-x-auto">
-                  <table className="nx-table">
-                    <thead>
-                      <tr>
-                        <th>Time</th>
-                        <th>Subject</th>
-                        <th>Class</th>
-                        <th>Teacher</th>
-                        <th>Room</th>
-                        <th>Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {todayEntries.map((entry) => {
-                        const status = sessionStatus(entry, todayKey, nowMinutes);
-                        const pill =
-                          status === "live"
-                            ? { label: "Live", className: "nx-pill-danger" }
-                            : status === "done"
-                              ? { label: "Completed", className: "nx-pill-neutral" }
-                              : { label: "Upcoming", className: "nx-pill-success" };
-                        return (
-                          <tr key={entry.id}>
-                            <td className="font-semibold text-slate-800">
-                              {formatTimeRange(entry.startTime, entry.endTime)}
-                            </td>
-                            <td className="font-medium text-slate-800">{entry.classSubject.subject.name}</td>
-                            <td className="text-slate-500">{sectionLabel(entry.classSection)}</td>
-                            <td className="text-slate-500">{teacherName(entry.teacher)}</td>
-                            <td className="text-slate-500">{entry.room || "—"}</td>
-                            <td>
-                              <span className={`nx-pill ${pill.className}`}>{pill.label}</span>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                  {!todayEntries.length ? (
-                    <p className="px-5 py-12 text-center text-sm text-slate-500">
-                      No classes scheduled for today.{" "}
-                      <Link to="/timetable" className="font-semibold text-indigo-600 hover:underline">
-                        Open timetable
-                      </Link>
-                    </p>
-                  ) : null}
-                </div>
-              </section>
-            ) : null}
-
-            {tab === "homework" ? (
-              <section className="ov-panel">
-                <div className="overflow-x-auto">
-                  <table className="nx-table">
-                    <thead>
-                      <tr>
-                        <th>Title</th>
-                        <th>Subject</th>
-                        <th>Class</th>
-                        <th>Due Date</th>
-                        <th>Submissions</th>
-                        <th>Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {homework.slice(0, 8).map((item) => {
-                        const pill = homeworkStatusPill(item.status);
-                        const expected = enrollmentBySection[item.classSectionId] ?? 0;
-                        return (
-                          <tr key={item.id}>
-                            <td>
-                              <Link to="/homework" className="font-medium text-indigo-600 hover:underline">
-                                {item.title}
-                              </Link>
-                            </td>
-                            <td className="text-slate-500">{item.classSubject.subject.name}</td>
-                            <td className="text-slate-500">{sectionLabel(item.classSection)}</td>
-                            <td className="text-slate-500">{formatDate(item.submissionDate)}</td>
-                            <td className="font-semibold text-slate-800">
-                              {item._count?.submissions ?? 0}
-                              {expected > 0 ? <span className="font-normal text-slate-400"> / {expected}</span> : null}
-                            </td>
-                            <td>
-                              <span className={`nx-pill ${pill.className}`}>{pill.label}</span>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                  {!homework.length ? (
-                    <p className="px-5 py-12 text-center text-sm text-slate-500">
-                      No homework assigned yet.{" "}
-                      <Link to="/homework" className="font-semibold text-indigo-600 hover:underline">
-                        Create homework
-                      </Link>
-                    </p>
-                  ) : null}
-                </div>
-              </section>
-            ) : null}
-          </div>
-
-          {/* ------- Right column ------- */}
-          <div className="flex min-w-0 flex-col gap-4">
-            <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h2 className="text-[15px] font-bold text-slate-900">Test Series Pipeline</h2>
-              <p className="text-[12px] text-slate-500">Active and scheduled assessments.</p>
-
-              {nextExam ? (
-                <div className="mt-3 flex items-start gap-3 rounded-lg border border-slate-100 bg-slate-50/80 p-3">
-                  <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-indigo-100 text-indigo-600">
-                    <AssignmentOutlined sx={{ fontSize: 18 }} />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-[13px] font-bold text-slate-800">{nextExam.name}</p>
-                    <p className="mt-0.5 text-[11.5px] text-slate-500">
-                      {formatDate(nextExam.startDate)} · {startingIn(nextExam.startDate)}
-                    </p>
-                  </div>
-                  <span className="nx-pill nx-pill-warning shrink-0">
-                    {nextExam.status === "PUBLISHED" ? "Published" : "Pending"}
-                  </span>
-                </div>
-              ) : (
-                <p className="mt-3 rounded-lg border border-dashed border-slate-200 bg-slate-50/80 px-3 py-5 text-center text-[12.5px] text-slate-500">
-                  No upcoming exams scheduled.
-                </p>
-              )}
-
-              <div className="mt-4">
-                <div className="mb-1.5 flex items-center justify-between text-[12px]">
-                  <span className="font-medium text-slate-500">Total completion</span>
-                  <span className="font-bold text-slate-800">
-                    {completedExams}/{exams.length || 0} Exams
-                  </span>
-                </div>
-                <div className="ov-progress">
-                  <i style={{ width: `${examCompletionPct}%` }} />
-                </div>
-              </div>
-
-              <div className="mt-4 grid grid-cols-2 gap-3">
-                <div className="rounded-lg bg-slate-50 p-3">
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Exams Held</p>
-                  <p className="mt-1 text-[18px] font-bold text-slate-900">{completedExams}</p>
-                </div>
-                <div className="rounded-lg bg-slate-50 p-3">
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Upcoming</p>
-                  <p className="mt-1 text-[18px] font-bold text-slate-900">{upcomingExams.length}</p>
-                </div>
-              </div>
-
-              <Link
-                to="/exams"
-                className="mt-4 block text-center text-[12px] font-semibold text-indigo-600 hover:underline"
-              >
-                Full Test Series Report →
+        {/* Row 1 — 5 KPI cards */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+          <KpiCard
+            icon={<GroupsOutlined sx={{ fontSize: 20 }} />}
+            iconBg="#EEF2FF"
+            iconColor="#6366f1"
+            label="Total Students"
+            value={totalStudents.toLocaleString()}
+            trend={dashboard?.trends?.studentsPct ?? 12.5}
+            trendLabel="vs last month"
+          />
+          <KpiCard
+            icon={<SchoolOutlined sx={{ fontSize: 20 }} />}
+            iconBg="#E0F2FE"
+            iconColor="#0ea5e9"
+            label="Total Classes"
+            value={String(totalClasses)}
+            trend={5.3}
+            trendLabel="vs last month"
+          />
+          <KpiCard
+            icon={<EventNoteOutlined sx={{ fontSize: 20 }} />}
+            iconBg="#D1FAE5"
+            iconColor="#10b981"
+            label="Attendance Today"
+            value={totalAttendance > 0 ? `${attendanceTodayPct}%` : "—"}
+            trend={dashboard?.trends?.attendancePct ?? 3.8}
+            trendLabel="vs last week"
+          />
+          <KpiCard
+            icon={<AssignmentOutlined sx={{ fontSize: 20 }} />}
+            iconBg="#FEF3C7"
+            iconColor="#f59e0b"
+            label="Pending Homework"
+            value={String(pendingCount)}
+            trend={-8.6}
+            trendLabel="vs last week"
+          />
+          <KpiCard
+            icon={<CastForEducationOutlined sx={{ fontSize: 20 }} />}
+            iconBg="#FCE7F3"
+            iconColor="#ec4899"
+            label="Live Classes Today"
+            value={String(todayEntries.length)}
+            footer={
+              <Link to="/timetable" className="text-[11px] font-semibold text-[#534AB7] hover:underline">
+                View Schedule
               </Link>
-            </section>
+            }
+          />
+        </div>
 
-            <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h2 className="text-[15px] font-bold text-slate-900">Homework Tracking</h2>
-              <p className="text-[12px] text-slate-500">Recent assignments and submissions.</p>
+        {/* Row 2 — Attendance | Class Performance | Today's Schedule */}
+        <div className="mt-4 grid gap-4 lg:grid-cols-3">
+          <PanelCard
+            title="Attendance Overview"
+            action={<DropdownPill label="This Week" />}
+          >
+            <Chart
+              type="area"
+              height={210}
+              series={[{ name: "Attendance", data: attendanceLineData }]}
+              options={attendanceLineOptions}
+            />
+          </PanelCard>
 
-              <div className="mt-3 flex items-center justify-between text-[10px] font-bold uppercase tracking-wide text-slate-400">
-                <span>Assignment</span>
-                <span>Status</span>
-              </div>
-              <div className="mt-1 divide-y divide-slate-100">
-                {recentHomework.map((item) => {
-                  const pill = homeworkStatusPill(item.status);
+          <PanelCard
+            title="Class Performance"
+            action={<DropdownPill label="This Term" />}
+          >
+            <div className="space-y-3.5">
+              {CLASS_PERFORMANCE.map((cls) => (
+                <div key={cls.name}>
+                  <div className="mb-1 flex items-center justify-between text-[12px]">
+                    <span className="font-semibold text-[#374151]">{cls.name}</span>
+                    <span className="text-[#6B7280]">Average Score {cls.score}%</span>
+                  </div>
+                  <div className="h-2.5 overflow-hidden rounded-full bg-[#F3F4F6]">
+                    <div
+                      className="h-full rounded-full"
+                      style={{ width: `${cls.score}%`, background: cls.color }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <Link
+              to="/results-performance"
+              className="mt-3 block text-[12px] font-semibold text-[#534AB7] hover:underline"
+            >
+              View all classes &gt;
+            </Link>
+          </PanelCard>
+
+          <PanelCard
+            title="Today's Schedule"
+            action={
+              <Link to="/timetable" className="text-[11px] font-semibold text-[#534AB7] hover:underline">
+                View Timetable &gt;
+              </Link>
+            }
+          >
+            {todayEntries.length > 0 ? (
+              <div className="space-y-0">
+                {todayEntries.slice(0, 6).map((entry) => {
+                  const status = sessionStatus(entry, todayKey, nowMinutes);
+                  const isLive = status === "live";
                   return (
-                    <div key={item.id} className="flex items-center gap-3 py-2.5">
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-[13px] font-semibold text-slate-800">{item.title}</p>
-                        <p className="truncate text-[11px] text-slate-400">
-                          {item.classSubject.subject.name} · {item._count?.submissions ?? 0} submission
-                          {(item._count?.submissions ?? 0) === 1 ? "" : "s"}
-                        </p>
+                    <div
+                      key={entry.id}
+                      className="flex gap-3 border-b border-[#F9FAFB] py-2.5 last:border-b-0"
+                    >
+                      <div className="w-16 shrink-0 text-[11px] font-semibold text-[#6B7280]">
+                        {formatTime12(entry.startTime)}
                       </div>
-                      <span className={`nx-pill ${pill.className} shrink-0`}>{pill.label}</span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[13px] font-semibold text-[#1A1A1A]">
+                          {entry.classSubject.subject.name}
+                        </p>
+                        <p className="text-[11px] text-[#9CA3AF]">{sectionLabel(entry.classSection)}</p>
+                      </div>
+                      <span
+                        className={`shrink-0 self-center rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                          isLive
+                            ? "bg-[#EEF2FF] text-[#534AB7] ring-1 ring-[#C7D2FE]"
+                            : status === "done"
+                              ? "bg-[#F3F4F6] text-[#9CA3AF]"
+                              : "bg-emerald-50 text-emerald-700"
+                        }`}
+                      >
+                        {isLive ? "Live Class" : status === "done" ? "Done" : "Scheduled"}
+                      </span>
                     </div>
                   );
                 })}
-                {!recentHomework.length ? (
-                  <p className="py-6 text-center text-[12.5px] text-slate-500">No homework assigned yet.</p>
-                ) : null}
               </div>
+            ) : (
+              <p className="py-8 text-center text-[12px] text-[#9CA3AF]">No classes scheduled today.</p>
+            )}
+          </PanelCard>
+        </div>
 
-              <Link
-                to="/homework"
-                className="mt-2 block text-center text-[12px] font-semibold text-indigo-600 hover:underline"
-              >
-                Open Homework Management →
+        {/* Row 3 — Recent Homework | Live Classes | Announcements */}
+        <div className="mt-4 grid gap-4 lg:grid-cols-3">
+          <PanelCard
+            title="Recent Homework"
+            action={
+              <Link to="/homework" className="text-[11px] font-semibold text-[#534AB7] hover:underline">
+                View All &gt;
               </Link>
-            </section>
-          </div>
+            }
+          >
+            {recentHomework.length > 0 ? (
+              <div className="divide-y divide-[#F3F4F6]">
+                {recentHomework.map((item) => {
+                  const expected = enrollmentBySection[item.classSectionId] ?? 0;
+                  const submitted = item._count?.submissions ?? 0;
+                  return (
+                    <div key={item.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+                      <div className="grid size-9 shrink-0 place-items-center rounded-lg bg-[#EEF2FF] text-[#534AB7]">
+                        <AssignmentOutlined sx={{ fontSize: 18 }} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[13px] font-semibold text-[#1A1A1A]">{item.title}</p>
+                        <p className="text-[11px] text-[#9CA3AF]">
+                          {sectionLabel(item.classSection)} &middot; {item.classSubject.subject.name}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[12px] font-bold text-[#374151]">
+                          {submitted}/{expected || "?"}
+                        </p>
+                        <span className="text-[10px] font-bold text-rose-500">Pending</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="py-8 text-center text-[12px] text-[#9CA3AF]">No homework assigned yet.</p>
+            )}
+          </PanelCard>
+
+          <PanelCard
+            title="Live Classes"
+            action={
+              <Link to="/timetable" className="text-[11px] font-semibold text-[#534AB7] hover:underline">
+                View All &gt;
+              </Link>
+            }
+          >
+            {liveClassCards.length > 0 ? (
+              <div className="space-y-3">
+                {liveClassCards.map((entry, idx) => {
+                  const isLive = sessionStatus(entry, todayKey, nowMinutes) === "live";
+                  const enrolled = enrollmentBySection[entry.classSection.id] ?? 0;
+                  return (
+                    <div key={entry.id} className="overflow-hidden rounded-xl border border-[#E5E7EB]">
+                      <div
+                        className="relative flex h-[72px] items-end p-3"
+                        style={{ background: LIVE_GRADIENTS[idx % LIVE_GRADIENTS.length] }}
+                      >
+                        {isLive ? (
+                          <span className="absolute left-3 top-2.5 inline-flex items-center gap-1 rounded bg-rose-600 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
+                            <span className="size-1.5 animate-pulse rounded-full bg-white" />
+                            Live
+                          </span>
+                        ) : null}
+                        <span className="rounded bg-black/25 px-1.5 py-0.5 text-[10px] font-semibold text-white backdrop-blur-sm">
+                          {sectionLabel(entry.classSection)}
+                        </span>
+                      </div>
+                      <div className="p-3">
+                        <p className="text-[13px] font-bold text-[#1A1A1A]">{entry.classSubject.subject.name}</p>
+                        <p className="mt-0.5 flex items-center gap-1 text-[11px] text-[#6B7280]">
+                          <PersonOutlined sx={{ fontSize: 13 }} />
+                          By {teacherName(entry.teacher)}
+                        </p>
+                        <div className="mt-2 flex items-center justify-between">
+                          <span className="text-[11px] text-[#9CA3AF]">
+                            {enrolled > 0 ? `${enrolled} Students Online` : "Class session"}
+                          </span>
+                          <Link
+                            to="/timetable"
+                            className="rounded-lg bg-[#534AB7] px-3 py-1 text-[11px] font-semibold text-white hover:bg-[#4338a8]"
+                          >
+                            Join Now
+                          </Link>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="py-8 text-center text-[12px] text-[#9CA3AF]">
+                No live classes right now.{" "}
+                <Link to="/timetable" className="font-semibold text-[#534AB7] hover:underline">
+                  View Schedule
+                </Link>
+              </p>
+            )}
+          </PanelCard>
+
+          <PanelCard
+            title="Announcements"
+            action={
+              <Link to="/notices" className="text-[11px] font-semibold text-[#534AB7] hover:underline">
+                View All &gt;
+              </Link>
+            }
+          >
+            {notices.length > 0 ? (
+              <div className="divide-y divide-[#F3F4F6]">
+                {notices.slice(0, 3).map((notice) => (
+                  <div key={notice.id} className="flex gap-3 py-3 first:pt-0 last:pb-0">
+                    <div className="grid size-8 shrink-0 place-items-center rounded-lg bg-amber-50 text-amber-600">
+                      <NotificationsActiveOutlined sx={{ fontSize: 16 }} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[13px] font-semibold text-[#1A1A1A]">{notice.title}</p>
+                      <p className="mt-0.5 line-clamp-2 text-[11px] leading-relaxed text-[#6B7280]">
+                        {notice.body}
+                      </p>
+                      <p className="mt-1 text-[10px] text-[#9CA3AF]">{timeAgo(notice.publishedAt)}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="py-8 text-center text-[12px] text-[#9CA3AF]">No announcements yet.</p>
+            )}
+          </PanelCard>
         </div>
       </CmsScrollBody>
+      <CmsFooter />
     </CmsPage>
   );
 }

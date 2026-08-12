@@ -445,7 +445,7 @@ export function AdminTenantDetailPage() {
               <CardContent>
                 <Typography fontWeight={700}>LMS Modules</Typography>
                 <Typography variant="caption" color="text.secondary" display="block" mb={1}>
-                  Learning experience
+                  Learning experience. Items marked (manual) are not on any subscription plan — enable only to force-show in the campus sidebar.
                 </Typography>
                 {LMS_MODULE_OPTIONS.map((mod) => (
                   <FormControlLabel

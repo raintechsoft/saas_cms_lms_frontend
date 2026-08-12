@@ -2,6 +2,20 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { DashboardPage } from "./pages/campus/DashboardPage";
 import { CmsDashboardPage } from "./pages/campus/CmsDashboardPage";
 import { LmsDashboardPage } from "./pages/campus/LmsDashboardPage";
+import { ResultsPerformancePage } from "./pages/campus/ResultsPerformancePage";
+import {
+  AcademicCalendarPage,
+  AiTutorPage,
+  ClassroomManagementPage,
+  LessonPlanningPage,
+  LiveClassesPage,
+  LmsSettingsPage,
+  NcertContentPage,
+  PreparationPracticePage,
+  TestSeriesPage,
+  VideoGalleryPage,
+  VoiceAiAgentPage,
+} from "./pages/campus/LmsComingSoonPages";
 import { LoginPage } from "./pages/auth/LoginPage";
 import { ForgotPasswordPage } from "./pages/auth/ForgotPasswordPage";
 import { ResetPasswordPage } from "./pages/auth/ResetPasswordPage";
@@ -23,6 +37,7 @@ import { HostelPage } from "./pages/campus/HostelPage";
 import { LibraryPage } from "./pages/campus/LibraryPage";
 import { InventoryPage } from "./pages/campus/InventoryPage";
 import { OnlineExamPage } from "./pages/campus/OnlineExamPage";
+import { QuestionBankPage } from "./pages/campus/QuestionBankPage";
 import { ReportsPage } from "./pages/campus/ReportsPage";
 import { DocumentPrintPage } from "./pages/campus/DocumentPrintPage";
 import { FeeReceiptPrintPage } from "./pages/campus/FeeReceiptPrintPage";
@@ -237,6 +252,18 @@ export function App() {
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/cms" element={<RequireProductBucket bucket="CMS"><CmsDashboardPage /></RequireProductBucket>} />
         <Route path="/lms" element={<RequireProductBucket bucket="LMS"><LmsDashboardPage /></RequireProductBucket>} />
+        <Route path="/results-performance" element={<RequireProductBucket bucket="LMS"><ResultsPerformancePage /></RequireProductBucket>} />
+        <Route path="/academic-calendar" element={<RequireProductBucket bucket="LMS"><AcademicCalendarPage /></RequireProductBucket>} />
+        <Route path="/lesson-planning" element={<RequireProductBucket bucket="LMS"><LessonPlanningPage /></RequireProductBucket>} />
+        <Route path="/live-classes" element={<RequireProductBucket bucket="LMS"><LiveClassesPage /></RequireProductBucket>} />
+        <Route path="/classroom-management" element={<RequireProductBucket bucket="LMS"><ClassroomManagementPage /></RequireProductBucket>} />
+        <Route path="/ai-tutor" element={<RequireProductBucket bucket="LMS"><AiTutorPage /></RequireProductBucket>} />
+        <Route path="/test-series" element={<RequireProductBucket bucket="LMS"><TestSeriesPage /></RequireProductBucket>} />
+        <Route path="/ncert-content" element={<RequireProductBucket bucket="LMS"><NcertContentPage /></RequireProductBucket>} />
+        <Route path="/video-gallery" element={<RequireProductBucket bucket="LMS"><VideoGalleryPage /></RequireProductBucket>} />
+        <Route path="/voice-ai-agent" element={<RequireProductBucket bucket="LMS"><VoiceAiAgentPage /></RequireProductBucket>} />
+        <Route path="/preparation-practice" element={<RequireProductBucket bucket="LMS"><PreparationPracticePage /></RequireProductBucket>} />
+        <Route path="/lms-settings" element={<RequireProductBucket bucket="LMS"><LmsSettingsPage /></RequireProductBucket>} />
         <Route path="/profile" element={<StaffProfilePage />} />
         <Route path="/students" element={<StudentsPage />} />
         <Route path="/students/new" element={<AddStudentPage />} />
@@ -253,7 +280,7 @@ export function App() {
           }
         />
         <Route path="/exams" element={<ExamsPage />} />
-        <Route path="/timetable" element={<RequireProductBucket bucket="LMS"><TimetablePage /></RequireProductBucket>} />
+        <Route path="/timetable" element={<RequireProductBucket bucket="CMS"><TimetablePage /></RequireProductBucket>} />
         <Route path="/homework" element={<HomeworkPage />} />
         <Route path="/fees" element={<RequireProductBucket bucket="CMS"><FeesPage /></RequireProductBucket>} />
         <Route path="/hr" element={<RequireProductBucket bucket="CMS"><HrPage /></RequireProductBucket>} />
@@ -267,6 +294,14 @@ export function App() {
         <Route path="/library" element={<RequireProductBucket bucket="CMS"><LibraryPage /></RequireProductBucket>} />
         <Route path="/inventory" element={<RequireProductBucket bucket="CMS"><InventoryPage /></RequireProductBucket>} />
         <Route path="/online-exams" element={<RequireProductBucket bucket="CMS"><OnlineExamPage /></RequireProductBucket>} />
+        <Route
+          path="/question-bank"
+          element={
+            <RequireProductBucket bucket="LMS">
+              <QuestionBankPage />
+            </RequireProductBucket>
+          }
+        />
         <Route
           path="/erp"
           element={

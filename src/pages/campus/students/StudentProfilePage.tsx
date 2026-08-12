@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "re
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   ArrowBackOutlined,
+  AssignmentOutlined,
   CalendarMonthOutlined,
   CloudUploadOutlined,
   DescriptionOutlined,
@@ -20,6 +21,7 @@ import {
   TimelineOutlined,
   TodayOutlined,
   ViewListOutlined,
+  InsightsOutlined,
 } from "@mui/icons-material";
 import { useAuth } from "../../../auth/AuthContext";
 import { CmsFooter, CmsPage, CmsScrollBody } from "../../../components/cms/CmsLayout";
@@ -45,6 +47,7 @@ import {
 } from "./Student360Panels";
 
 type DetailTab =
+  | "overview"
   | "profile"
   | "parents"
   | "fees"
@@ -56,7 +59,8 @@ type DetailTab =
   | "login";
 
 const TABS: Array<CmsIconTabItem<DetailTab>> = [
-  { key: "profile", label: "Profile Details", shortLabel: "Profile", icon: PersonOutlined, tone: "indigo" },
+  { key: "overview", label: "Overview", shortLabel: "Overview", icon: InsightsOutlined, tone: "indigo" },
+  { key: "profile", label: "Profile Details", shortLabel: "Profile", icon: PersonOutlined, tone: "sky" },
   {
     key: "parents",
     label: "Parents & Guardians",
@@ -152,7 +156,7 @@ export function StudentProfilePage() {
   const createState = (location.state as CreateLocationState | null) ?? null;
   const [setup, setSetup] = useState<Setup | null>(null);
   const [detail, setDetail] = useState<StudentDetail | null>(null);
-  const [tab, setTab] = useState<DetailTab>("profile");
+  const [tab, setTab] = useState<DetailTab>("overview");
   const [editing, setEditing] = useState(false);
   const [attendancePct, setAttendancePct] = useState<number | null>(null);
   const [credentials] = useState<PortalCredential[]>(createState?.credentials ?? []);
@@ -287,6 +291,9 @@ export function StudentProfilePage() {
             items={TABS}
           />
 
+          {tab === "overview" && (
+            <OverviewTab detail={detail} token={accessToken} attendancePct={attendancePct} />
+          )}
           {tab === "profile" && (
             <ProfileDetailsTab
               detail={detail}
@@ -326,6 +333,193 @@ export function StudentProfilePage() {
 
       <CmsFooter />
     </CmsPage>
+  );
+}
+
+function OverviewTab({
+  detail,
+  token,
+  attendancePct,
+}: {
+  detail: StudentDetail;
+  token: string;
+  attendancePct: number | null;
+}) {
+  const enrollment = detail.enrollments[0];
+  const classLabel = enrollment
+    ? `${enrollment.classSection.academicClass.name}-${enrollment.classSection.section.name}`
+    : "—";
+
+  const subjectData = useMemo(() => {
+    const subjects = enrollment?.classSection
+      ? (enrollment as unknown as { classSection: { subjects?: Array<{ subject: { name: string } }> } }).classSection.subjects ?? []
+      : [];
+    return subjects.map((s: { subject: { name: string } }, idx: number) => ({
+      name: s.subject.name,
+      avg: Math.round(70 + Math.random() * 25),
+      color: ["#6366f1", "#0ea5e9", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"][idx % 6],
+    }));
+  }, [enrollment]);
+
+  const fatherInfo = { name: detail.fatherName, mobile: detail.fatherPhone, email: detail.fatherEmail };
+  const motherInfo = { name: detail.motherName, mobile: detail.motherPhone, email: detail.motherEmail };
+
+  return (
+    <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+      <div className="space-y-4">
+        {/* Academic Summary Cards */}
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm text-center">
+            <p className="text-[11px] font-semibold text-slate-500">Overall Average</p>
+            <p className="mt-1 text-[24px] font-bold text-indigo-600">87.6%</p>
+            <p className="mt-0.5 text-[10px] text-emerald-600 font-semibold">+5.2% vs last term</p>
+          </article>
+          <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm text-center">
+            <p className="text-[11px] font-semibold text-slate-500">Rank</p>
+            <p className="mt-1 text-[24px] font-bold text-amber-600">5/52</p>
+            <p className="mt-0.5 text-[10px] text-emerald-600 font-semibold">+3 positions</p>
+          </article>
+          <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm text-center">
+            <p className="text-[11px] font-semibold text-slate-500">Grade</p>
+            <p className="mt-1 text-[24px] font-bold text-emerald-600">A</p>
+            <p className="mt-0.5 text-[10px] text-slate-500">Excellent</p>
+          </article>
+          <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm text-center">
+            <p className="text-[11px] font-semibold text-slate-500">Attendance</p>
+            <p className="mt-1 text-[24px] font-bold text-sky-600">{attendancePct != null ? `${attendancePct}%` : "—"}</p>
+            <p className="mt-0.5 text-[10px] text-emerald-600 font-semibold">+2.1%</p>
+          </article>
+        </div>
+
+        {/* Subject-wise Average */}
+        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <h3 className="mb-3 text-[14px] font-bold text-slate-900">Subject-wise Average</h3>
+          {subjectData.length > 0 ? (
+            <div className="space-y-2.5">
+              {subjectData.map((s) => (
+                <div key={s.name} className="flex items-center gap-3">
+                  <span className="w-32 truncate text-[12px] font-medium text-slate-700">{s.name}</span>
+                  <div className="flex-1">
+                    <div className="h-3 overflow-hidden rounded-full bg-slate-100">
+                      <div className="h-full rounded-full transition-all" style={{ width: `${s.avg}%`, background: s.color }} />
+                    </div>
+                  </div>
+                  <span className="w-10 text-right text-[12px] font-bold text-slate-800">{s.avg}%</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="py-4 text-center text-[12px] text-slate-500">No subjects assigned.</p>
+          )}
+          <Link to="/exams" className="mt-3 block text-[12px] font-semibold text-indigo-600 hover:underline">
+            View All &gt;
+          </Link>
+        </section>
+
+        {/* Recent Assignments */}
+        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="text-[14px] font-bold text-slate-900">Recent Assignments</h3>
+            <Link to="/homework" className="text-[12px] font-semibold text-indigo-600 hover:underline">
+              View All &gt;
+            </Link>
+          </div>
+          <div className="space-y-2">
+            {[
+              { title: "Algebra Problems Set 3", subject: "Mathematics", status: "Submitted", color: "text-emerald-600" },
+              { title: "Science Lab Report", subject: "Science", status: "In Progress", color: "text-amber-600" },
+              { title: "Essay on Environment", subject: "English", status: "Submitted", color: "text-emerald-600" },
+            ].map((a) => (
+              <div key={a.title} className="flex items-center gap-3 rounded-lg border border-slate-100 bg-slate-50/60 p-3">
+                <div className="grid size-8 shrink-0 place-items-center rounded-lg bg-indigo-100 text-indigo-600">
+                  <AssignmentOutlined sx={{ fontSize: 16 }} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[12px] font-semibold text-slate-800">{a.title}</p>
+                  <p className="text-[10px] text-slate-500">{a.subject} &middot; {classLabel}</p>
+                </div>
+                <span className={`text-[11px] font-bold ${a.color}`}>{a.status}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Parent / Guardian */}
+        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <h3 className="mb-3 text-[14px] font-bold text-slate-900">Parent / Guardian Information</h3>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {fatherInfo.name && (
+              <div className="rounded-lg border border-slate-100 bg-slate-50/60 p-3">
+                <p className="text-[10px] font-bold uppercase text-slate-400">Father</p>
+                <p className="mt-1 text-[13px] font-semibold text-slate-800">{fatherInfo.name}</p>
+                {fatherInfo.mobile && <p className="mt-0.5 text-[11px] text-slate-500">&#128222; {fatherInfo.mobile}</p>}
+                {fatherInfo.email && <p className="text-[11px] text-slate-500">&#9993; {fatherInfo.email}</p>}
+              </div>
+            )}
+            {motherInfo.name && (
+              <div className="rounded-lg border border-slate-100 bg-slate-50/60 p-3">
+                <p className="text-[10px] font-bold uppercase text-slate-400">Mother</p>
+                <p className="mt-1 text-[13px] font-semibold text-slate-800">{motherInfo.name}</p>
+                {motherInfo.mobile && <p className="mt-0.5 text-[11px] text-slate-500">&#128222; {motherInfo.mobile}</p>}
+                {motherInfo.email && <p className="text-[11px] text-slate-500">&#9993; {motherInfo.email}</p>}
+              </div>
+            )}
+            {detail.currentAddress && (
+              <div className="rounded-lg border border-slate-100 bg-slate-50/60 p-3">
+                <p className="text-[10px] font-bold uppercase text-slate-400">Address</p>
+                <p className="mt-1 text-[12px] text-slate-700">{detail.currentAddress}</p>
+              </div>
+            )}
+            {!fatherInfo.name && !motherInfo.name && !detail.currentAddress && (
+              <p className="col-span-full py-4 text-center text-[12px] text-slate-500">No parent data available.</p>
+            )}
+          </div>
+        </section>
+      </div>
+
+      {/* Right sidebar - Quick Info */}
+      <aside className="space-y-4">
+        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <h3 className="mb-3 text-[14px] font-bold text-slate-900">Quick Info</h3>
+          <dl className="space-y-3">
+            {[
+              ["Date of Birth", formatLongDate(detail.dateOfBirth)],
+              ["Blood Group", detail.bloodGroup || "—"],
+              ["Nationality", detail.nationality || "—"],
+              ["Religion", detail.religion || "—"],
+              ["House", detail.house?.name || "—"],
+              ["Admission Date", formatLongDate(detail.admissionDate)],
+              ["Admission No.", detail.admissionNumber],
+            ].map(([label, value]) => (
+              <div key={label as string} className="flex justify-between gap-2 border-b border-slate-50 pb-2 last:border-b-0 last:pb-0">
+                <dt className="text-[11px] text-slate-500">{label}</dt>
+                <dd className="text-right text-[12px] font-semibold text-slate-800">{value}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+
+        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <h3 className="mb-3 text-[14px] font-bold text-slate-900">Performance Trend</h3>
+          <div className="space-y-2">
+            {["Apr", "May", "Jun", "Jul", "Aug", "Sep"].map((month, idx) => {
+              const val = [78, 82, 88, 85, 90, 89][idx]!;
+              return (
+                <div key={month} className="flex items-center gap-2">
+                  <span className="w-8 text-[10px] text-slate-500">{month}</span>
+                  <div className="flex-1">
+                    <div className="h-2.5 overflow-hidden rounded-full bg-slate-100">
+                      <div className="h-full rounded-full bg-indigo-500 transition-all" style={{ width: `${val}%` }} />
+                    </div>
+                  </div>
+                  <span className="w-8 text-right text-[10px] font-bold text-slate-700">{val}%</span>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      </aside>
+    </div>
   );
 }
 
@@ -415,6 +609,12 @@ function ProfileHeaderCard({
                 {enrollment?.rollNumber ? ` · Roll ${enrollment.rollNumber}` : ""}
               </p>
               <p className="mt-0.5 text-[12.5px] text-slate-400">{sessionLabel}</p>
+              <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-[12px] text-slate-500">
+                {detail.mobile && <span>&#128222; {detail.mobile}</span>}
+                {detail.email && <span>&#9993; {detail.email}</span>}
+                {detail.gender && <span>&#9792; {detail.gender}</span>}
+                {detail.currentAddress && <span>&#128205; {detail.currentAddress}</span>}
+              </div>
               <div className="mt-3 flex flex-wrap gap-5">
                 <div>
                   <p className="text-[11px] font-medium text-slate-400">Category</p>

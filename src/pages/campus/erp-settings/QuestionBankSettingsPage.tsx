@@ -51,6 +51,7 @@ interface SettingsPayload {
   allowImport: boolean;
   allowExport: boolean;
   requireApproval: boolean;
+  allowTeachersToAddQuestions: boolean;
   difficultyRules: DifficultyRule[];
 }
 
@@ -212,6 +213,7 @@ export function QuestionBankSettingsPage() {
   const [allowImport, setAllowImport] = useState(true);
   const [allowExport, setAllowExport] = useState(true);
   const [requireApproval, setRequireApproval] = useState(false);
+  const [allowTeachersToAddQuestions, setAllowTeachersToAddQuestions] = useState(false);
   const [difficultyRules, setDifficultyRules] = useState<DifficultyRule[]>([]);
 
   const [diffFormOpen, setDiffFormOpen] = useState(false);
@@ -237,6 +239,7 @@ export function QuestionBankSettingsPage() {
     setAllowImport(data.allowImport);
     setAllowExport(data.allowExport);
     setRequireApproval(data.requireApproval);
+    setAllowTeachersToAddQuestions(data.allowTeachersToAddQuestions);
     setDifficultyRules(data.difficultyRules);
   }
 
@@ -312,6 +315,7 @@ export function QuestionBankSettingsPage() {
           allowImport,
           allowExport,
           requireApproval,
+          allowTeachersToAddQuestions,
         }),
       });
       applyPayload(data);
@@ -378,7 +382,9 @@ export function QuestionBankSettingsPage() {
 
   async function deleteDifficulty(rule: DifficultyRule) {
     if (!accessToken || !canManage) return;
-    const ok = await confirmDelete(`Delete ${rule.level.toLowerCase()} difficulty rule?`);
+    const ok = await confirmDelete({
+      text: `Delete ${rule.level.toLowerCase()} difficulty rule?`,
+    });
     if (!ok) return;
     setSaving(true);
     try {
@@ -546,6 +552,22 @@ export function QuestionBankSettingsPage() {
                       checked={autoCode}
                       disabled={!canManage || saving}
                       onChange={setAutoCode}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-3 rounded-lg border border-[#E5E7EB] bg-[#F9FAFB] px-3 py-2.5">
+                    <div>
+                      <span className="block text-sm font-semibold text-[#374151]">
+                        Allow Teachers to Add Questions
+                      </span>
+                      <span className="mt-0.5 block text-xs text-[#6B7280]">
+                        When off, teachers can view the bank but cannot create, edit, or delete
+                        drafts.
+                      </span>
+                    </div>
+                    <Toggle
+                      checked={allowTeachersToAddQuestions}
+                      disabled={!canManage || saving}
+                      onChange={setAllowTeachersToAddQuestions}
                     />
                   </div>
                 </div>
@@ -831,6 +853,7 @@ export function QuestionBankSettingsPage() {
                 <h2 className="text-sm font-bold text-[#1A1A1A]">Quick Guide</h2>
               </div>
               <ul className="space-y-2.5 text-xs leading-relaxed text-[#6B7280]">
+                <li>• Enable &quot;Allow Teachers to Add Questions&quot; to let teachers draft items.</li>
                 <li>• Set default marks for each question type to speed up bank entry.</li>
                 <li>• Use difficulty levels to balance papers automatically.</li>
                 <li>• Enable shuffle options to reduce cheating in online exams.</li>
