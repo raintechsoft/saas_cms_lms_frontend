@@ -40,7 +40,7 @@ export interface CampusNavItem {
 
 export const CAMPUS_NAV: CampusNavItem[] = [
   // DASHBOARD
-  { to: "/dashboard", label: "Overview", permission: null, moduleKey: "dashboard", bucket: "SHARED", section: "top" },
+  { to: "/dashboard", label: "Dashboard", permission: null, moduleKey: null, bucket: "SHARED", section: "top" },
   { to: "/notifications", label: "Notifications", permission: null, moduleKey: null, bucket: "SHARED", section: "top" },
 
   // CMS MODULES

@@ -48,6 +48,7 @@ import {
   CAMPUS_NAV,
   NAV_SECTION_LABEL,
   isCampusNavItemVisible,
+  isProductBucketAllowed,
 } from "../lib/productMode";
 import { InitialsAvatar } from "./InitialsAvatar";
 
@@ -103,10 +104,10 @@ function useBreadcrumb() {
       .filter((item) => path === item.to || path.startsWith(`${item.to}/`))
       .sort((a, b) => b.to.length - a.to.length)[0];
 
-    if (!match) return ["Overview"];
+    if (!match) return ["Dashboard"];
 
     if (match.section === "top") {
-      return match.to === "/dashboard" ? ["Overview"] : ["Dashboard", match.label];
+      return match.to === "/dashboard" ? ["Dashboard"] : ["Dashboard", match.label];
     }
 
     const trail = ["Dashboard", NAV_SECTION_LABEL[match.section], match.label];
@@ -244,42 +245,61 @@ function SidebarNavLink({
 
 function ModuleAccordion({
   label,
+  to,
   items,
-  active,
+  childActive,
   headerIcon: HeaderIcon,
   headerTone,
 }: {
   label: string;
+  to: string;
   items: Array<{ to: string; label: string }>;
-  active: boolean;
+  childActive: boolean;
   headerIcon: NavIcon;
   headerTone: string;
 }) {
+  const location = useLocation();
+  const headerActive = location.pathname === to;
   const [open, setOpen] = useState(true);
 
   useEffect(() => {
-    if (active) setOpen(true);
-  }, [active]);
+    if (childActive || headerActive) setOpen(true);
+  }, [childActive, headerActive]);
+
+  const restBg = headerActive
+    ? "bg-[#EEF2FF]"
+    : open
+      ? "bg-[#F6F7F9]"
+      : "hover:bg-[#F6F7F9]";
 
   return (
     <div>
-      <button
-        type="button"
-        onClick={() => setOpen((current) => !current)}
-        className={`flex h-10 w-full items-center gap-2 rounded-lg px-4 text-left text-[14px] font-semibold text-[#1A1A1A] transition ${
-          open ? "bg-[#F6F7F9]" : "hover:bg-[#F6F7F9]"
-        }`}
-      >
-        <span className={`inline-grid size-5 shrink-0 place-items-center rounded-md ${headerTone}`}>
-          <HeaderIcon sx={{ fontSize: 13 }} />
-        </span>
-        <span className="min-w-0 flex-1 truncate">{label}</span>
-        <ExpandMoreOutlined
-          sx={{ fontSize: 18 }}
-          className={`shrink-0 text-[#9CA3AF] transition-transform ${open ? "rotate-180" : ""}`}
-        />
-      </button>
-      {open ? (
+      <div className={`flex h-10 items-center rounded-lg ${headerActive ? "bg-[#EEF2FF]" : open ? "bg-[#F6F7F9]" : ""}`}>
+        <NavLink
+          to={to}
+          end
+          className={`flex h-10 min-w-0 flex-1 items-center gap-2 rounded-l-lg pl-4 pr-2 text-[14px] font-semibold transition ${
+            headerActive ? "text-[#4F46E5]" : `text-[#1A1A1A] ${open ? "" : "hover:bg-[#F6F7F9]"}`
+          }`}
+        >
+          <span className={`inline-grid size-5 shrink-0 place-items-center rounded-md ${headerTone}`}>
+            <HeaderIcon sx={{ fontSize: 13 }} />
+          </span>
+          <span className="min-w-0 flex-1 truncate">{label}</span>
+        </NavLink>
+        <button
+          type="button"
+          aria-label={open ? `Collapse ${label}` : `Expand ${label}`}
+          onClick={() => setOpen((current) => !current)}
+          className={`flex h-10 w-9 shrink-0 items-center justify-center rounded-r-lg ${restBg}`}
+        >
+          <ExpandMoreOutlined
+            sx={{ fontSize: 18 }}
+            className={`text-[#9CA3AF] transition-transform ${open ? "rotate-180" : ""}`}
+          />
+        </button>
+      </div>
+      {open && items.length > 0 ? (
         <div className="mt-0.5 space-y-0.5 pl-4">
           {items.map((item) => (
             <SidebarNavLink key={item.to} to={item.to} label={item.label} size="child" />
@@ -512,10 +532,12 @@ export function AppShell() {
   const topLinks = links.filter((item) => item.section === "top");
   const cmsLinks = links.filter((item) => item.section === "cms");
   const lmsLinks = links.filter((item) => item.section === "lms");
-  const isCmsActive = cmsLinks.some(
+  const showCms = isProductBucketAllowed(user.tenant?.productMode, "CMS");
+  const showLms = isProductBucketAllowed(user.tenant?.productMode, "LMS");
+  const isCmsChildActive = cmsLinks.some(
     (item) => location.pathname === item.to || location.pathname.startsWith(`${item.to}/`),
   );
-  const isLmsActive = lmsLinks.some(
+  const isLmsChildActive = lmsLinks.some(
     (item) => location.pathname === item.to || location.pathname.startsWith(`${item.to}/`),
   );
 
@@ -564,24 +586,26 @@ export function AppShell() {
             ))}
           </div>
 
-          {cmsLinks.length > 0 ? (
+          {showCms ? (
             <div className="mt-2">
               <ModuleAccordion
                 label="CMS Modules"
+                to="/cms"
                 items={cmsLinks}
-                active={isCmsActive}
+                childActive={isCmsChildActive}
                 headerIcon={SchoolOutlined}
                 headerTone="bg-[#EEF2FF] text-[#6366F1]"
               />
             </div>
           ) : null}
 
-          {lmsLinks.length > 0 ? (
+          {showLms ? (
             <div className="mt-2">
               <ModuleAccordion
                 label="LMS Modules"
+                to="/lms"
                 items={lmsLinks}
-                active={isLmsActive}
+                childActive={isLmsChildActive}
                 headerIcon={CalendarMonthOutlined}
                 headerTone="bg-[#CCFBF1] text-[#14B8A6]"
               />
