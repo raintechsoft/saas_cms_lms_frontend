@@ -1,41 +1,31 @@
 import { useCallback, useEffect, useState } from "react";
-import { VideocamOutlined } from "@mui/icons-material";
-import { apiRequest } from "../../lib/api";
+import { LinkOutlined, MenuBookOutlined, UploadFileOutlined } from "@mui/icons-material";
+import { API_ORIGIN, apiRequest, assetUrl } from "../../lib/api";
 import { notifyError } from "../../lib/notify";
 import { PageHeader } from "./components/PageHeader";
 import { useParentPortal } from "./ParentPortalContext";
 import { PARENT_BORDER, PARENT_PRIMARY, PARENT_PRIMARY_SUBTLE } from "./ParentPortalLayout";
 
-type SchedulePhase = "UPCOMING" | "LIVE" | "ENDED" | null;
-
-type PortalLiveClass = {
+type PortalNcertResource = {
   id: string;
   title: string;
-  topic: string | null;
-  meetingUrl: string | null;
-  startsAt: string;
-  endsAt: string;
-  schedulePhase: SchedulePhase;
+  chapter: string | null;
+  resourceType: "LINK" | "FILE";
+  resourceUrl: string | null;
+  fileName: string | null;
   subject: { id: string; name: string } | null;
-  hostTeacher: { id: string; firstName: string; lastName: string };
 };
 
-function formatWhen(value: string) {
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+function openUrl(url: string | null) {
+  if (!url) return "#";
+  if (/^https?:\/\//i.test(url) || url.startsWith("data:")) return url;
+  return assetUrl(url) || `${API_ORIGIN}${url.startsWith("/") ? url : `/${url}`}`;
 }
 
-export function ParentLiveClassesPage() {
+export function ParentNcertPage() {
   const { activeChild, portalChild, accessToken } = useParentPortal();
   const studentId = portalChild?.student?.id;
-  const [rows, setRows] = useState<PortalLiveClass[]>([]);
+  const [rows, setRows] = useState<PortalNcertResource[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
@@ -46,13 +36,13 @@ export function ParentLiveClassesPage() {
     }
     setLoading(true);
     try {
-      const data = await apiRequest<PortalLiveClass[]>(
-        `/portal/children/${studentId}/live-classes`,
+      const data = await apiRequest<PortalNcertResource[]>(
+        `/portal/children/${studentId}/ncert-content`,
         accessToken,
       );
       setRows(data ?? []);
     } catch (error) {
-      notifyError(error instanceof Error ? error.message : "Unable to load live classes");
+      notifyError(error instanceof Error ? error.message : "Unable to load NCERT content");
       setRows([]);
     } finally {
       setLoading(false);
@@ -66,8 +56,8 @@ export function ParentLiveClassesPage() {
   return (
     <div className="flex flex-col gap-5">
       <PageHeader
-        title="Live Classes"
-        subtitle={`Published sessions for ${activeChild.name}. Join opens the school meeting link.`}
+        title="NCERT Content"
+        subtitle={`Published study links and files for ${activeChild.name}.`}
       />
 
       <section
@@ -75,13 +65,13 @@ export function ParentLiveClassesPage() {
         style={{ borderColor: PARENT_BORDER }}
       >
         <div className="border-b px-5 py-4" style={{ borderColor: PARENT_BORDER }}>
-          <h2 className="text-[15px] font-bold text-[#1A1A2E]">Schedule</h2>
+          <h2 className="text-[15px] font-bold text-[#1A1A2E]">Resources</h2>
         </div>
         {loading ? (
           <p className="px-5 py-12 text-center text-[13px] text-[#6B7280]">Loading…</p>
         ) : rows.length === 0 ? (
           <p className="px-5 py-12 text-center text-[13px] text-[#6B7280]">
-            No published live classes for this class yet.
+            No published NCERT resources for this class yet.
           </p>
         ) : (
           <ul className="divide-y" style={{ borderColor: PARENT_BORDER }}>
@@ -91,32 +81,32 @@ export function ParentLiveClassesPage() {
                   className="grid size-10 place-items-center rounded-xl"
                   style={{ background: PARENT_PRIMARY_SUBTLE, color: PARENT_PRIMARY }}
                 >
-                  <VideocamOutlined sx={{ fontSize: 20 }} />
+                  {item.resourceType === "FILE" ? (
+                    <UploadFileOutlined sx={{ fontSize: 20 }} />
+                  ) : item.resourceType === "LINK" ? (
+                    <LinkOutlined sx={{ fontSize: 20 }} />
+                  ) : (
+                    <MenuBookOutlined sx={{ fontSize: 20 }} />
+                  )}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="truncate text-[14px] font-bold text-[#1A1A2E]">{item.title}</p>
-                    {item.schedulePhase ? (
-                      <span className="rounded-full bg-[#F3F4F6] px-2 py-0.5 text-[10px] font-bold uppercase text-[#6B7280]">
-                        {item.schedulePhase}
-                      </span>
-                    ) : null}
-                  </div>
+                  <p className="truncate text-[14px] font-bold text-[#1A1A2E]">{item.title}</p>
                   <p className="mt-0.5 text-[12px] text-[#6B7280]">
-                    {formatWhen(item.startsAt)}
-                    {item.subject ? ` · ${item.subject.name}` : ""}
-                    {` · ${item.hostTeacher.firstName} ${item.hostTeacher.lastName}`}
+                    {[item.chapter, item.subject?.name].filter(Boolean).join(" · ") || "Study material"}
                   </p>
                 </div>
-                {item.meetingUrl && item.schedulePhase !== "ENDED" ? (
+                {item.resourceUrl ? (
                   <a
-                    href={item.meetingUrl}
+                    href={openUrl(item.resourceUrl)}
                     target="_blank"
                     rel="noreferrer"
+                    {...(item.resourceType === "FILE"
+                      ? { download: item.fileName || true }
+                      : {})}
                     className="rounded-xl px-3 py-2 text-[12px] font-semibold text-white"
                     style={{ background: PARENT_PRIMARY }}
                   >
-                    Join
+                    {item.resourceType === "FILE" ? "Download" : "Open"}
                   </a>
                 ) : (
                   <span className="text-[11px] font-medium text-[#9CA3AF]">No link</span>

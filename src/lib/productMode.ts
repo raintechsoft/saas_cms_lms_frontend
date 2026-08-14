@@ -64,9 +64,9 @@ export const CAMPUS_NAV: CampusNavItem[] = [
   { to: "/erp", label: "ERP Settings", permission: "erp.view", moduleKey: "erp", bucket: "CMS", section: "cms" },
 
   // LMS MODULES
-  { to: "/academic-calendar", label: "Academic Calendar", permission: "timetable.view", moduleKey: "academicCalendar", bucket: "LMS", section: "lms" },
-  { to: "/lesson-planning", label: "Lesson Planning", permission: "academics.view", moduleKey: "lessonPlanning", bucket: "LMS", section: "lms" },
-  { to: "/live-classes", label: "Live Classes", permission: "timetable.view", moduleKey: "liveClasses", bucket: "LMS", section: "lms" },
+  { to: "/academic-calendar", label: "Academic Calendar", permission: "academic_calendar.view", moduleKey: "academicCalendar", bucket: "LMS", section: "lms" },
+  { to: "/lesson-planning", label: "Lesson Planning", permission: "lesson_planning.view", moduleKey: "lessonPlanning", bucket: "LMS", section: "lms" },
+  { to: "/live-classes", label: "Live Classes", permission: "live_classes.view", moduleKey: "liveClasses", bucket: "LMS", section: "lms" },
   {
     to: "/classroom-management",
     label: "Classroom Management",
@@ -95,9 +95,9 @@ export const CAMPUS_NAV: CampusNavItem[] = [
     section: "lms",
     requiresManualEnable: true,
   },
-  { to: "/ncert-content", label: "NCERT Content", permission: null, moduleKey: "ncertLibrary", bucket: "LMS", section: "lms" },
+  { to: "/ncert-content", label: "NCERT Library", permission: "ncert.view", moduleKey: "ncertLibrary", bucket: "LMS", section: "lms" },
   { to: "/question-bank", label: "Question Bank", permission: "question_bank.view", moduleKey: "questionBank", bucket: "LMS", section: "lms" },
-  { to: "/test-series", label: "Test Series", permission: "online_exam.view", moduleKey: "testSeries", bucket: "LMS", section: "lms" },
+  { to: "/test-series", label: "Test Series", permission: "test_series.view", moduleKey: "testSeries", bucket: "LMS", section: "lms" },
   {
     to: "/results-performance",
     label: "Results & Performance",

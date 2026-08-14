@@ -2,34 +2,58 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNo
 import {
   AddOutlined,
   ArchiveOutlined,
-  CategoryOutlined,
+  ArrowForwardOutlined,
   CheckCircleOutline,
+  ComputerOutlined,
+  CreateOutlined,
   DeleteOutline,
+  DescriptionOutlined,
+  DownloadOutlined,
   EditOutlined,
-  LibraryBooksOutlined,
+  FilterAltOutlined,
+  InsertDriveFileOutlined,
+  LanguageOutlined,
+  MoreVert,
   QuizOutlined,
-  RefreshOutlined,
+  ScienceOutlined,
+  ShareOutlined,
+  VisibilityOutlined,
 } from "@mui/icons-material";
 import { Link } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 import type { AcademicSetup, ClassItem, SubjectItem } from "./academics/types";
 import {
   CmsFooter,
-  CmsKpiCard,
-  CmsKpiGrid,
   CmsPage,
   CmsPageHeader,
   CmsScrollBody,
   CmsSectionCard,
 } from "../../components/cms/CmsLayout";
-import { CmsIconTabs, type CmsIconTabItem } from "../../components/cms/CmsIconTabs";
 import { ListPagination } from "../../components/ListPagination";
 import { apiRequest } from "../../lib/api";
 import { confirmDelete } from "../../lib/confirm";
 import { notifyError, notifySuccess } from "../../lib/notify";
 
-type Tab = "questions" | "create" | "categories";
+type View = "browse" | "create" | "categories" | "import";
 type QuestionStatus = "DRAFT" | "PUBLISHED" | "ARCHIVED";
+
+interface ImportFailure {
+  row: number;
+  message: string;
+  questionText?: string;
+}
+
+interface ImportResult {
+  created: number;
+  failed: number;
+  failures: ImportFailure[];
+}
+
+interface NamedRef {
+  id: string;
+  name: string;
+  code?: string | null;
+}
 
 interface QuestionCategory {
   id: string;
@@ -42,12 +66,6 @@ interface QuestionCategory {
 
 interface QuestionBankSettings {
   allowTeachersToAddQuestions: boolean;
-}
-
-interface NamedRef {
-  id: string;
-  name: string;
-  code?: string | null;
 }
 
 interface QuestionTypeConfig {
@@ -96,44 +114,75 @@ interface ListResult {
   pageSize: number;
 }
 
+interface DashboardStats {
+  total: number;
+  myQuestions: number;
+  byType: Array<{ id: string; name: string; count: number }>;
+  byDifficulty: Array<{ id: string; name: string; colorTag: string; count: number }>;
+  bySubject: Array<{ id: string; name: string; questionCount: number; chapterCount: number }>;
+  topTopics: Array<{ id: string; name: string; subjectName: string; count: number }>;
+}
+
 interface OptionDraft {
   optionText: string;
   isCorrect: boolean;
 }
 
-const TABS: Array<CmsIconTabItem<Tab>> = [
-  { key: "questions", label: "All Questions", shortLabel: "List", icon: LibraryBooksOutlined, tone: "indigo" },
-  { key: "create", label: "Create / Edit", shortLabel: "Form", icon: AddOutlined, tone: "violet" },
-  { key: "categories", label: "Categories", shortLabel: "Cats", icon: CategoryOutlined, tone: "sky" },
+const PAGE_SIZE = 8;
+const ADMIN_ROLES = new Set(["INSTITUTION_ADMIN", "STAFF"]);
+const SUBJECT_STYLES = [
+  { bg: "#efeaff", fg: "#4b2cf7" },
+  { bg: "#eaf8ef", fg: "#11a34a" },
+  { bg: "#fff2e7", fg: "#ff7a00" },
+  { bg: "#ffeaf4", fg: "#f72585" },
+  { bg: "#e9f1ff", fg: "#1769ff" },
+  { bg: "#efeaff", fg: "#5a37f4" },
 ];
 
-const PAGE_SIZE = 10;
-const ADMIN_ROLES = new Set(["INSTITUTION_ADMIN", "STAFF"]);
+function subjectGlyph(name: string): ReactNode {
+  const n = name.toLowerCase();
+  if (/math|mathematics|algebra/.test(n)) return <span className="text-[22px] font-black leading-none">×÷</span>;
+  if (/science|physics|chem|bio/.test(n)) return <ScienceOutlined sx={{ fontSize: 22 }} />;
+  if (/social|history|civics|geography/.test(n)) return <LanguageOutlined sx={{ fontSize: 22 }} />;
+  if (/english/.test(n)) return <span className="text-[18px] font-black leading-none">Aa</span>;
+  if (/hindi|sanskrit/.test(n)) return <span className="text-[18px] font-black leading-none">अ</span>;
+  if (/computer|it|coding/.test(n)) return <ComputerOutlined sx={{ fontSize: 22 }} />;
+  return <QuizOutlined sx={{ fontSize: 22 }} />;
+}
 
 function typeNeedsOptions(name: string) {
   return /mcq|true\s*\/?\s*false|multiple\s*choice|matching/i.test(name);
 }
 
-function statusBadge(status: QuestionStatus) {
-  if (status === "PUBLISHED") {
-    return "bg-emerald-100 text-emerald-800 ring-emerald-200";
-  }
-  if (status === "ARCHIVED") {
-    return "bg-slate-100 text-slate-600 ring-slate-200";
-  }
-  return "bg-amber-100 text-amber-800 ring-amber-200";
+function typePillStyle(name: string): { bgcolor: string; color: string } {
+  if (/mcq|multiple/i.test(name)) return { bgcolor: "#e5f8f0", color: "#173b5f" };
+  if (/long/i.test(name)) return { bgcolor: "#e9f1ff", color: "#173b5f" };
+  if (/short/i.test(name)) return { bgcolor: "#fff0df", color: "#173b5f" };
+  return { bgcolor: "#efeaff", color: "#173b5f" };
 }
 
-function EmptyState({ icon, title, hint }: { icon: ReactNode; title: string; hint?: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center gap-2 px-6 py-14 text-center">
-      <div className="flex size-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-700 ring-1 ring-slate-200">
-        {icon}
-      </div>
-      <p className="text-sm font-semibold text-slate-800">{title}</p>
-      {hint ? <p className="max-w-sm text-xs text-slate-500">{hint}</p> : null}
-    </div>
-  );
+function difficultyPillStyle(name: string): { bgcolor: string; color: string } {
+  if (/easy/i.test(name)) return { bgcolor: "#e4f7ef", color: "#3b455f" };
+  if (/hard/i.test(name)) return { bgcolor: "#ffe7ea", color: "#d72a37" };
+  return { bgcolor: "#fff0df", color: "#3b455f" };
+}
+
+function formatDate(value: string) {
+  return new Date(value).toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function personName(person?: { firstName: string; lastName: string } | null) {
+  if (!person) return "Unknown";
+  return `${person.firstName} ${person.lastName}`.trim();
+}
+
+function pct(part: number, total: number) {
+  if (!total) return 0;
+  return Math.round((part / total) * 1000) / 10;
 }
 
 function defaultOptions(): OptionDraft[] {
@@ -145,24 +194,346 @@ function defaultOptions(): OptionDraft[] {
   ];
 }
 
+function EmptyState({ title, hint }: { title: string; hint?: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-1 px-6 py-12 text-center">
+      <p className="text-sm font-semibold text-slate-800">{title}</p>
+      {hint ? <p className="max-w-sm text-xs text-slate-500">{hint}</p> : null}
+    </div>
+  );
+}
+
+function StatCard({
+  label,
+  value,
+  hint,
+  icon,
+  bg,
+  fg,
+}: {
+  label: string;
+  value: string | number;
+  hint: string;
+  icon: ReactNode;
+  bg: string;
+  fg: string;
+}) {
+  return (
+    <div className="h-full rounded-xl border border-[#E5E7EB] bg-white p-3.5 shadow-sm">
+      <div className="flex items-start gap-3">
+        <span
+          className="inline-grid size-11 shrink-0 place-items-center rounded-xl"
+          style={{ background: bg, color: fg }}
+        >
+          {icon}
+        </span>
+        <div className="min-w-0">
+          <p className="truncate text-[11px] font-bold text-slate-600">{label}</p>
+          <p className="mt-0.5 text-[20px] font-black leading-none tracking-tight text-slate-900">
+            {value}
+          </p>
+          <p className="mt-1 truncate text-[10.5px] text-slate-500">{hint}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FilterField({
+  label,
+  children,
+  className = "",
+}: {
+  label: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <label className={`block min-w-0 ${className}`}>
+      <span className="mb-1 block text-[10.5px] font-semibold text-slate-600">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function QuestionImportPanel({
+  accessToken,
+  onDone,
+  onBack,
+}: {
+  accessToken: string;
+  onDone: () => Promise<void>;
+  onBack: () => void;
+}) {
+  const [csv, setCsv] = useState("");
+  const [fileName, setFileName] = useState("");
+  const [result, setResult] = useState<ImportResult | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+
+  const rowEstimate = useMemo(() => {
+    const lines = csv
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    return Math.max(0, lines.length - (lines.length ? 1 : 0));
+  }, [csv]);
+
+  async function downloadTemplate() {
+    try {
+      const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:4000/api/v1";
+      const response = await fetch(`${API_URL}/question-bank/questions/import-template`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!response.ok) {
+        throw new Error("Unable to download template");
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "question_bank_import_template.csv";
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (cause) {
+      notifyError(cause instanceof Error ? cause.message : "Unable to download template");
+    }
+  }
+
+  async function runImport() {
+    if (csv.trim().length < 10) {
+      notifyError("Paste or upload CSV content first");
+      return;
+    }
+    setBusy(true);
+    setResult(null);
+    try {
+      const next = await apiRequest<ImportResult>("/question-bank/questions/import", accessToken, {
+        method: "POST",
+        body: JSON.stringify({ csv }),
+      });
+      setResult(next);
+      if (next.created > 0) {
+        notifySuccess(
+          `${next.created} question${next.created === 1 ? "" : "s"} imported as draft` +
+            (next.failed ? ` · ${next.failed} row${next.failed === 1 ? "" : "s"} failed` : ""),
+        );
+        await onDone();
+      } else if (next.failed) {
+        notifyError(`No questions imported · ${next.failed} row${next.failed === 1 ? "" : "s"} failed`);
+      } else {
+        notifyError("No rows were imported");
+      }
+    } catch (cause) {
+      notifyError(cause instanceof Error ? cause.message : "Unable to import questions");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function handleFile(file: File | undefined) {
+    if (!file) return;
+    if (!/\.csv$/i.test(file.name) && file.type !== "text/csv" && file.type !== "application/vnd.ms-excel") {
+      notifyError("Please upload a .CSV file (save Excel as CSV)");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      notifyError("CSV must be 2MB or smaller");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setCsv(String(reader.result ?? ""));
+      setFileName(file.name);
+      setResult(null);
+    };
+    reader.readAsText(file);
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-[15px] font-bold text-slate-900">Bulk Import Questions</h2>
+          <p className="text-[12px] text-slate-500">
+            Upload a CSV matching the template. Rows become Draft questions via the same create rules as manual entry.
+            Max 500 rows. Subject, type, and difficulty must already exist (matched by name).
+          </p>
+        </div>
+        <button type="button" className="nx-btn-secondary !text-[12px]" onClick={onBack}>
+          Back to bank
+        </button>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <CmsSectionCard className="!p-4">
+          <h3 className="text-[14px] font-bold text-slate-900">Upload CSV</h3>
+          <p className="mt-1 text-[12px] text-slate-500">
+            Required columns:{" "}
+            <span className="font-semibold text-slate-700">
+              subject, question_type, difficulty, question_text
+            </span>
+            . Optional: class, chapter, marks, options, correct_option (1–4 or A–D).
+          </p>
+
+          <button
+            type="button"
+            className="mt-4 flex w-full items-center gap-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-left hover:border-indigo-300"
+            onClick={() => void downloadTemplate()}
+          >
+            <span className="inline-grid size-10 place-items-center rounded-lg bg-white text-[#4b2cf7] shadow-sm">
+              <DownloadOutlined sx={{ fontSize: 20 }} />
+            </span>
+            <span>
+              <span className="block text-[13px] font-semibold text-slate-800">Download Template</span>
+              <span className="block text-[11px] text-slate-500">Official CSV header + sample rows</span>
+            </span>
+          </button>
+
+          <label
+            className={`mt-3 flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed px-4 py-10 text-center ${
+              dragOver ? "border-indigo-400 bg-indigo-50/70" : "border-slate-300 bg-slate-50/70"
+            }`}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragOver(true);
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragOver(false);
+              handleFile(e.dataTransfer.files?.[0]);
+            }}
+          >
+            <input
+              className="sr-only"
+              type="file"
+              accept=".csv,text/csv"
+              onChange={(e) => {
+                handleFile(e.target.files?.[0]);
+                e.target.value = "";
+              }}
+            />
+            <InsertDriveFileOutlined sx={{ fontSize: 28 }} className="text-[#4b2cf7]" />
+            <p className="mt-2 text-[13px] font-semibold text-slate-700">Click or drop CSV here</p>
+            <p className="mt-1 text-[11px] text-slate-500">.CSV only · max 2MB · 500 rows</p>
+          </label>
+
+          {fileName ? (
+            <div className="mt-3 flex items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2">
+              <div className="min-w-0">
+                <p className="truncate text-[12px] font-medium text-slate-700">{fileName}</p>
+                <p className="text-[11px] text-slate-400">
+                  {rowEstimate.toLocaleString()} data row{rowEstimate === 1 ? "" : "s"}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="text-[12px] font-semibold text-rose-600"
+                onClick={() => {
+                  setCsv("");
+                  setFileName("");
+                  setResult(null);
+                }}
+              >
+                Remove
+              </button>
+            </div>
+          ) : null}
+
+          <button
+            type="button"
+            className="nx-btn-primary mt-4 w-full justify-center"
+            disabled={busy || csv.trim().length < 10}
+            onClick={() => void runImport()}
+          >
+            {busy ? "Importing…" : "Import Questions"}
+          </button>
+        </CmsSectionCard>
+
+        <CmsSectionCard className="!p-4">
+          <h3 className="text-[14px] font-bold text-slate-900">Paste CSV</h3>
+          <p className="mt-1 text-[12px] text-slate-500">Or paste raw CSV content below.</p>
+          <textarea
+            className="nx-input mt-3 min-h-[260px] font-mono text-[11px] leading-relaxed"
+            placeholder={
+              "subject,question_type,difficulty,question_text,option_1,option_2,option_3,option_4,correct_option\nMathematics,MCQ,Medium,What is 2+2?,3,4,5,6,2"
+            }
+            value={csv}
+            onChange={(e) => {
+              setCsv(e.target.value);
+              if (fileName) setFileName("");
+              setResult(null);
+            }}
+          />
+        </CmsSectionCard>
+      </div>
+
+      {result ? (
+        <CmsSectionCard className="!p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-[14px] font-bold text-slate-900">Import results</h3>
+            <p className="text-[12px] text-slate-600">
+              <span className="font-semibold text-emerald-700">{result.created} created</span>
+              {" · "}
+              <span className="font-semibold text-rose-600">{result.failed} failed</span>
+            </p>
+          </div>
+          {result.failures.length ? (
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full min-w-[520px] text-left text-[12px]">
+                <thead className="bg-[#fbfcff] text-[10.5px] text-slate-500">
+                  <tr>
+                    <th className="px-3 py-2 font-bold">Row</th>
+                    <th className="px-3 py-2 font-bold">Question</th>
+                    <th className="px-3 py-2 font-bold">Error</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.failures.map((failure) => (
+                    <tr key={`${failure.row}-${failure.message}`} className="border-t border-slate-100">
+                      <td className="px-3 py-2 font-semibold text-slate-700">{failure.row}</td>
+                      <td className="max-w-[280px] px-3 py-2 text-slate-600">
+                        <span className="line-clamp-2">{failure.questionText || "—"}</span>
+                      </td>
+                      <td className="px-3 py-2 text-rose-600">{failure.message}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="mt-3 text-[12px] text-slate-500">All rows imported successfully as drafts.</p>
+          )}
+        </CmsSectionCard>
+      ) : null}
+    </div>
+  );
+}
+
 export function QuestionBankPage() {
   const { accessToken, user } = useAuth();
-  const [tab, setTab] = useState<Tab>("questions");
+  const [view, setView] = useState<View>("browse");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [page, setPage] = useState(1);
+  const [viewing, setViewing] = useState<BankQuestion | null>(null);
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
 
   const [subjects, setSubjects] = useState<SubjectItem[]>([]);
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [questionTypes, setQuestionTypes] = useState<QuestionTypeConfig[]>([]);
   const [difficultyLevels, setDifficultyLevels] = useState<DifficultyLevelConfig[]>([]);
+  const [stats, setStats] = useState<DashboardStats | null>(null);
 
+  const [filterClassId, setFilterClassId] = useState("");
   const [filterSubjectId, setFilterSubjectId] = useState("");
   const [filterTypeId, setFilterTypeId] = useState("");
-  const [filterDifficultyId, setFilterDifficultyId] = useState("");
   const [filterCategoryId, setFilterCategoryId] = useState("");
+  const [filterDifficultyId, setFilterDifficultyId] = useState("");
   const [filterStatus, setFilterStatus] = useState<QuestionStatus | "">("");
   const [search, setSearch] = useState("");
+  const [draftSearch, setDraftSearch] = useState("");
 
   const [categories, setCategories] = useState<QuestionCategory[]>([]);
   const [categorySubjectId, setCategorySubjectId] = useState("");
@@ -172,14 +543,7 @@ export function QuestionBankPage() {
   const [allowTeachersToAddQuestions, setAllowTeachersToAddQuestions] = useState(false);
 
   const [list, setList] = useState<ListResult>({ items: [], total: 0, page: 1, pageSize: PAGE_SIZE });
-  const [statusCounts, setStatusCounts] = useState({
-    total: 0,
-    draft: 0,
-    published: 0,
-    archived: 0,
-  });
   const [editingId, setEditingId] = useState<string | null>(null);
-
   const [subjectId, setSubjectId] = useState("");
   const [classId, setClassId] = useState("");
   const [categoryId, setCategoryId] = useState("");
@@ -216,7 +580,40 @@ export function QuestionBankPage() {
     return categories.filter((row) => row.subjectId === filterSubjectId);
   }, [categories, filterSubjectId]);
 
-  const counts = statusCounts;
+  const typeHighlight = useMemo(() => {
+    const rows = stats?.byType ?? [];
+    const find = (re: RegExp) => rows.find((row) => re.test(row.name));
+    return {
+      mcq: find(/mcq|multiple/i),
+      short: find(/short/i),
+      long: find(/long/i),
+    };
+  }, [stats]);
+
+  const distribution = useMemo(() => {
+    const palette = ["#0aa06e", "#ff8a00", "#1769ff", "#5a37f4", "#f72585", "#11a34a"];
+    const rows = (stats?.byType ?? [])
+      .filter((row) => row.count > 0)
+      .map((row, index) => ({
+        ...row,
+        color: palette[index % palette.length]!,
+        share: pct(row.count, stats?.total ?? 0),
+      }));
+    const totalCount = stats?.total ?? 0;
+    let cursor = 0;
+    const stops = rows.map((row) => {
+      const start = cursor;
+      const end = totalCount ? cursor + (row.count / totalCount) * 100 : cursor;
+      cursor = end;
+      return `${row.color} ${start}% ${end}%`;
+    });
+    return {
+      rows,
+      gradient: stops.length
+        ? `conic-gradient(${stops.join(", ")})`
+        : "conic-gradient(#edf0f8 0 100%)",
+    };
+  }, [stats]);
 
   const resetForm = useCallback(() => {
     setEditingId(null);
@@ -247,7 +644,6 @@ export function QuestionBankPage() {
     setQuestionTypes(types);
     setDifficultyLevels(levels);
     setAllowTeachersToAddQuestions(settings.allowTeachersToAddQuestions);
-    return { setup, types, levels, settings };
   }, [accessToken]);
 
   const loadCategories = useCallback(
@@ -259,26 +655,14 @@ export function QuestionBankPage() {
         accessToken,
       );
       setCategories(data);
-      return data;
     },
     [accessToken],
   );
 
-  const loadStatusCounts = useCallback(async () => {
+  const loadStats = useCallback(async () => {
     if (!accessToken) return;
-    const base = "/question-bank/questions?page=1&pageSize=1";
-    const [all, draft, published, archived] = await Promise.all([
-      apiRequest<ListResult>(base, accessToken),
-      apiRequest<ListResult>(`${base}&status=DRAFT`, accessToken),
-      apiRequest<ListResult>(`${base}&status=PUBLISHED`, accessToken),
-      apiRequest<ListResult>(`${base}&status=ARCHIVED`, accessToken),
-    ]);
-    setStatusCounts({
-      total: all.total,
-      draft: draft.total,
-      published: published.total,
-      archived: archived.total,
-    });
+    const data = await apiRequest<DashboardStats>("/question-bank/stats", accessToken);
+    setStats(data);
   }, [accessToken]);
 
   const loadQuestions = useCallback(async () => {
@@ -286,6 +670,7 @@ export function QuestionBankPage() {
     const params = new URLSearchParams();
     params.set("page", String(page));
     params.set("pageSize", String(PAGE_SIZE));
+    if (filterClassId) params.set("classId", filterClassId);
     if (filterSubjectId) params.set("subjectId", filterSubjectId);
     if (filterTypeId) params.set("questionTypeId", filterTypeId);
     if (filterDifficultyId) params.set("difficultyLevelId", filterDifficultyId);
@@ -300,6 +685,7 @@ export function QuestionBankPage() {
   }, [
     accessToken,
     page,
+    filterClassId,
     filterSubjectId,
     filterTypeId,
     filterDifficultyId,
@@ -313,34 +699,28 @@ export function QuestionBankPage() {
     setLoading(true);
     try {
       await loadMasters();
-      await Promise.all([loadQuestions(), loadStatusCounts(), loadCategories()]);
+      await Promise.all([loadQuestions(), loadStats(), loadCategories()]);
     } catch (cause) {
       notifyError(cause instanceof Error ? cause.message : "Unable to load question bank");
     } finally {
       setLoading(false);
     }
-  }, [accessToken, loadMasters, loadQuestions, loadStatusCounts, loadCategories]);
+  }, [accessToken, loadMasters, loadQuestions, loadStats, loadCategories]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
   useEffect(() => {
-    if (!categorySubjectId && subjects.length) {
-      setCategorySubjectId(subjects[0]!.id);
-    }
+    if (!categorySubjectId && subjects.length) setCategorySubjectId(subjects[0]!.id);
   }, [categorySubjectId, subjects]);
 
   useEffect(() => {
-    if (categorySubjectId) {
-      void loadCategories(categorySubjectId);
-    }
+    if (categorySubjectId) void loadCategories(categorySubjectId);
   }, [categorySubjectId, loadCategories]);
 
   useEffect(() => {
-    if (subjectId) {
-      void loadCategories(subjectId);
-    }
+    if (subjectId) void loadCategories(subjectId);
   }, [subjectId, loadCategories]);
 
   useEffect(() => {
@@ -354,15 +734,15 @@ export function QuestionBankPage() {
     }
   }, [editingId, subjects, questionTypes, difficultyLevels, subjectId, questionTypeId, difficultyLevelId]);
 
-  useEffect(() => {
-    if (selectedType && !marks) {
-      setMarks(String(selectedType.defaultMarks));
-    }
-  }, [selectedType, marks]);
+  function applyFilters() {
+    setSearch(draftSearch);
+    setPage(1);
+  }
 
   function startCreate() {
     resetForm();
-    setTab("create");
+    setViewing(null);
+    setView("create");
   }
 
   async function startEdit(id: string) {
@@ -386,7 +766,19 @@ export function QuestionBankPage() {
           ? q.options.map((o) => ({ optionText: o.optionText, isCorrect: o.isCorrect }))
           : defaultOptions(),
       );
-      setTab("create");
+      setViewing(null);
+      setView("create");
+    } catch (cause) {
+      notifyError(cause instanceof Error ? cause.message : "Unable to load question");
+    }
+  }
+
+  async function openView(id: string) {
+    if (!accessToken) return;
+    try {
+      const q = await apiRequest<BankQuestion>(`/question-bank/questions/${id}`, accessToken);
+      setViewing(q);
+      setMenuOpenId(null);
     } catch (cause) {
       notifyError(cause instanceof Error ? cause.message : "Unable to load question");
     }
@@ -447,8 +839,8 @@ export function QuestionBankPage() {
         notifySuccess("Question saved as draft");
       }
       resetForm();
-      setTab("questions");
-      await Promise.all([loadQuestions(), loadStatusCounts()]);
+      setView("browse");
+      await Promise.all([loadQuestions(), loadStats()]);
     } catch (cause) {
       notifyError(cause instanceof Error ? cause.message : "Unable to save question");
     } finally {
@@ -463,7 +855,8 @@ export function QuestionBankPage() {
       await apiRequest(`/question-bank/questions/${id}/publish`, accessToken, { method: "POST" });
       notifySuccess("Question published");
       if (editingId === id) setEditStatus("PUBLISHED");
-      await Promise.all([loadQuestions(), loadStatusCounts()]);
+      setMenuOpenId(null);
+      await Promise.all([loadQuestions(), loadStats()]);
     } catch (cause) {
       notifyError(cause instanceof Error ? cause.message : "Unable to publish");
     } finally {
@@ -478,7 +871,8 @@ export function QuestionBankPage() {
       await apiRequest(`/question-bank/questions/${id}/archive`, accessToken, { method: "POST" });
       notifySuccess("Question archived");
       if (editingId === id) setEditStatus("ARCHIVED");
-      await Promise.all([loadQuestions(), loadStatusCounts()]);
+      setMenuOpenId(null);
+      await Promise.all([loadQuestions(), loadStats()]);
     } catch (cause) {
       notifyError(cause instanceof Error ? cause.message : "Unable to archive");
     } finally {
@@ -498,9 +892,10 @@ export function QuestionBankPage() {
       notifySuccess("Question deleted");
       if (editingId === id) {
         resetForm();
-        setTab("questions");
+        setView("browse");
       }
-      await Promise.all([loadQuestions(), loadStatusCounts()]);
+      setMenuOpenId(null);
+      await Promise.all([loadQuestions(), loadStats()]);
     } catch (cause) {
       notifyError(cause instanceof Error ? cause.message : "Unable to delete");
     }
@@ -508,33 +903,6 @@ export function QuestionBankPage() {
 
   function updateOption(index: number, patch: Partial<OptionDraft>) {
     setOptions((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)));
-  }
-
-  function addOption() {
-    setOptions((prev) => [...prev, { optionText: "", isCorrect: false }]);
-  }
-
-  function removeOption(index: number) {
-    setOptions((prev) => prev.filter((_, i) => i !== index));
-  }
-
-  function resetCategoryForm() {
-    setEditingCategoryId(null);
-    setCategoryName("");
-    setCategoryParentId("");
-  }
-
-  function startEditCategory(
-    id: string,
-    name: string,
-    subjectIdValue: string,
-    parentCategoryId: string | null,
-  ) {
-    setEditingCategoryId(id);
-    setCategorySubjectId(subjectIdValue);
-    setCategoryName(name);
-    setCategoryParentId(parentCategoryId ?? "");
-    setTab("categories");
   }
 
   async function saveCategory(event: FormEvent) {
@@ -562,8 +930,10 @@ export function QuestionBankPage() {
         });
         notifySuccess("Category created");
       }
-      resetCategoryForm();
-      await loadCategories(categorySubjectId);
+      setEditingCategoryId(null);
+      setCategoryName("");
+      setCategoryParentId("");
+      await Promise.all([loadCategories(categorySubjectId), loadStats()]);
     } catch (cause) {
       notifyError(cause instanceof Error ? cause.message : "Unable to save category");
     } finally {
@@ -581,358 +951,147 @@ export function QuestionBankPage() {
     try {
       await apiRequest(`/question-bank/categories/${id}`, accessToken, { method: "DELETE" });
       notifySuccess("Category deleted");
-      if (editingCategoryId === id) resetCategoryForm();
-      await loadCategories(categorySubjectId);
+      if (editingCategoryId === id) {
+        setEditingCategoryId(null);
+        setCategoryName("");
+      }
+      await Promise.all([loadCategories(categorySubjectId), loadStats()]);
     } catch (cause) {
       notifyError(cause instanceof Error ? cause.message : "Unable to delete category");
     }
   }
 
-  const categoryParentsForForm = useMemo(
-    () => categories.filter((row) => row.subjectId === categorySubjectId),
-    [categories, categorySubjectId],
-  );
+  const total = stats?.total ?? 0;
 
   return (
     <CmsPage>
       <CmsPageHeader
         title="Question Bank"
-        description="Create and manage questions for Examination and Test Series."
+        description={
+          <span>
+            <span className="text-[#4b2cf7]">Home</span>
+            <span className="text-[#676b8f]">{" / Question Bank"}</span>
+          </span>
+        }
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <Link to="/erp/question-bank-settings" className="nx-btn-secondary !text-[12px]">
-              ERP Settings
-            </Link>
+            <button
+              type="button"
+              className="nx-btn-secondary !text-[12px]"
+              onClick={() => {
+                if (!canManage) {
+                  notifyError("You do not have permission to import questions");
+                  return;
+                }
+                setView("import");
+              }}
+            >
+              <DownloadOutlined sx={{ fontSize: 16 }} /> Import Questions
+            </button>
             {canManage ? (
-              <button type="button" className="nx-btn-primary" onClick={startCreate}>
-                <AddOutlined sx={{ fontSize: 16 }} /> New Question
+              <button type="button" className="nx-btn-primary !text-[12px]" onClick={startCreate}>
+                <AddOutlined sx={{ fontSize: 16 }} /> Add Question
               </button>
             ) : null}
-            <button type="button" className="nx-btn-secondary" onClick={() => void load()} disabled={loading}>
-              <RefreshOutlined sx={{ fontSize: 16 }} />
-            </button>
           </div>
         }
       />
 
       <CmsScrollBody>
-        <CmsKpiGrid>
-          <CmsKpiCard label="Total" value={String(counts.total)} icon={<QuizOutlined sx={{ fontSize: 20 }} />} tint="#6366f1" />
-          <CmsKpiCard label="Draft" value={String(counts.draft)} icon={<EditOutlined sx={{ fontSize: 20 }} />} tint="#f59e0b" />
-          <CmsKpiCard
-            label="Published"
-            value={String(counts.published)}
-            icon={<CheckCircleOutline sx={{ fontSize: 20 }} />}
-            tint="#10b981"
-          />
-          <CmsKpiCard label="Archived" value={String(counts.archived)} icon={<ArchiveOutlined sx={{ fontSize: 20 }} />} tint="#64748b" />
-        </CmsKpiGrid>
-
-        <CmsIconTabs items={TABS} value={tab} onChange={setTab} columnsClass="grid-cols-3 max-w-2xl" />
-
         {isTeacherOnly && !allowTeachersToAddQuestions ? (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            Question entry is disabled for teachers. You can browse questions, but creating or
-            editing requires your administrator to enable{" "}
+          <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            Question entry is disabled for teachers. Ask an administrator to enable{" "}
             <strong>Allow Teachers to Add Questions</strong> in ERP Settings.
           </div>
         ) : null}
 
-        {tab === "questions" ? (
-          <CmsSectionCard>
-            <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
-              <div>
-                <span className="nx-label">Search</span>
-                <input
-                  className="nx-input w-full"
-                  placeholder="Question text…"
-                  value={search}
-                  onChange={(e) => {
-                    setSearch(e.target.value);
-                    setPage(1);
-                  }}
+        {view === "browse" ? (
+          <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_300px] 2xl:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="min-w-0 space-y-4">
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-5">
+                <StatCard
+                  label="Total Questions"
+                  value={total.toLocaleString("en-IN")}
+                  hint="Across all subjects"
+                  icon={<QuizOutlined sx={{ fontSize: 20 }} />}
+                  bg="#efeaff"
+                  fg="#4b2cf7"
+                />
+                <StatCard
+                  label="MCQ"
+                  value={(typeHighlight.mcq?.count ?? 0).toLocaleString("en-IN")}
+                  hint={`${pct(typeHighlight.mcq?.count ?? 0, total)}%`}
+                  icon={<DescriptionOutlined sx={{ fontSize: 20 }} />}
+                  bg="#eaf8ef"
+                  fg="#11a34a"
+                />
+                <StatCard
+                  label="Short Answer"
+                  value={(typeHighlight.short?.count ?? 0).toLocaleString("en-IN")}
+                  hint={`${pct(typeHighlight.short?.count ?? 0, total)}%`}
+                  icon={<CreateOutlined sx={{ fontSize: 20 }} />}
+                  bg="#fff2e7"
+                  fg="#ff7a00"
+                />
+                <StatCard
+                  label="Long Answer"
+                  value={(typeHighlight.long?.count ?? 0).toLocaleString("en-IN")}
+                  hint={`${pct(typeHighlight.long?.count ?? 0, total)}%`}
+                  icon={<InsertDriveFileOutlined sx={{ fontSize: 20 }} />}
+                  bg="#e9f1ff"
+                  fg="#1769ff"
+                />
+                <StatCard
+                  label="My Questions"
+                  value={(stats?.myQuestions ?? 0).toLocaleString("en-IN")}
+                  hint="Created by you"
+                  icon={<CheckCircleOutline sx={{ fontSize: 20 }} />}
+                  bg="#ffeaf4"
+                  fg="#f72585"
                 />
               </div>
-              <div>
-                <span className="nx-label">Subject</span>
-                <select
-                  className="nx-input w-full"
-                  value={filterSubjectId}
-                  onChange={(e) => {
-                    setFilterSubjectId(e.target.value);
-                    setFilterCategoryId("");
-                    setPage(1);
-                  }}
-                >
-                  <option value="">All subjects</option>
-                  {subjects.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <span className="nx-label">Type</span>
-                <select
-                  className="nx-input w-full"
-                  value={filterTypeId}
-                  onChange={(e) => {
-                    setFilterTypeId(e.target.value);
-                    setPage(1);
-                  }}
-                >
-                  <option value="">All types</option>
-                  {questionTypes.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <span className="nx-label">Difficulty</span>
-                <select
-                  className="nx-input w-full"
-                  value={filterDifficultyId}
-                  onChange={(e) => {
-                    setFilterDifficultyId(e.target.value);
-                    setPage(1);
-                  }}
-                >
-                  <option value="">All levels</option>
-                  {difficultyLevels.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <span className="nx-label">Category</span>
-                <select
-                  className="nx-input w-full"
-                  value={filterCategoryId}
-                  onChange={(e) => {
-                    setFilterCategoryId(e.target.value);
-                    setPage(1);
-                  }}
-                >
-                  <option value="">All categories</option>
-                  {filterCategories.map((parent) => (
-                    <optgroup key={parent.id} label={parent.name}>
-                      <option value={parent.id}>{parent.name} (all)</option>
-                      {parent.subCategories.map((sub) => (
-                        <option key={sub.id} value={sub.id}>
-                          {parent.name} → {sub.name}
+
+              <div className="rounded-xl border border-[#E5E7EB] bg-white p-3 shadow-sm">
+                <div className="flex flex-wrap items-end gap-3">
+                  <FilterField label="Class" className="w-[140px] grow sm:grow-0">
+                    <select
+                      className="nx-input !py-2 !font-semibold"
+                      value={filterClassId}
+                      onChange={(e) => setFilterClassId(e.target.value)}
+                    >
+                      <option value="">All Classes</option>
+                      {classes.map((row) => (
+                        <option key={row.id} value={row.id}>
+                          {row.name}
                         </option>
                       ))}
-                    </optgroup>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <span className="nx-label">Status</span>
-                <select
-                  className="nx-input w-full"
-                  value={filterStatus}
-                  onChange={(e) => {
-                    setFilterStatus(e.target.value as QuestionStatus | "");
-                    setPage(1);
-                  }}
-                >
-                  <option value="">All statuses</option>
-                  <option value="DRAFT">Draft</option>
-                  <option value="PUBLISHED">Published</option>
-                  <option value="ARCHIVED">Archived</option>
-                </select>
-              </div>
-            </div>
-
-            {loading ? (
-              <p className="py-10 text-center text-sm text-slate-500">Loading questions…</p>
-            ) : list.items.length === 0 ? (
-              <EmptyState
-                icon={<LibraryBooksOutlined />}
-                title="No questions yet"
-                hint={canManage ? "Create your first question to get started." : "Questions will appear here once added."}
-              />
-            ) : (
-              <>
-                <div className="overflow-x-auto">
-                  <table className="nx-table w-full min-w-[720px]">
-                    <thead>
-                      <tr>
-                        <th>Question</th>
-                        <th>Subject</th>
-                        <th>Category</th>
-                        <th>Type</th>
-                        <th>Difficulty</th>
-                        <th>Marks</th>
-                        <th>Status</th>
-                        <th className="text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {list.items.map((q) => (
-                        <tr key={q.id}>
-                          <td className="max-w-xs">
-                            <p className="line-clamp-2 text-[13px] font-medium text-slate-800">
-                              {q.questionText}
-                            </p>
-                            {q.academicClass ? (
-                              <p className="text-[11px] text-slate-500">{q.academicClass.name}</p>
-                            ) : null}
-                          </td>
-                          <td className="text-[12px]">{q.subject.name}</td>
-                          <td className="text-[12px] text-slate-600">{q.category?.name ?? "—"}</td>
-                          <td className="text-[12px]">{q.questionType.name}</td>
-                          <td>
-                            <span
-                              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold"
-                              style={{
-                                backgroundColor: `${q.difficultyLevel.colorTag}22`,
-                                color: q.difficultyLevel.colorTag,
-                              }}
-                            >
-                              {q.difficultyLevel.name}
-                            </span>
-                          </td>
-                          <td className="text-[12px]">{q.marks}</td>
-                          <td>
-                            <span
-                              className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold ring-1 ${statusBadge(q.status)}`}
-                            >
-                              {q.status}
-                            </span>
-                          </td>
-                          <td>
-                            <div className="flex justify-end gap-1">
-                              {canManage ? (
-                                <button
-                                  type="button"
-                                  className="nx-icon-btn"
-                                  title="Edit"
-                                  onClick={() => void startEdit(q.id)}
-                                >
-                                  <EditOutlined sx={{ fontSize: 16 }} />
-                                </button>
-                              ) : null}
-                              {isAdmin && q.status === "DRAFT" ? (
-                                <button
-                                  type="button"
-                                  className="nx-icon-btn text-emerald-700"
-                                  title="Publish"
-                                  onClick={() => void publishQuestion(q.id)}
-                                >
-                                  <CheckCircleOutline sx={{ fontSize: 16 }} />
-                                </button>
-                              ) : null}
-                              {isAdmin && q.status === "PUBLISHED" ? (
-                                <button
-                                  type="button"
-                                  className="nx-icon-btn"
-                                  title="Archive"
-                                  onClick={() => void archiveQuestion(q.id)}
-                                >
-                                  <ArchiveOutlined sx={{ fontSize: 16 }} />
-                                </button>
-                              ) : null}
-                              {canManage && q.status === "DRAFT" ? (
-                                <button
-                                  type="button"
-                                  className="nx-icon-btn text-rose-600"
-                                  title="Delete"
-                                  onClick={() => void deleteQuestion(q.id)}
-                                >
-                                  <DeleteOutline sx={{ fontSize: 16 }} />
-                                </button>
-                              ) : null}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <ListPagination
-                  page={page}
-                  pageSize={PAGE_SIZE}
-                  total={list.total}
-                  onPageChange={setPage}
-                />
-              </>
-            )}
-          </CmsSectionCard>
-        ) : tab === "create" ? (
-          <CmsSectionCard>
-            {!canManage ? (
-              <p className="py-8 text-center text-sm text-slate-500">
-                {isTeacherOnly && !allowTeachersToAddQuestions
-                  ? "Question entry is disabled for teachers. Contact your administrator."
-                  : "You do not have permission to create or edit questions."}
-              </p>
-            ) : (
-              <form onSubmit={saveQuestion} className="space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h2 className="text-[15px] font-bold text-slate-900">
-                    {editingId ? "Edit question" : "New question"}
-                  </h2>
-                  {editingId ? (
-                    <span
-                      className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold ring-1 ${statusBadge(editStatus)}`}
-                    >
-                      {editStatus}
-                    </span>
-                  ) : (
-                    <span className="text-[12px] text-slate-500">Saves as DRAFT</span>
-                  )}
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
-                    <span className="nx-label">Subject *</span>
+                    </select>
+                  </FilterField>
+                  <FilterField label="Subject" className="w-[140px] grow sm:grow-0">
                     <select
-                      className="nx-input w-full"
-                      value={subjectId}
+                      className="nx-input !py-2 !font-semibold"
+                      value={filterSubjectId}
                       onChange={(e) => {
-                        setSubjectId(e.target.value);
-                        setCategoryId("");
+                        setFilterSubjectId(e.target.value);
+                        setFilterCategoryId("");
                       }}
-                      required
                     >
-                      <option value="">Select subject</option>
-                      {subjects.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name}
+                      <option value="">All Subjects</option>
+                      {subjects.map((row) => (
+                        <option key={row.id} value={row.id}>
+                          {row.name}
                         </option>
                       ))}
                     </select>
-                  </div>
-                  <div>
-                    <span className="nx-label">Class (optional)</span>
+                  </FilterField>
+                  <FilterField label="Chapter" className="w-[150px] grow sm:grow-0">
                     <select
-                      className="nx-input w-full"
-                      value={classId}
-                      onChange={(e) => setClassId(e.target.value)}
+                      className="nx-input !py-2 !font-semibold"
+                      value={filterCategoryId}
+                      onChange={(e) => setFilterCategoryId(e.target.value)}
                     >
-                      <option value="">All classes</option>
-                      {classes.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <span className="nx-label">Category (optional)</span>
-                    <select
-                      className="nx-input w-full"
-                      value={categoryId}
-                      onChange={(e) => setCategoryId(e.target.value)}
-                    >
-                      <option value="">No category</option>
-                      {formCategories.map((parent) => (
+                      <option value="">All Chapters</option>
+                      {filterCategories.map((parent) => (
                         <optgroup key={parent.id} label={parent.name}>
                           <option value={parent.id}>{parent.name}</option>
                           {parent.subCategories.map((sub) => (
@@ -943,351 +1102,709 @@ export function QuestionBankPage() {
                         </optgroup>
                       ))}
                     </select>
-                  </div>
-                  <div>
-                    <span className="nx-label">Question type *</span>
+                  </FilterField>
+                  <FilterField label="Question Type" className="w-[140px] grow sm:grow-0">
                     <select
-                      className="nx-input w-full"
-                      value={questionTypeId}
-                      onChange={(e) => {
-                        const id = e.target.value;
-                        setQuestionTypeId(id);
-                        const t = questionTypes.find((row) => row.id === id);
-                        if (t) setMarks(String(t.defaultMarks));
+                      className="nx-input !py-2 !font-semibold"
+                      value={filterTypeId}
+                      onChange={(e) => setFilterTypeId(e.target.value)}
+                    >
+                      <option value="">All Types</option>
+                      {questionTypes.map((row) => (
+                        <option key={row.id} value={row.id}>
+                          {row.name}
+                        </option>
+                      ))}
+                    </select>
+                  </FilterField>
+                  <FilterField label="Search" className="min-w-[200px] flex-[1.4]">
+                    <input
+                      className="nx-input !py-2"
+                      placeholder="Search questions..."
+                      value={draftSearch}
+                      onChange={(e) => setDraftSearch(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") applyFilters();
                       }}
-                      required
-                    >
-                      {questionTypes.map((t) => (
-                        <option key={t.id} value={t.id}>
-                          {t.name} (default {t.defaultMarks} marks)
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <span className="nx-label">Difficulty *</span>
-                    <select
-                      className="nx-input w-full"
-                      value={difficultyLevelId}
-                      onChange={(e) => setDifficultyLevelId(e.target.value)}
-                      required
-                    >
-                      {difficultyLevels.map((d) => (
-                        <option key={d.id} value={d.id}>
-                          {d.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <span className="nx-label">Marks *</span>
-                    <input
-                      className="nx-input w-full"
-                      type="number"
-                      min="0"
-                      step="0.5"
-                      value={marks}
-                      onChange={(e) => setMarks(e.target.value)}
-                      required
                     />
-                  </div>
-                  <div>
-                    <span className="nx-label">Negative marks</span>
-                    <input
-                      className="nx-input w-full"
-                      type="number"
-                      min="0"
-                      step="0.25"
-                      value={negativeMarks}
-                      onChange={(e) => setNegativeMarks(e.target.value)}
-                    />
-                  </div>
+                  </FilterField>
+                  <button
+                    type="button"
+                    className="nx-btn-secondary h-[38px] shrink-0 !px-3 !text-[12px]"
+                    onClick={applyFilters}
+                  >
+                    <FilterAltOutlined sx={{ fontSize: 16 }} /> Filter
+                  </button>
                 </div>
+              </div>
 
-                <div>
-                  <span className="nx-label">Question text *</span>
-                  <textarea
-                    className="nx-input min-h-[120px] w-full"
-                    value={questionText}
-                    onChange={(e) => setQuestionText(e.target.value)}
-                    required
-                  />
+              <div>
+                <div className="mb-2.5 flex items-center justify-between gap-2">
+                  <h2 className="text-[15px] font-bold text-slate-900">Browse by Subject</h2>
+                  <button
+                    type="button"
+                    className="inline-flex shrink-0 items-center gap-1 text-[12px] font-semibold text-[#4b2cf7] hover:underline"
+                    onClick={() => {
+                      setFilterSubjectId("");
+                      setPage(1);
+                    }}
+                  >
+                    View All Subjects <ArrowForwardOutlined sx={{ fontSize: 14 }} />
+                  </button>
                 </div>
-
-                <div>
-                  <span className="nx-label">Explanation (optional)</span>
-                  <textarea
-                    className="nx-input min-h-[80px] w-full"
-                    value={explanation}
-                    onChange={(e) => setExplanation(e.target.value)}
-                  />
-                </div>
-
-                <div>
-                  <span className="nx-label">Tags (comma-separated)</span>
-                  <input
-                    className="nx-input w-full"
-                    value={tags}
-                    onChange={(e) => setTags(e.target.value)}
-                    placeholder="algebra, chapter-5"
-                  />
-                </div>
-
-                {showOptions ? (
-                  <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4">
-                    <div className="mb-3 flex items-center justify-between">
-                      <span className="text-[13px] font-bold text-slate-800">Answer options</span>
-                      <button type="button" className="nx-btn-secondary !py-1 !text-[12px]" onClick={addOption}>
-                        Add option
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-6">
+                  {(stats?.bySubject ?? []).slice(0, 6).map((subject, index) => {
+                    const tone = SUBJECT_STYLES[index % SUBJECT_STYLES.length]!;
+                    return (
+                      <button
+                        key={subject.id}
+                        type="button"
+                        onClick={() => {
+                          setFilterSubjectId(subject.id);
+                          setDraftSearch("");
+                          setSearch("");
+                          setPage(1);
+                        }}
+                        className={`flex min-h-[132px] flex-col rounded-xl border border-[#E5E7EB] bg-white p-3.5 text-left shadow-sm transition hover:border-[#c7d2fe] ${
+                          filterSubjectId === subject.id ? "ring-2 ring-[#4b2cf7]/30" : ""
+                        }`}
+                      >
+                        <span
+                          className="mb-2.5 inline-grid size-11 place-items-center rounded-xl"
+                          style={{ background: tone.bg, color: tone.fg }}
+                        >
+                          {subjectGlyph(subject.name)}
+                        </span>
+                        <p className="truncate text-[13px] font-bold text-slate-900">{subject.name}</p>
+                        <p className="mt-auto pt-2 text-[11px] text-slate-600">
+                          {subject.questionCount.toLocaleString("en-IN")} Questions
+                        </p>
+                        <p className="text-[11px] text-slate-500">{subject.chapterCount} Chapters</p>
                       </button>
+                    );
+                  })}
+                  {!stats?.bySubject?.length ? (
+                    <div className="col-span-full rounded-xl border border-dashed border-[#E5E7EB] bg-white px-4 py-8 text-center text-[12px] text-slate-500">
+                      Subjects appear here once questions exist in the bank.
                     </div>
-                    <div className="space-y-2">
-                      {options.map((opt, idx) => (
-                        <div key={idx} className="flex items-start gap-2">
-                          <input
-                            type="checkbox"
-                            className="mt-2.5"
-                            checked={opt.isCorrect}
-                            onChange={(e) => updateOption(idx, { isCorrect: e.target.checked })}
-                            title="Correct answer"
-                          />
-                          <input
-                            className="nx-input flex-1"
-                            placeholder={`Option ${idx + 1}`}
-                            value={opt.optionText}
-                            onChange={(e) => updateOption(idx, { optionText: e.target.value })}
-                          />
-                          {options.length > 2 ? (
-                            <button
-                              type="button"
-                              className="nx-icon-btn text-rose-600"
-                              onClick={() => removeOption(idx)}
-                            >
-                              <DeleteOutline sx={{ fontSize: 16 }} />
-                            </button>
-                          ) : null}
+                  ) : null}
+                </div>
+              </div>
+
+              <CmsSectionCard className="!p-0 overflow-hidden !shadow-sm hover:!transform-none">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-4 py-3">
+                  <h2 className="text-[14px] font-bold text-slate-900">Recently Added Questions</h2>
+                  <div className="flex items-center gap-2">
+                    <select
+                      className="nx-input !h-8 !w-auto !py-1 !text-[12px]"
+                      value={filterStatus}
+                      onChange={(e) => {
+                        setFilterStatus(e.target.value as QuestionStatus | "");
+                        setPage(1);
+                      }}
+                    >
+                      <option value="">All statuses</option>
+                      <option value="DRAFT">Draft</option>
+                      <option value="PUBLISHED">Published</option>
+                      <option value="ARCHIVED">Archived</option>
+                    </select>
+                    <button
+                      type="button"
+                      className="text-[12px] font-semibold text-[#4b2cf7] hover:underline"
+                      onClick={() => {
+                        setFilterSubjectId("");
+                        setFilterCategoryId("");
+                        setFilterTypeId("");
+                        setFilterClassId("");
+                        setDraftSearch("");
+                        setSearch("");
+                        setPage(1);
+                      }}
+                    >
+                      View All
+                    </button>
+                  </div>
+                </div>
+
+                {loading ? (
+                  <p className="py-12 text-center text-sm text-slate-500">Loading questions…</p>
+                ) : list.items.length === 0 ? (
+                  <EmptyState
+                    title="No questions found"
+                    hint={canManage ? "Add your first question or widen the filters." : "Questions will appear once published."}
+                  />
+                ) : (
+                  <>
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[720px] border-collapse text-left">
+                        <thead className="bg-[#fbfcff] text-[10.5px]">
+                          <tr>
+                            {["Question", "Subject", "Type", "Difficulty", "Added On", "Actions"].map(
+                              (heading) => (
+                                <th
+                                  key={heading}
+                                  className={`px-3 py-2.5 font-bold text-slate-600 ${
+                                    heading === "Actions" ? "text-right" : ""
+                                  }`}
+                                >
+                                  {heading}
+                                </th>
+                              ),
+                            )}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {list.items.map((q) => {
+                            const typeStyle = typePillStyle(q.questionType.name);
+                            const diffStyle = difficultyPillStyle(q.difficultyLevel.name);
+                            return (
+                              <tr key={q.id} className="border-t border-slate-100 text-[11.5px] hover:bg-[#fbfcff]">
+                                <td className="max-w-[280px] px-3 py-2.5 font-semibold text-slate-800">
+                                  <p className="line-clamp-2">{q.questionText}</p>
+                                </td>
+                                <td className="whitespace-nowrap px-3 py-2.5">
+                                  <div className="font-semibold text-slate-800">{q.subject.name}</div>
+                                  <div className="mt-0.5 text-[10.5px] text-[#575b87]">
+                                    {q.category?.name ?? "Uncategorized"}
+                                  </div>
+                                </td>
+                                <td className="px-3 py-2.5">
+                                  <span
+                                    className="inline-flex h-[22px] items-center rounded-full px-2 text-[10.5px] font-semibold"
+                                    style={typeStyle}
+                                  >
+                                    {q.questionType.name}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2.5">
+                                  <span
+                                    className="inline-flex h-[22px] items-center rounded-full px-2 text-[10.5px] font-semibold"
+                                    style={diffStyle}
+                                  >
+                                    {q.difficultyLevel.name}
+                                  </span>
+                                </td>
+                                <td className="whitespace-nowrap px-3 py-2.5">
+                                  <div className="font-semibold text-slate-800">{formatDate(q.createdAt)}</div>
+                                  <div className="text-[10px] text-[#666b8f]">by {personName(q.createdBy)}</div>
+                                </td>
+                                <td className="relative px-3 py-2.5">
+                                  <div className="flex justify-end gap-0.5">
+                                    <button
+                                      type="button"
+                                      className="nx-icon-btn"
+                                      title="View"
+                                      onClick={() => void openView(q.id)}
+                                    >
+                                      <VisibilityOutlined sx={{ fontSize: 17 }} />
+                                    </button>
+                                    {canManage ? (
+                                      <button
+                                        type="button"
+                                        className="nx-icon-btn"
+                                        title="Edit"
+                                        onClick={() => void startEdit(q.id)}
+                                      >
+                                        <EditOutlined sx={{ fontSize: 17 }} />
+                                      </button>
+                                    ) : null}
+                                    <button
+                                      type="button"
+                                      className="nx-icon-btn"
+                                      title="More"
+                                      onClick={() =>
+                                        setMenuOpenId((current) => (current === q.id ? null : q.id))
+                                      }
+                                    >
+                                      <MoreVert sx={{ fontSize: 17 }} />
+                                    </button>
+                                  </div>
+                                  {menuOpenId === q.id ? (
+                                    <div className="absolute right-3 top-10 z-10 w-40 overflow-hidden rounded-xl border border-[#E5E7EB] bg-white py-1 shadow-lg">
+                                      {isAdmin && q.status === "DRAFT" ? (
+                                        <button
+                                          type="button"
+                                          className="block w-full px-3 py-2 text-left text-[12px] hover:bg-slate-50"
+                                          onClick={() => void publishQuestion(q.id)}
+                                        >
+                                          Publish
+                                        </button>
+                                      ) : null}
+                                      {isAdmin && q.status === "PUBLISHED" ? (
+                                        <button
+                                          type="button"
+                                          className="block w-full px-3 py-2 text-left text-[12px] hover:bg-slate-50"
+                                          onClick={() => void archiveQuestion(q.id)}
+                                        >
+                                          Archive
+                                        </button>
+                                      ) : null}
+                                      {canManage && q.status === "DRAFT" ? (
+                                        <button
+                                          type="button"
+                                          className="block w-full px-3 py-2 text-left text-[12px] text-rose-600 hover:bg-rose-50"
+                                          onClick={() => void deleteQuestion(q.id)}
+                                        >
+                                          Delete
+                                        </button>
+                                      ) : null}
+                                      <button
+                                        type="button"
+                                        className="block w-full px-3 py-2 text-left text-[12px] hover:bg-slate-50"
+                                        onClick={() => setMenuOpenId(null)}
+                                      >
+                                        Close
+                                      </button>
+                                    </div>
+                                  ) : null}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="border-t border-slate-100 px-4 py-3">
+                      <ListPagination
+                        page={list.page}
+                        pageSize={list.pageSize}
+                        total={list.total}
+                        onPageChange={setPage}
+                      />
+                    </div>
+                  </>
+                )}
+              </CmsSectionCard>
+            </div>
+
+            <aside className="min-w-0 space-y-3 xl:sticky xl:top-0 xl:self-start">
+              <CmsSectionCard className="!p-4 hover:!transform-none">
+                <h3 className="mb-2 text-[14px] font-bold text-slate-900">Quick Actions</h3>
+                <div>
+                  {canManage ? (
+                    <button
+                      type="button"
+                      onClick={startCreate}
+                      className="flex w-full gap-3 border-b border-slate-100 py-2.5 text-left hover:bg-[#fafbfe]"
+                    >
+                      <span className="inline-grid size-9 shrink-0 place-items-center rounded-lg bg-[#efeaff] text-[#4b2cf7]">
+                        <AddOutlined sx={{ fontSize: 18 }} />
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block text-[12px] font-bold text-slate-800">Add New Question</span>
+                        <span className="text-[10.5px] text-slate-500">Create a new question</span>
+                      </span>
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!canManage) {
+                        notifyError("You do not have permission to import questions");
+                        return;
+                      }
+                      setView("import");
+                    }}
+                    className="flex w-full gap-3 border-b border-slate-100 py-2.5 text-left hover:bg-[#fafbfe]"
+                  >
+                    <span className="inline-grid size-9 shrink-0 place-items-center rounded-lg bg-[#efeaff] text-[#4b2cf7]">
+                      <DownloadOutlined sx={{ fontSize: 18 }} />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-[12px] font-bold text-slate-800">Import from File</span>
+                      <span className="text-[10.5px] text-slate-500">Upload questions in bulk</span>
+                    </span>
+                  </button>
+                  <Link
+                    to="/test-series"
+                    className="flex w-full gap-3 border-b border-slate-100 py-2.5 text-left hover:bg-[#fafbfe]"
+                  >
+                    <span className="inline-grid size-9 shrink-0 place-items-center rounded-lg bg-[#efeaff] text-[#4b2cf7]">
+                      <DescriptionOutlined sx={{ fontSize: 18 }} />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-[12px] font-bold text-slate-800">Create Question Paper</span>
+                      <span className="text-[10.5px] text-slate-500">Use questions to build paper</span>
+                    </span>
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => setView("categories")}
+                    className="flex w-full gap-3 py-2.5 text-left hover:bg-[#fafbfe]"
+                  >
+                    <span className="inline-grid size-9 shrink-0 place-items-center rounded-lg bg-[#efeaff] text-[#4b2cf7]">
+                      <ShareOutlined sx={{ fontSize: 18 }} />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-[12px] font-bold text-slate-800">Manage Chapters</span>
+                      <span className="text-[10.5px] text-slate-500">Organize subject chapters</span>
+                    </span>
+                  </button>
+                </div>
+              </CmsSectionCard>
+
+              <CmsSectionCard className="!p-4 hover:!transform-none">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <h3 className="text-[14px] font-bold text-slate-900">Question Distribution</h3>
+                  <button type="button" className="shrink-0 text-[10px] font-semibold text-[#4b2cf7] hover:underline">
+                    View Report
+                  </button>
+                </div>
+                {distribution.rows.length ? (
+                  <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-center xl:flex-col 2xl:flex-row">
+                    <div
+                      className="flex size-28 shrink-0 items-center justify-center rounded-full"
+                      style={{ background: distribution.gradient }}
+                    >
+                      <div className="flex size-20 flex-col items-center justify-center rounded-full bg-white text-center">
+                        <b className="text-[13px]">{total.toLocaleString("en-IN")}</b>
+                        <span className="text-[10px] text-slate-500">Total</span>
+                      </div>
+                    </div>
+                    <div className="w-full min-w-0 flex-1 space-y-2.5">
+                      {distribution.rows.map((row) => (
+                        <div key={row.id} className="flex items-center justify-between gap-2 text-[10.5px]">
+                          <span className="flex min-w-0 items-center gap-2 text-slate-700">
+                            <span className="size-2 shrink-0 rounded-full" style={{ background: row.color }} />
+                            <span className="truncate">{row.name}</span>
+                          </span>
+                          <span className="shrink-0 text-slate-600">
+                            {row.share}% ({row.count.toLocaleString("en-IN")})
+                          </span>
                         </div>
                       ))}
                     </div>
                   </div>
-                ) : null}
+                ) : (
+                  <p className="py-6 text-center text-[12px] text-slate-500">No distribution yet.</p>
+                )}
+              </CmsSectionCard>
 
-                <div className="flex flex-wrap gap-2 pt-2">
-                  <button type="submit" className="nx-btn-primary" disabled={submitting}>
-                    {submitting ? "Saving…" : editingId ? "Update question" : "Save as draft"}
+              <CmsSectionCard className="!p-4 hover:!transform-none">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <h3 className="text-[14px] font-bold text-slate-900">Difficulty Level</h3>
+                  <button type="button" className="shrink-0 text-[10px] font-semibold text-[#4b2cf7] hover:underline">
+                    View Report
                   </button>
+                </div>
+                <div className="space-y-3">
+                  {(stats?.byDifficulty ?? []).map((row) => {
+                    const share = pct(row.count, total);
+                    const bar =
+                      /easy/i.test(row.name)
+                        ? "#11a34a"
+                        : /hard/i.test(row.name)
+                          ? "#f33"
+                          : row.colorTag || "#ff9800";
+                    return (
+                      <div key={row.id} className="grid grid-cols-[52px_minmax(0,1fr)_auto] items-center gap-2 text-[10.5px]">
+                        <span className="truncate text-slate-700">{row.name}</span>
+                        <div className="h-2 overflow-hidden rounded-full bg-[#edf0f8]">
+                          <div
+                            className="h-full rounded-full"
+                            style={{ width: `${Math.min(share, 100)}%`, backgroundColor: bar }}
+                          />
+                        </div>
+                        <span className="whitespace-nowrap text-right text-slate-600">
+                          {row.count.toLocaleString("en-IN")} ({share}%)
+                        </span>
+                      </div>
+                    );
+                  })}
+                  {!stats?.byDifficulty?.length ? (
+                    <p className="text-[12px] text-slate-500">No difficulty data yet.</p>
+                  ) : null}
+                </div>
+              </CmsSectionCard>
+
+              <CmsSectionCard className="!p-4 hover:!transform-none">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <h3 className="text-[14px] font-bold text-slate-900">My Top Topics</h3>
                   <button
                     type="button"
-                    className="nx-btn-secondary"
-                    onClick={() => {
-                      resetForm();
-                      setTab("questions");
-                    }}
+                    className="shrink-0 text-[10px] font-semibold text-[#4b2cf7] hover:underline"
+                    onClick={() => setView("categories")}
                   >
-                    Cancel
+                    View All
                   </button>
-                  {editingId && isAdmin && editStatus === "DRAFT" ? (
-                    <button
-                      type="button"
-                      className="nx-btn-secondary !border-emerald-300 !text-emerald-800"
-                      disabled={submitting}
-                      onClick={() => void publishQuestion(editingId)}
-                    >
-                      Publish
-                    </button>
-                  ) : null}
-                  {editingId && isAdmin && editStatus === "PUBLISHED" ? (
-                    <button
-                      type="button"
-                      className="nx-btn-secondary"
-                      disabled={submitting}
-                      onClick={() => void archiveQuestion(editingId)}
-                    >
-                      Archive
-                    </button>
-                  ) : null}
                 </div>
-              </form>
-            )}
-          </CmsSectionCard>
-        ) : (
-          <CmsSectionCard>
-            {!canManage ? (
-              <p className="py-8 text-center text-sm text-slate-500">
-                {isTeacherOnly && !allowTeachersToAddQuestions
-                  ? "Category management is disabled for teachers. Contact your administrator."
-                  : "You do not have permission to manage categories."}
-              </p>
-            ) : (
-              <div className="space-y-4">
-                <div className="flex flex-wrap items-end justify-between gap-3">
-                  <div className="min-w-[200px] flex-1">
-                    <span className="nx-label">Subject</span>
-                    <select
-                      className="nx-input w-full max-w-xs"
-                      value={categorySubjectId}
-                      onChange={(e) => {
-                        setCategorySubjectId(e.target.value);
-                        resetCategoryForm();
+                <div>
+                  {(stats?.topTopics ?? []).map((topic) => (
+                    <button
+                      key={topic.id}
+                      type="button"
+                      onClick={() => {
+                        setFilterCategoryId(topic.id);
+                        setPage(1);
                       }}
+                      className="flex w-full items-center justify-between gap-2 py-2 text-left text-[11px] hover:bg-[#fafbfe]"
                     >
-                      {subjects.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <form
-                  onSubmit={saveCategory}
-                  className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-4 sm:grid-cols-2 lg:grid-cols-4"
-                >
-                  <div>
-                    <span className="nx-label">Category name *</span>
-                    <input
-                      className="nx-input w-full"
-                      value={categoryName}
-                      onChange={(e) => setCategoryName(e.target.value)}
-                      placeholder="e.g. Algebra"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <span className="nx-label">Parent category</span>
-                    <select
-                      className="nx-input w-full"
-                      value={categoryParentId}
-                      onChange={(e) => setCategoryParentId(e.target.value)}
-                      disabled={Boolean(editingCategoryId && categoryParentId)}
-                    >
-                      <option value="">Top-level category</option>
-                      {categoryParentsForForm
-                        .filter((row) => row.id !== editingCategoryId)
-                        .map((row) => (
-                          <option key={row.id} value={row.id}>
-                            {row.name}
-                          </option>
-                        ))}
-                    </select>
-                  </div>
-                  <div className="flex items-end gap-2 sm:col-span-2">
-                    <button type="submit" className="nx-btn-primary" disabled={submitting}>
-                      {submitting
-                        ? "Saving…"
-                        : editingCategoryId
-                          ? "Update category"
-                          : "Add category"}
+                      <span className="min-w-0 truncate text-slate-800">{topic.name}</span>
+                      <span className="shrink-0 text-[#4f5681]">{topic.count} ›</span>
                     </button>
-                    {editingCategoryId ? (
-                      <button
-                        type="button"
-                        className="nx-btn-secondary"
-                        onClick={resetCategoryForm}
-                      >
-                        Cancel
+                  ))}
+                  {!stats?.topTopics?.length ? (
+                    <p className="py-4 text-center text-[12px] text-slate-500">
+                      Topics appear after chapters have questions.
+                    </p>
+                  ) : null}
+                </div>
+              </CmsSectionCard>
+            </aside>
+          </div>
+        ) : null}
+
+        {view === "import" && accessToken ? (
+          <QuestionImportPanel
+            accessToken={accessToken}
+            onBack={() => setView("browse")}
+            onDone={async () => {
+              await Promise.all([loadQuestions(), loadStats()]);
+            }}
+          />
+        ) : null}
+
+        {view === "create" ? (
+          <CmsSectionCard className="!p-4">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-[15px] font-bold text-slate-900">
+                  {editingId ? "Edit Question" : "Add Question"}
+                </h2>
+                <p className="text-[12px] text-slate-500">
+                  {editingId ? `Status: ${editStatus}` : "New questions save as Draft until published."}
+                </p>
+              </div>
+              <button type="button" className="nx-btn-secondary !text-[12px]" onClick={() => setView("browse")}>
+                Back to bank
+              </button>
+            </div>
+            <form className="grid gap-3 md:grid-cols-2" onSubmit={saveQuestion}>
+              <label className="block text-[12px] font-medium text-slate-600">
+                Subject
+                <select className="nx-input mt-1" required value={subjectId} onChange={(e) => setSubjectId(e.target.value)}>
+                  {subjects.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="block text-[12px] font-medium text-slate-600">
+                Class
+                <select className="nx-input mt-1" value={classId} onChange={(e) => setClassId(e.target.value)}>
+                  <option value="">Optional</option>
+                  {classes.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="block text-[12px] font-medium text-slate-600">
+                Chapter / Category
+                <select className="nx-input mt-1" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+                  <option value="">Optional</option>
+                  {formCategories.map((parent) => (
+                    <optgroup key={parent.id} label={parent.name}>
+                      <option value={parent.id}>{parent.name}</option>
+                      {parent.subCategories.map((sub) => (
+                        <option key={sub.id} value={sub.id}>{parent.name} → {sub.name}</option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+              </label>
+              <label className="block text-[12px] font-medium text-slate-600">
+                Question type
+                <select
+                  className="nx-input mt-1"
+                  required
+                  value={questionTypeId}
+                  onChange={(e) => {
+                    setQuestionTypeId(e.target.value);
+                    const type = questionTypes.find((row) => row.id === e.target.value);
+                    if (type) setMarks(String(type.defaultMarks));
+                  }}
+                >
+                  {questionTypes.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="block text-[12px] font-medium text-slate-600">
+                Difficulty
+                <select className="nx-input mt-1" required value={difficultyLevelId} onChange={(e) => setDifficultyLevelId(e.target.value)}>
+                  {difficultyLevels.map((d) => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="block text-[12px] font-medium text-slate-600">
+                Marks
+                <input className="nx-input mt-1" type="number" min={0} step="0.25" value={marks} onChange={(e) => setMarks(e.target.value)} />
+              </label>
+              <label className="block text-[12px] font-medium text-slate-600 md:col-span-2">
+                Question text
+                <textarea className="nx-input mt-1 min-h-[110px]" required value={questionText} onChange={(e) => setQuestionText(e.target.value)} />
+              </label>
+              <label className="block text-[12px] font-medium text-slate-600 md:col-span-2">
+                Explanation
+                <textarea className="nx-input mt-1 min-h-[80px]" value={explanation} onChange={(e) => setExplanation(e.target.value)} />
+              </label>
+              {showOptions ? (
+                <div className="md:col-span-2 space-y-2 rounded-xl border border-[#E5E7EB] p-3">
+                  <p className="text-[12px] font-semibold text-slate-700">Options</p>
+                  {options.map((option, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={option.isCorrect}
+                        onChange={(e) => updateOption(index, { isCorrect: e.target.checked })}
+                        title="Correct answer"
+                      />
+                      <input
+                        className="nx-input flex-1"
+                        placeholder={`Option ${index + 1}`}
+                        value={option.optionText}
+                        onChange={(e) => updateOption(index, { optionText: e.target.value })}
+                      />
+                      <button type="button" className="nx-icon-btn text-rose-600" onClick={() => setOptions((prev) => prev.filter((_, i) => i !== index))}>
+                        <DeleteOutline sx={{ fontSize: 16 }} />
                       </button>
+                    </div>
+                  ))}
+                  <button type="button" className="nx-btn-secondary !text-[12px]" onClick={() => setOptions((prev) => [...prev, { optionText: "", isCorrect: false }])}>
+                    Add option
+                  </button>
+                </div>
+              ) : null}
+              <div className="md:col-span-2 flex flex-wrap gap-2">
+                <button type="submit" className="nx-btn-primary !text-[12px]" disabled={submitting || !canManage}>
+                  {editingId ? "Save changes" : "Save as draft"}
+                </button>
+                {editingId && isAdmin && editStatus === "DRAFT" ? (
+                  <button type="button" className="nx-btn-secondary !text-[12px]" onClick={() => void publishQuestion(editingId)}>
+                    <CheckCircleOutline sx={{ fontSize: 16 }} /> Publish
+                  </button>
+                ) : null}
+                {editingId && isAdmin && editStatus === "PUBLISHED" ? (
+                  <button type="button" className="nx-btn-secondary !text-[12px]" onClick={() => void archiveQuestion(editingId)}>
+                    <ArchiveOutlined sx={{ fontSize: 16 }} /> Archive
+                  </button>
+                ) : null}
+              </div>
+            </form>
+          </CmsSectionCard>
+        ) : null}
+
+        {view === "categories" ? (
+          <CmsSectionCard className="!p-4">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-[15px] font-bold text-slate-900">Manage Chapters</h2>
+              <button type="button" className="nx-btn-secondary !text-[12px]" onClick={() => setView("browse")}>
+                Back to bank
+              </button>
+            </div>
+            <form className="mb-4 grid gap-2 md:grid-cols-4" onSubmit={saveCategory}>
+              <select className="nx-input" value={categorySubjectId} onChange={(e) => setCategorySubjectId(e.target.value)}>
+                {subjects.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+              <input className="nx-input" placeholder="Chapter name" value={categoryName} onChange={(e) => setCategoryName(e.target.value)} required />
+              <select className="nx-input" value={categoryParentId} onChange={(e) => setCategoryParentId(e.target.value)}>
+                <option value="">No parent</option>
+                {categories
+                  .filter((row) => row.subjectId === categorySubjectId)
+                  .map((row) => (
+                    <option key={row.id} value={row.id}>{row.name}</option>
+                  ))}
+              </select>
+              <button type="submit" className="nx-btn-primary !text-[12px]" disabled={!canManage || submitting}>
+                {editingCategoryId ? "Update" : "Add chapter"}
+              </button>
+            </form>
+            <div className="space-y-2">
+              {categories
+                .filter((row) => !categorySubjectId || row.subjectId === categorySubjectId)
+                .map((row) => (
+                  <div key={row.id} className="rounded-xl border border-[#E5E7EB] px-3 py-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <p className="text-[13px] font-semibold text-slate-800">{row.name}</p>
+                        <p className="text-[11px] text-slate-400">{row.subject.name}</p>
+                      </div>
+                      {canManage ? (
+                        <div className="flex gap-1">
+                          <button
+                            type="button"
+                            className="nx-icon-btn"
+                            onClick={() => {
+                              setEditingCategoryId(row.id);
+                              setCategorySubjectId(row.subjectId);
+                              setCategoryName(row.name);
+                              setCategoryParentId(row.parentCategoryId ?? "");
+                            }}
+                          >
+                            <EditOutlined sx={{ fontSize: 16 }} />
+                          </button>
+                          <button type="button" className="nx-icon-btn text-rose-600" onClick={() => void deleteCategory(row.id, row.name)}>
+                            <DeleteOutline sx={{ fontSize: 16 }} />
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                    {row.subCategories.length ? (
+                      <div className="mt-2 space-y-1 border-t border-[#F1F5F9] pt-2">
+                        {row.subCategories.map((sub) => (
+                          <p key={sub.id} className="text-[12px] text-slate-600">↳ {sub.name}</p>
+                        ))}
+                      </div>
                     ) : null}
                   </div>
-                </form>
-
-                {loading ? (
-                  <p className="py-8 text-center text-sm text-slate-500">Loading categories…</p>
-                ) : categoryParentsForForm.length === 0 ? (
-                  <EmptyState
-                    icon={<CategoryOutlined />}
-                    title="No categories yet"
-                    hint="Add a top-level category for this subject to organize questions."
-                  />
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="nx-table w-full min-w-[560px]">
-                      <thead>
-                        <tr>
-                          <th>Category</th>
-                          <th>Subcategories</th>
-                          <th className="text-right">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {categoryParentsForForm.map((parent) => (
-                          <tr key={parent.id}>
-                            <td className="text-[13px] font-semibold text-slate-800">{parent.name}</td>
-                            <td className="text-[12px] text-slate-600">
-                              {parent.subCategories.length
-                                ? parent.subCategories.map((sub) => sub.name).join(", ")
-                                : "—"}
-                            </td>
-                            <td>
-                              <div className="flex justify-end gap-1">
-                                <button
-                                  type="button"
-                                  className="nx-icon-btn"
-                                  title="Edit"
-                                  onClick={() =>
-                                    startEditCategory(parent.id, parent.name, parent.subjectId, null)
-                                  }
-                                >
-                                  <EditOutlined sx={{ fontSize: 16 }} />
-                                </button>
-                                <button
-                                  type="button"
-                                  className="nx-icon-btn text-rose-600"
-                                  title="Delete"
-                                  onClick={() => void deleteCategory(parent.id, parent.name)}
-                                >
-                                  <DeleteOutline sx={{ fontSize: 16 }} />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                        {categoryParentsForForm.flatMap((parent) =>
-                          parent.subCategories.map((sub) => (
-                            <tr key={sub.id} className="bg-slate-50/60">
-                              <td className="pl-8 text-[12px] text-slate-700">
-                                ↳ {sub.name}
-                              </td>
-                              <td className="text-[12px] text-slate-500">under {parent.name}</td>
-                              <td>
-                                <div className="flex justify-end gap-1">
-                                  <button
-                                    type="button"
-                                    className="nx-icon-btn"
-                                    title="Edit"
-                                    onClick={() =>
-                                      startEditCategory(
-                                        sub.id,
-                                        sub.name,
-                                        parent.subjectId,
-                                        parent.id,
-                                      )
-                                    }
-                                  >
-                                    <EditOutlined sx={{ fontSize: 16 }} />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="nx-icon-btn text-rose-600"
-                                    title="Delete"
-                                    onClick={() => void deleteCategory(sub.id, sub.name)}
-                                  >
-                                    <DeleteOutline sx={{ fontSize: 16 }} />
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          )),
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            )}
+                ))}
+            </div>
           </CmsSectionCard>
-        )}
+        ) : null}
+
+        {viewing ? (
+          <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40 p-4">
+            <div className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                    {viewing.subject.name}
+                    {viewing.category ? ` · ${viewing.category.name}` : ""}
+                  </p>
+                  <h3 className="mt-1 text-[16px] font-bold text-slate-900">Question detail</h3>
+                </div>
+                <button type="button" className="nx-btn-secondary !text-[12px]" onClick={() => setViewing(null)}>
+                  Close
+                </button>
+              </div>
+              <p className="whitespace-pre-wrap text-[14px] text-slate-800">{viewing.questionText}</p>
+              {viewing.options.length ? (
+                <ul className="mt-4 space-y-2">
+                  {viewing.options.map((option) => (
+                    <li
+                      key={option.id ?? option.optionText}
+                      className={`rounded-lg border px-3 py-2 text-[13px] ${
+                        option.isCorrect
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                          : "border-[#E5E7EB] text-slate-700"
+                      }`}
+                    >
+                      {option.optionText}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {viewing.explanation ? (
+                <p className="mt-4 rounded-xl bg-slate-50 px-3 py-2 text-[12px] text-slate-600">
+                  <span className="font-semibold text-slate-800">Explanation: </span>
+                  {viewing.explanation}
+                </p>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
       </CmsScrollBody>
       <CmsFooter />
     </CmsPage>
