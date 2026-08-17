@@ -418,7 +418,7 @@ export function TimetablePeriodSetupPage() {
 
   async function deletePeriod(item: PeriodItem) {
     if (!accessToken || !canManage) return;
-    const ok = await confirmDelete(`Delete "${item.name}"?`);
+    const ok = await confirmDelete({ text: `Delete "${item.name}"?` });
     if (!ok) return;
     setSaving(true);
     try {
@@ -481,7 +481,7 @@ export function TimetablePeriodSetupPage() {
 
   async function deleteTemplate(item: TemplateItem) {
     if (!accessToken || !canManage) return;
-    const ok = await confirmDelete(`Delete template "${item.name}"?`);
+    const ok = await confirmDelete({ text: `Delete template "${item.name}"?` });
     if (!ok) return;
     setSaving(true);
     try {

@@ -30,16 +30,18 @@ function Card({
   children,
   className = "",
   id,
+  style,
 }: {
   children: React.ReactNode;
   className?: string;
   id?: string;
+  style?: React.CSSProperties;
 }) {
   return (
     <section
       id={id}
       className={`rounded-[20px] border bg-white p-5 shadow-[0_4px_18px_rgba(28,27,60,0.04)] ${className}`}
-      style={{ borderColor: BORDER }}
+      style={{ borderColor: BORDER, ...style }}
     >
       {children}
     </section>

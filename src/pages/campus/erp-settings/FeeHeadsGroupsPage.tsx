@@ -273,7 +273,7 @@ export function FeeHeadsGroupsPage() {
 
   async function deleteHead(item: FeeType) {
     if (!accessToken || !canManage) return;
-    const ok = await confirmDelete(`Delete fee head "${item.name}"?`);
+    const ok = await confirmDelete({ text: `Delete fee head "${item.name}"?` });
     if (!ok) return;
     setSaving(true);
     try {
@@ -340,7 +340,7 @@ export function FeeHeadsGroupsPage() {
       notifyError("This fee group is in use and cannot be deleted.");
       return;
     }
-    const ok = await confirmDelete(`Delete fee group "${group.name}"?`);
+    const ok = await confirmDelete({ text: `Delete fee group "${group.name}"?` });
     if (!ok) return;
     setSaving(true);
     try {

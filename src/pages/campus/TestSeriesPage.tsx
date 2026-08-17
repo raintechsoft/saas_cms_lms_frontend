@@ -524,7 +524,7 @@ export function TestSeriesPage() {
 
   async function onDeleteSeries(id: string) {
     if (!accessToken || !canManage) return;
-    const ok = await confirmDelete("Delete this test series and all its papers?");
+    const ok = await confirmDelete({ text: "Delete this test series and all its papers?" });
     if (!ok) return;
     try {
       await apiRequest(`/test-series/${id}`, accessToken, { method: "DELETE" });
@@ -540,7 +540,7 @@ export function TestSeriesPage() {
 
   async function onDeletePaper() {
     if (!accessToken || !selected || !activePaper || !canEditPaper) return;
-    const ok = await confirmDelete("Delete this draft paper?");
+    const ok = await confirmDelete({ text: "Delete this draft paper?" });
     if (!ok) return;
     try {
       await apiRequest(`/test-series/${selected.id}/papers/${activePaper.id}`, accessToken, {

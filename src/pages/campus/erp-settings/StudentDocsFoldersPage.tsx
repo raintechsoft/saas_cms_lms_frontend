@@ -260,7 +260,7 @@ export function StudentDocsFoldersPage() {
 
   async function removeFolder(item: Folder) {
     if (!accessToken || !canManage) return;
-    const ok = await confirmDelete(`Move "${item.name}" to recycle bin?`);
+    const ok = await confirmDelete({ text: `Move "${item.name}" to recycle bin?` });
     if (!ok) return;
     try {
       await apiRequest(`/erp/student-docs-folders/${item.id}`, accessToken, { method: "DELETE" });

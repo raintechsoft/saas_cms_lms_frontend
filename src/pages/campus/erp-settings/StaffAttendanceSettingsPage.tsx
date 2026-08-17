@@ -365,7 +365,7 @@ export function StaffAttendanceSettingsPage() {
 
   async function deleteHoliday(item: Holiday) {
     if (!accessToken || !canManage) return;
-    const ok = await confirmDelete(`Delete holiday "${item.title}"?`);
+    const ok = await confirmDelete({ text: `Delete holiday "${item.title}"?` });
     if (!ok) return;
     setSaving(true);
     try {

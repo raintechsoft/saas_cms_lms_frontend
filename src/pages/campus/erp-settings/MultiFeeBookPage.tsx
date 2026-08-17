@@ -466,7 +466,7 @@ export function MultiFeeBookPage() {
 
   async function deleteBook(book: FeeBook) {
     if (!accessToken || !canManage) return;
-    const ok = await confirmDelete(`Delete fee book "${book.name}"?`);
+    const ok = await confirmDelete({ text: `Delete fee book "${book.name}"?` });
     if (!ok) return;
     setSaving(true);
     setMenuOpenId(null);

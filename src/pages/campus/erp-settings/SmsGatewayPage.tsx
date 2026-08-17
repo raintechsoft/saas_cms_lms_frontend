@@ -861,7 +861,7 @@ export function SmsGatewayPage() {
                           onClick={() =>
                             void (async () => {
                               if (!accessToken) return;
-                              const ok = await confirmDelete(`Delete template "${item.name}"?`);
+                              const ok = await confirmDelete({ text: `Delete template "${item.name}"?` });
                               if (!ok) return;
                               try {
                                 const data = await apiRequest<Setup>(

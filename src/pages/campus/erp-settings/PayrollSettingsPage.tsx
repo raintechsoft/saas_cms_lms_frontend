@@ -376,7 +376,7 @@ export function PayrollSettingsPage() {
 
   async function removeComponent(item: Component) {
     if (!accessToken || !canManage) return;
-    const ok = await confirmDelete(`Delete "${item.name}"?`);
+    const ok = await confirmDelete({ text: `Delete "${item.name}"?` });
     if (!ok) return;
     try {
       await apiRequest(`/erp/payroll-components/${item.id}`, accessToken, { method: "DELETE" });

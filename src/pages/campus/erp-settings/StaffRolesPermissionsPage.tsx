@@ -345,7 +345,7 @@ export function StaffRolesPermissionsPage() {
       notifyError("System roles cannot be deleted.");
       return;
     }
-    const ok = await confirmDelete(`Delete role "${role.name}"?`);
+    const ok = await confirmDelete({ text: `Delete role "${role.name}"?` });
     if (!ok) return;
     setSaving(true);
     try {
@@ -380,7 +380,7 @@ export function StaffRolesPermissionsPage() {
 
   async function removeStaff(userId: string) {
     if (!accessToken || !canManage || !selectedRole) return;
-    const ok = await confirmDelete("Remove this staff member from the role?");
+    const ok = await confirmDelete({ text: "Remove this staff member from the role?" });
     if (!ok) return;
     setSaving(true);
     try {

@@ -321,7 +321,7 @@ export function SubjectSetupPage() {
 
   async function deleteSubject(item: SubjectItem) {
     if (!accessToken || !canManage) return;
-    const ok = await confirmDelete(`Delete subject "${item.name}"?`);
+    const ok = await confirmDelete({ text: `Delete subject "${item.name}"?` });
     if (!ok) return;
     setSaving(true);
     try {
