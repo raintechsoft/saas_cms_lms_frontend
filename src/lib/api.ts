@@ -1,4 +1,5 @@
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:4000/api/v1";
+export const API_URL =
+  import.meta.env.VITE_API_URL ?? "https://saas-cms-lms-backend.onrender.com/api/v1";
 export const API_ORIGIN = API_URL.replace(/\/api\/v1\/?$/, "");
 
 export function assetUrl(path: string | null | undefined) {

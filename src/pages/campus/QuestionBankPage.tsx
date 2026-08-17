@@ -30,7 +30,7 @@ import {
   CmsSectionCard,
 } from "../../components/cms/CmsLayout";
 import { ListPagination } from "../../components/ListPagination";
-import { apiRequest } from "../../lib/api";
+import { API_URL, apiRequest } from "../../lib/api";
 import { confirmDelete } from "../../lib/confirm";
 import { notifyError, notifySuccess } from "../../lib/notify";
 
@@ -281,7 +281,6 @@ function QuestionImportPanel({
 
   async function downloadTemplate() {
     try {
-      const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:4000/api/v1";
       const response = await fetch(`${API_URL}/question-bank/questions/import-template`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });

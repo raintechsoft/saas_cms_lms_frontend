@@ -32,7 +32,7 @@ import { useAuth } from "../../auth/AuthContext";
 import { CmsFooter, CmsPage, CmsPageHeader, CmsScrollBody } from "../../components/cms/CmsLayout";
 import { CmsIconTabs, type CmsIconTabItem } from "../../components/cms/CmsIconTabs";
 import { InitialsAvatar } from "../../components/InitialsAvatar";
-import { apiRequest } from "../../lib/api";
+import { API_URL, apiRequest } from "../../lib/api";
 import { confirmDelete } from "../../lib/confirm";
 import { notifyError, notifySuccess } from "../../lib/notify";
 import type {
@@ -71,7 +71,6 @@ type PageTab =
   | "documents";
 
 async function apiDelete(path: string, token: string) {
-  const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:4000/api/v1";
   const response = await fetch(`${API_URL}${path}`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${token}` },

@@ -6,7 +6,9 @@ import {
   ChevronRightOutlined,
   DownloadOutlined,
   EditOutlined,
+  EventAvailableOutlined,
   EventNoteOutlined,
+  FilterAltOutlined,
   SettingsOutlined,
   TodayOutlined,
 } from "@mui/icons-material";
@@ -14,6 +16,8 @@ import { useAuth } from "../../auth/AuthContext";
 import type { AcademicSetup, ClassItem } from "./academics/types";
 import {
   CmsFooter,
+  CmsKpiCard,
+  CmsKpiGrid,
   CmsPage,
   CmsPageHeader,
   CmsScrollBody,
@@ -75,13 +79,13 @@ interface CalendarSettings {
   importantNotes: string | null;
 }
 
-const EVENT_TYPES: { id: EventType; label: string; color: string; dot: string }[] = [
-  { id: "ACADEMIC", label: "Academic Event", color: "#534AB7", dot: "#534AB7" },
-  { id: "EXAMINATION", label: "Examination", color: "#ea580c", dot: "#f97316" },
-  { id: "HOLIDAY", label: "Holiday", color: "#15803d", dot: "#22c55e" },
-  { id: "MEETING", label: "Meeting", color: "#1d4ed8", dot: "#3b82f6" },
-  { id: "OTHER", label: "Other Event", color: "#64748b", dot: "#94a3b8" },
-  { id: "IMPORTANT", label: "Important", color: "#be185d", dot: "#ec4899" },
+const EVENT_TYPES: { id: EventType; label: string; color: string; dot: string; bg: string; text: string }[] = [
+  { id: "ACADEMIC", label: "Academic Event", color: "#534AB7", dot: "#534AB7", bg: "#EEF2FF", text: "#4338CA" },
+  { id: "EXAMINATION", label: "Examination", color: "#ea580c", dot: "#f97316", bg: "#FFEDD5", text: "#C2410C" },
+  { id: "HOLIDAY", label: "Holiday", color: "#15803d", dot: "#22c55e", bg: "#DCFCE7", text: "#15803D" },
+  { id: "MEETING", label: "Meeting", color: "#1d4ed8", dot: "#3b82f6", bg: "#DBEAFE", text: "#1D4ED8" },
+  { id: "OTHER", label: "Other Event", color: "#64748b", dot: "#94a3b8", bg: "#F1F5F9", text: "#475569" },
+  { id: "IMPORTANT", label: "Important", color: "#be185d", dot: "#ec4899", bg: "#FCE7F3", text: "#BE185D" },
 ];
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -106,7 +110,7 @@ const statusTone: Record<EventStatus, string> = {
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-[10.5px] font-semibold text-slate-600">{label}</span>
+      <span className="nx-label">{label}</span>
       {children}
     </label>
   );
@@ -572,102 +576,118 @@ export function AcademicCalendarPage() {
     </form>
   );
 
-  const toolbar = (
-    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[#E5E7EB] bg-white p-3 shadow-sm">
-      <button
-        type="button"
-        className="inline-grid size-8 place-items-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
-        onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))}
-      >
-        <ChevronLeftOutlined sx={{ fontSize: 18 }} />
-      </button>
-      <p className="min-w-[140px] text-center text-[14px] font-bold text-slate-900">{monthLabel}</p>
-      <button
-        type="button"
-        className="inline-grid size-8 place-items-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
-        onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1))}
-      >
-        <ChevronRightOutlined sx={{ fontSize: 18 }} />
-      </button>
-      <select
-        className="nx-input !h-[34px] !w-auto !py-0 !text-[12px] !font-semibold"
-        value={filterType}
-        onChange={(e) => setFilterType(e.target.value as EventType | "")}
-        disabled={tab === "holidays" || tab === "exams"}
-      >
-        <option value="">All Event Types</option>
-        {EVENT_TYPES.map((t) => (
-          <option key={t.id} value={t.id}>
-            {t.label}
-          </option>
-        ))}
-      </select>
-      <select
-        className="nx-input !h-[34px] !w-auto !py-0 !text-[12px] !font-semibold"
-        value={filterClassId}
-        onChange={(e) => setFilterClassId(e.target.value)}
-      >
-        <option value="">All Classes</option>
-        {classes.map((row) => (
-          <option key={row.id} value={row.id}>
-            {row.name}
-          </option>
-        ))}
-      </select>
-      <select
-        className="nx-input !h-[34px] !w-auto !py-0 !text-[12px] !font-semibold"
-        value={filterStatus}
-        onChange={(e) => setFilterStatus(e.target.value as EventStatus | "")}
-      >
-        <option value="">All Statuses</option>
-        <option value="DRAFT">Draft</option>
-        <option value="PUBLISHED">Published</option>
-        <option value="ARCHIVED">Archived</option>
-      </select>
-      <button
-        type="button"
-        className="nx-btn-secondary !h-[34px] !px-3 !text-[12px]"
-        onClick={() => setCursor(startOfMonth(new Date()))}
-      >
-        <TodayOutlined sx={{ fontSize: 16 }} /> Today
-      </button>
+  const monthNav = (
+    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#EEF0F4] px-4 py-3">
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          aria-label="Previous month"
+          className="inline-grid size-8 place-items-center rounded-lg border border-[#E5E7EB] bg-white text-slate-600 hover:bg-slate-50"
+          onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))}
+        >
+          <ChevronLeftOutlined sx={{ fontSize: 18 }} />
+        </button>
+        <p className="min-w-[148px] text-center text-[15px] font-bold tracking-tight text-slate-900">{monthLabel}</p>
+        <button
+          type="button"
+          aria-label="Next month"
+          className="inline-grid size-8 place-items-center rounded-lg border border-[#E5E7EB] bg-white text-slate-600 hover:bg-slate-50"
+          onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1))}
+        >
+          <ChevronRightOutlined sx={{ fontSize: 18 }} />
+        </button>
+        <button
+          type="button"
+          className="nx-btn-secondary !ml-1 !h-8 !px-3 !text-[12px]"
+          onClick={() => setCursor(startOfMonth(new Date()))}
+        >
+          <TodayOutlined sx={{ fontSize: 16 }} /> Today
+        </button>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="hidden items-center gap-1 text-[11px] font-semibold text-slate-400 sm:inline-flex">
+          <FilterAltOutlined sx={{ fontSize: 14 }} /> Filters
+        </span>
+        <select
+          className="nx-input !h-8 !w-auto !min-w-[132px] !py-0 !text-[12px] !font-semibold"
+          value={filterType}
+          onChange={(e) => setFilterType(e.target.value as EventType | "")}
+          disabled={tab === "holidays" || tab === "exams"}
+        >
+          <option value="">All types</option>
+          {EVENT_TYPES.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.label}
+            </option>
+          ))}
+        </select>
+        <select
+          className="nx-input !h-8 !w-auto !min-w-[120px] !py-0 !text-[12px] !font-semibold"
+          value={filterClassId}
+          onChange={(e) => setFilterClassId(e.target.value)}
+        >
+          <option value="">All classes</option>
+          {classes.map((row) => (
+            <option key={row.id} value={row.id}>
+              {row.name}
+            </option>
+          ))}
+        </select>
+        <select
+          className="nx-input !h-8 !w-auto !min-w-[118px] !py-0 !text-[12px] !font-semibold"
+          value={filterStatus}
+          onChange={(e) => setFilterStatus(e.target.value as EventStatus | "")}
+        >
+          <option value="">All statuses</option>
+          <option value="DRAFT">Draft</option>
+          <option value="PUBLISHED">Published</option>
+          <option value="ARCHIVED">Archived</option>
+        </select>
+      </div>
     </div>
   );
 
   const monthGrid = (
-    <div className="overflow-hidden rounded-xl border border-[#E5E7EB] bg-white shadow-sm">
-      <div className="grid grid-cols-7 border-b border-slate-100 bg-[#fafbfd]">
+    <div className="overflow-hidden rounded-2xl border border-[#E4E7F0] bg-white">
+      {monthNav}
+      <div className="grid grid-cols-7 bg-[#F7F6FF]">
         {WEEKDAYS.map((d) => (
-          <div key={d} className="px-2 py-2 text-center text-[11px] font-bold uppercase tracking-wide text-slate-500">
+          <div
+            key={d}
+            className="px-2 py-2.5 text-center text-[10.5px] font-bold uppercase tracking-[0.08em] text-slate-400"
+          >
             {d}
           </div>
         ))}
       </div>
-      <div className="grid grid-cols-7">
+      <div className="grid grid-cols-7 [&>div]:border-t [&>div]:border-r [&>div]:border-[#EEF0F4] [&>div:nth-child(7n)]:border-r-0">
         {calendarDays.map((day) => {
           const inMonth = day.getMonth() === cursor.getMonth();
           const isToday = sameDay(day, new Date());
-          const dayEvents = rows.filter((ev) => eventOnDay(ev, day)).slice(0, 3);
-          const more = rows.filter((ev) => eventOnDay(ev, day)).length - dayEvents.length;
+          const allDayEvents = rows.filter((ev) => eventOnDay(ev, day));
+          const dayEvents = allDayEvents.slice(0, 3);
+          const more = allDayEvents.length - dayEvents.length;
           return (
             <div
               key={day.toISOString()}
-              className={`min-h-[96px] border-b border-r border-slate-100 p-1.5 ${
-                inMonth ? "bg-white" : "bg-[#f8fafc]"
+              className={`min-h-[108px] p-1.5 ${inMonth ? "bg-white" : "bg-[#F8FAFC]"} ${
+                isToday ? "bg-[#F5F3FF]" : ""
               }`}
             >
-              <p
-                className={`mb-1 inline-flex size-6 items-center justify-center rounded-full text-[11px] font-bold ${
-                  isToday
-                    ? "bg-[#534AB7] text-white"
-                    : inMonth
-                      ? "text-slate-800"
-                      : "text-slate-400"
-                }`}
-              >
-                {day.getDate()}
-              </p>
-              <div className="space-y-0.5">
+              <div className="mb-1.5 flex items-center justify-between">
+                <span
+                  className={`inline-flex size-6 items-center justify-center rounded-full text-[11px] font-bold ${
+                    isToday
+                      ? "bg-[#534AB7] text-white shadow-sm"
+                      : inMonth
+                        ? "text-slate-800"
+                        : "text-slate-300"
+                  }`}
+                >
+                  {day.getDate()}
+                </span>
+              </div>
+              <div className="space-y-1">
                 {dayEvents.map((ev) => {
                   const meta = typeMeta(ev.eventType);
                   return (
@@ -675,8 +695,12 @@ export function AcademicCalendarPage() {
                       key={ev.id}
                       type="button"
                       onClick={() => void openRow(ev.id)}
-                      className="block w-full truncate rounded-md px-1.5 py-0.5 text-left text-[9.5px] font-semibold leading-tight text-white shadow-sm hover:opacity-90"
-                      style={{ background: meta.color }}
+                      className="block w-full truncate rounded-md px-1.5 py-[3px] text-left text-[10px] font-semibold leading-tight hover:brightness-[0.97]"
+                      style={{
+                        background: meta.bg,
+                        color: meta.text,
+                        boxShadow: `inset 3px 0 0 ${meta.dot}`,
+                      }}
                       title={`${ev.title} (${ev.status})`}
                     >
                       {ev.title}
@@ -695,13 +719,14 @@ export function AcademicCalendarPage() {
   );
 
   const listPanel = (
-    <div className="overflow-hidden rounded-xl border border-[#E5E7EB] bg-white shadow-sm">
+    <div className="overflow-hidden rounded-2xl border border-[#E4E7F0] bg-white">
+      {monthNav}
       {loading ? (
-        <p className="py-10 text-center text-sm text-slate-500">Loading…</p>
+        <p className="py-12 text-center text-sm text-slate-500">Loading…</p>
       ) : rows.length === 0 ? (
-        <p className="py-10 text-center text-sm text-slate-500">No events in this month.</p>
+        <p className="py-12 text-center text-sm text-slate-500">No events in this month.</p>
       ) : (
-        <ul className="divide-y divide-slate-100">
+        <ul className="divide-y divide-[#EEF0F4]">
           {rows.map((ev) => {
             const meta = typeMeta(ev.eventType);
             return (
@@ -709,24 +734,32 @@ export function AcademicCalendarPage() {
                 <button
                   type="button"
                   onClick={() => void openRow(ev.id)}
-                  className="flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-[#fafbfe]"
+                  className="flex w-full items-start gap-3 px-4 py-3.5 text-left transition-colors hover:bg-[#F8F7FF]"
                 >
                   <span
-                    className="mt-1 size-2.5 shrink-0 rounded-full"
-                    style={{ background: meta.dot }}
-                  />
+                    className="mt-0.5 grid size-10 shrink-0 place-items-center rounded-xl text-[12px] font-extrabold"
+                    style={{ background: meta.bg, color: meta.text }}
+                  >
+                    {new Date(ev.startAt).getDate()}
+                  </span>
                   <span className="min-w-0 flex-1">
                     <span className="flex flex-wrap items-center gap-2">
                       <span className="text-[13px] font-bold text-slate-900">{ev.title}</span>
-                      <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${statusTone[ev.status]}`}>
+                      <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${statusTone[ev.status]}`}>
                         {ev.status}
                       </span>
+                      <span
+                        className="rounded-md px-1.5 py-0.5 text-[10px] font-semibold"
+                        style={{ background: meta.bg, color: meta.text }}
+                      >
+                        {meta.label}
+                      </span>
                     </span>
-                    <span className="mt-0.5 block text-[11.5px] text-slate-500">
+                    <span className="mt-0.5 block text-[12px] text-slate-500">
                       {formatDayLabel(ev.startAt)}
-                      {ev.academicClass ? ` · ${ev.academicClass.name}` : ""}
+                      {ev.endAt ? ` – ${formatDayLabel(ev.endAt)}` : ""}
+                      {ev.academicClass ? ` · ${ev.academicClass.name}` : " · School-wide"}
                       {ev.location ? ` · ${ev.location}` : ""}
-                      {` · ${meta.label}`}
                     </span>
                   </span>
                 </button>
@@ -738,105 +771,108 @@ export function AcademicCalendarPage() {
     </div>
   );
 
-  const browseMain = (
-    <div className="min-w-0 space-y-4">
-      {toolbar}
-      {tab === "calendar" ? monthGrid : listPanel}
-      <div className="relative overflow-hidden rounded-xl border border-[#ddd6fe] bg-gradient-to-r from-[#f5f3ff] to-[#eff6ff] px-4 py-4">
-        <div className="flex items-start gap-3">
-          <span className="inline-grid size-10 shrink-0 place-items-center rounded-xl bg-white text-[#534AB7] shadow-sm">
-            <EventNoteOutlined sx={{ fontSize: 20 }} />
-          </span>
-          <div className="min-w-0 flex-1 max-w-2xl">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-[13px] font-bold text-slate-900">Important Notes</h3>
-              {isAdmin && !editingNotes ? (
+  const notesCard = (
+    <div className="rounded-2xl border border-[#E4E7F0] bg-gradient-to-br from-[#F8F7FF] to-white p-4">
+      <div className="flex items-start gap-3">
+        <span className="inline-grid size-10 shrink-0 place-items-center rounded-xl bg-white text-[#534AB7] shadow-sm ring-1 ring-[#E4E7F0]">
+          <EventNoteOutlined sx={{ fontSize: 20 }} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-[13px] font-bold text-slate-900">Important notes</h3>
+            {isAdmin && !editingNotes ? (
+              <button
+                type="button"
+                className="text-[11px] font-bold text-[#534AB7] hover:underline"
+                onClick={() => {
+                  setNotesDraft(settings?.importantNotes ?? "");
+                  setEditingNotes(true);
+                }}
+              >
+                Edit
+              </button>
+            ) : null}
+          </div>
+          {editingNotes && isAdmin ? (
+            <div className="mt-2 space-y-2">
+              <textarea
+                className="nx-input min-h-[88px] !py-2 text-[12px]"
+                value={notesDraft}
+                onChange={(e) => setNotesDraft(e.target.value)}
+                placeholder="One note per line"
+                maxLength={5000}
+              />
+              <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
-                  className="text-[11px] font-bold text-[#534AB7] hover:underline"
+                  className="nx-btn-primary !px-3 !text-[11px]"
+                  disabled={savingSettings}
+                  onClick={() => void saveImportantNotes()}
+                >
+                  {savingSettings ? "Saving…" : "Save notes"}
+                </button>
+                <button
+                  type="button"
+                  className="nx-btn-secondary !px-3 !text-[11px]"
                   onClick={() => {
                     setNotesDraft(settings?.importantNotes ?? "");
-                    setEditingNotes(true);
+                    setEditingNotes(false);
                   }}
                 >
-                  Edit
+                  Cancel
                 </button>
-              ) : null}
+              </div>
             </div>
-            {editingNotes && isAdmin ? (
-              <div className="mt-2 space-y-2">
-                <textarea
-                  className="nx-input min-h-[88px] !py-2 text-[12px]"
-                  value={notesDraft}
-                  onChange={(e) => setNotesDraft(e.target.value)}
-                  placeholder="One note per line"
-                  maxLength={5000}
-                />
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    className="nx-btn-primary !px-3 !text-[11px]"
-                    disabled={savingSettings}
-                    onClick={() => void saveImportantNotes()}
-                  >
-                    {savingSettings ? "Saving…" : "Save notes"}
-                  </button>
-                  <button
-                    type="button"
-                    className="nx-btn-secondary !px-3 !text-[11px]"
-                    onClick={() => {
-                      setNotesDraft(settings?.importantNotes ?? "");
-                      setEditingNotes(false);
-                    }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="mt-1 space-y-1 text-[12px] leading-relaxed text-slate-600">
-                {(settings?.importantNotes ||
-                  "Events and dates are subject to change. Please check regularly for updates.\nFor any queries regarding the academic calendar, contact the school administration.")
-                  .split("\n")
-                  .filter(Boolean)
-                  .map((line) => (
-                    <p key={line}>• {line}</p>
-                  ))}
-              </div>
-            )}
-          </div>
+          ) : (
+            <ul className="mt-2 space-y-1.5 text-[12.5px] leading-relaxed text-slate-600">
+              {(settings?.importantNotes ||
+                "Events and dates are subject to change. Please check regularly for updates.\nFor any queries regarding the academic calendar, contact the school administration.")
+                .split("\n")
+                .filter(Boolean)
+                .map((line) => (
+                  <li key={line} className="flex gap-2">
+                    <span className="mt-[7px] size-1.5 shrink-0 rounded-full bg-[#534AB7]" />
+                    <span>{line}</span>
+                  </li>
+                ))}
+            </ul>
+          )}
         </div>
       </div>
     </div>
   );
 
+  const browseMain = (
+    <div className="min-w-0 space-y-4">
+      {tab === "calendar" ? monthGrid : listPanel}
+      {notesCard}
+    </div>
+  );
+
   const rightRail = (
-    <aside className="min-w-0 space-y-3 xl:sticky xl:top-0 xl:self-start">
+    <aside className="min-w-0 space-y-4 xl:sticky xl:top-0 xl:self-start">
       <CmsSectionCard className="!p-4 hover:!transform-none">
-        <div className="mb-2.5 flex items-center justify-between gap-2">
-          <h3 className="text-[14px] font-bold text-slate-900">Event Summary</h3>
-          <span className="text-[10.5px] font-semibold text-slate-400">{monthLabel}</span>
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <h3 className="text-[13px] font-bold text-slate-900">This month</h3>
+          <span className="text-[10.5px] font-semibold uppercase tracking-wide text-slate-400">{monthLabel}</span>
         </div>
         <ul className="space-y-2">
-          {(
-            [
-              ["ACADEMIC", "Academic Events"],
-              ["EXAMINATION", "Examinations"],
-              ["HOLIDAY", "Holidays"],
-              ["MEETING", "Meetings"],
-              ["OTHER", "Others"],
-              ["IMPORTANT", "Important"],
-            ] as const
-          ).map(([id, label]) => {
-            const meta = typeMeta(id);
-            const count = stats?.byType?.[id] ?? 0;
+          {EVENT_TYPES.map((t) => {
+            const count = stats?.byType?.[t.id] ?? 0;
             return (
-              <li key={id} className="flex items-center justify-between gap-2 text-[12px]">
-                <span className="inline-flex items-center gap-2 font-semibold text-slate-700">
-                  <span className="size-2 rounded-full" style={{ background: meta.dot }} />
-                  {label}
-                </span>
-                <span className="font-bold text-slate-900">{count}</span>
+              <li key={t.id}>
+                <div className="flex items-center justify-between gap-2 rounded-lg px-1 py-0.5">
+                  <span className="inline-flex items-center gap-2 text-[12px] font-semibold text-slate-700">
+                    <span className="size-2.5 rounded-full" style={{ background: t.dot }} />
+                    {t.label}
+                  </span>
+                  <span
+                    className="min-w-6 rounded-md px-1.5 py-0.5 text-center text-[11px] font-bold"
+                    style={{ background: t.bg, color: t.text }}
+                  >
+                    {count}
+                  </span>
+                </div>
               </li>
             );
           })}
@@ -844,70 +880,60 @@ export function AcademicCalendarPage() {
       </CmsSectionCard>
 
       <CmsSectionCard className="!p-4 hover:!transform-none">
-        <h3 className="mb-2.5 text-[14px] font-bold text-slate-900">Upcoming Events</h3>
+        <h3 className="mb-3 text-[13px] font-bold text-slate-900">Upcoming</h3>
         {upcoming.length === 0 ? (
-          <p className="text-[11.5px] text-slate-500">No upcoming events this month.</p>
+          <p className="text-[12px] text-slate-500">No upcoming events this month.</p>
         ) : (
-          <ul className="space-y-3">
-            {upcoming.map((ev) => (
-              <li key={ev.id}>
-                <button
-                  type="button"
-                  className="w-full text-left"
-                  onClick={() => void openRow(ev.id)}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <p className="text-[11px] font-semibold text-slate-500">
-                        {formatDayLabel(ev.startAt)} ({formatWeekday(ev.startAt)})
-                      </p>
-                      <p className="mt-0.5 text-[12.5px] font-bold text-slate-900">{ev.title}</p>
-                      <p className="text-[11px] text-slate-500">
-                        {ev.location || ev.academicClass?.name || typeMeta(ev.eventType).label}
-                      </p>
+          <ul className="space-y-2">
+            {upcoming.map((ev) => {
+              const meta = typeMeta(ev.eventType);
+              return (
+                <li key={ev.id}>
+                  <button
+                    type="button"
+                    className="w-full rounded-xl p-2.5 text-left transition-colors hover:bg-[#F8F7FF]"
+                    style={{ boxShadow: `inset 3px 0 0 ${meta.dot}` }}
+                    onClick={() => void openRow(ev.id)}
+                  >
+                    <div className="flex items-start justify-between gap-2 pl-1">
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-semibold text-slate-500">
+                          {formatDayLabel(ev.startAt)} · {formatWeekday(ev.startAt)}
+                        </p>
+                        <p className="mt-0.5 truncate text-[12.5px] font-bold text-slate-900">{ev.title}</p>
+                        <p className="truncate text-[11px] text-slate-500">
+                          {ev.location || ev.academicClass?.name || meta.label}
+                        </p>
+                      </div>
+                      <span className="shrink-0 rounded-full bg-[#EEF2FF] px-2 py-0.5 text-[10px] font-bold text-[#534AB7]">
+                        {relativeBadge(ev.startAt)}
+                      </span>
                     </div>
-                    <span className="shrink-0 rounded-full bg-[#ede9fe] px-2 py-0.5 text-[10px] font-bold text-[#534AB7]">
-                      {relativeBadge(ev.startAt)}
-                    </span>
-                  </div>
-                </button>
-              </li>
-            ))}
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         )}
       </CmsSectionCard>
 
-      <CmsSectionCard className="!p-4 hover:!transform-none">
-        <h3 className="mb-2.5 text-[14px] font-bold text-slate-900">Legend</h3>
-        <ul className="space-y-2">
-          {EVENT_TYPES.map((t) => (
-            <li key={t.id} className="flex items-center gap-2 text-[12px] font-semibold text-slate-700">
-              <span className="size-2.5 rounded-full" style={{ background: t.dot }} />
-              {t.label}
-            </li>
-          ))}
-        </ul>
-      </CmsSectionCard>
-
       {isAdmin ? (
         <CmsSectionCard className="!p-4 hover:!transform-none">
-          <div className="mb-2 flex items-center gap-2">
+          <div className="mb-2.5 flex items-center gap-2">
             <SettingsOutlined sx={{ fontSize: 16, color: "#64748b" }} />
-            <h3 className="text-[14px] font-bold text-slate-900">Settings</h3>
+            <h3 className="text-[13px] font-bold text-slate-900">Settings</h3>
           </div>
-          <label className="flex cursor-pointer items-start gap-2.5">
+          <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-[#EEF0F4] bg-[#FAFBFF] p-3">
             <input
               type="checkbox"
-              className="mt-0.5"
+              className="mt-0.5 accent-[#534AB7]"
               checked={teachersAllowed}
               disabled={savingSettings || settings == null}
               onChange={(e) => void toggleTeacherCreate(e.target.checked)}
             />
             <span>
-              <span className="block text-[12px] font-semibold text-slate-800">
-                Allow teachers to create events
-              </span>
-              <span className="text-[10.5px] text-slate-500">
+              <span className="block text-[12px] font-semibold text-slate-800">Allow teachers to create events</span>
+              <span className="text-[11px] leading-snug text-slate-500">
                 Teachers still need an admin to publish or archive.
               </span>
             </span>
@@ -918,71 +944,77 @@ export function AcademicCalendarPage() {
   );
 
   const detailMain = selected ? (
-    <div className="min-w-0 space-y-4">
-      <div className="rounded-xl border border-[#E5E7EB] bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${statusTone[selected.status]}`}>
-                {selected.status}
-              </span>
-              <span
-                className="rounded-md px-1.5 py-0.5 text-[10px] font-semibold text-white"
-                style={{ background: typeMeta(selected.eventType).color }}
-              >
-                {typeMeta(selected.eventType).label}
-              </span>
+    <div className="mx-auto min-w-0 max-w-3xl space-y-4">
+      <div className="overflow-hidden rounded-2xl border border-[#E4E7F0] bg-white">
+        <div className="h-1.5" style={{ background: typeMeta(selected.eventType).dot }} />
+        <div className="p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${statusTone[selected.status]}`}>
+                  {selected.status}
+                </span>
+                <span
+                  className="rounded-md px-1.5 py-0.5 text-[10px] font-semibold"
+                  style={{
+                    background: typeMeta(selected.eventType).bg,
+                    color: typeMeta(selected.eventType).text,
+                  }}
+                >
+                  {typeMeta(selected.eventType).label}
+                </span>
+              </div>
+              <h2 className="mt-2 text-[20px] font-bold tracking-tight text-slate-900">{selected.title}</h2>
+              <p className="mt-1.5 text-[13px] text-slate-600">
+                {formatDayLabel(selected.startAt)}
+                {selected.endAt ? ` – ${formatDayLabel(selected.endAt)}` : ""}
+                {selected.academicClass ? ` · ${selected.academicClass.name}` : " · School-wide"}
+                {selected.location ? ` · ${selected.location}` : ""}
+              </p>
             </div>
-            <h2 className="mt-2 text-[18px] font-bold text-slate-900">{selected.title}</h2>
-            <p className="mt-1 text-[12.5px] text-slate-600">
-              {formatDayLabel(selected.startAt)}
-              {selected.endAt ? ` – ${formatDayLabel(selected.endAt)}` : ""}
-              {selected.academicClass ? ` · ${selected.academicClass.name}` : " · School-wide"}
-              {selected.location ? ` · ${selected.location}` : ""}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {canEditSelected ? (
-              <>
-                <button type="button" className="nx-btn-secondary !px-3 !text-[12px]" onClick={startEdit}>
-                  <EditOutlined sx={{ fontSize: 16 }} /> Edit
-                </button>
-                {canDeleteSelected ? (
-                  <button
-                    type="button"
-                    className="nx-btn-secondary !px-3 !text-[12px]"
-                    onClick={() => void deleteSelected()}
-                  >
-                    Delete
+            <div className="flex flex-wrap gap-2">
+              {canEditSelected ? (
+                <>
+                  <button type="button" className="nx-btn-secondary !px-3 !text-[12px]" onClick={startEdit}>
+                    <EditOutlined sx={{ fontSize: 16 }} /> Edit
                   </button>
-                ) : null}
-              </>
-            ) : null}
-            {canPublish && selected.status === "DRAFT" ? (
-              <button
-                type="button"
-                className="nx-btn-primary !px-3 !text-[12px]"
-                onClick={() => void publishSelected()}
-              >
-                Publish
-              </button>
-            ) : null}
-            {canPublish && selected.status !== "ARCHIVED" ? (
-              <button
-                type="button"
-                className="nx-btn-secondary !px-3 !text-[12px]"
-                onClick={() => void archiveSelected()}
-              >
-                Archive
-              </button>
-            ) : null}
+                  {canDeleteSelected ? (
+                    <button
+                      type="button"
+                      className="nx-btn-secondary !px-3 !text-[12px]"
+                      onClick={() => void deleteSelected()}
+                    >
+                      Delete
+                    </button>
+                  ) : null}
+                </>
+              ) : null}
+              {canPublish && selected.status === "DRAFT" ? (
+                <button
+                  type="button"
+                  className="nx-btn-primary !px-3 !text-[12px]"
+                  onClick={() => void publishSelected()}
+                >
+                  Publish
+                </button>
+              ) : null}
+              {canPublish && selected.status !== "ARCHIVED" ? (
+                <button
+                  type="button"
+                  className="nx-btn-secondary !px-3 !text-[12px]"
+                  onClick={() => void archiveSelected()}
+                >
+                  Archive
+                </button>
+              ) : null}
+            </div>
           </div>
         </div>
       </div>
-      <CmsSectionCard className="!p-4 hover:!transform-none">
-        <h3 className="mb-2 text-[13px] font-bold text-slate-900">Description</h3>
-        <p className="whitespace-pre-wrap text-[12.5px] leading-relaxed text-slate-700">
-          {selected.description?.trim() || "—"}
+      <CmsSectionCard className="!p-5 hover:!transform-none">
+        <h3 className="mb-2 text-[12px] font-bold uppercase tracking-wide text-slate-400">Description</h3>
+        <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-slate-700">
+          {selected.description?.trim() || "No description added."}
         </p>
       </CmsSectionCard>
     </div>
@@ -1069,14 +1101,42 @@ export function AcademicCalendarPage() {
 
       <CmsScrollBody>
         {view === "browse" ? (
-          <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_300px] 2xl:grid-cols-[minmax(0,1fr)_320px]">
-            {browseMain}
-            {rightRail}
+          <div className="space-y-4">
+            <CmsKpiGrid>
+              <CmsKpiCard
+                icon={<EventAvailableOutlined sx={{ fontSize: 18 }} />}
+                label="Events this month"
+                value={stats?.total ?? (loading ? "…" : 0)}
+                tint="#534AB7"
+              />
+              <CmsKpiCard
+                icon={<EventNoteOutlined sx={{ fontSize: 18 }} />}
+                label="Published"
+                value={stats?.published ?? 0}
+                tint="#059669"
+              />
+              <CmsKpiCard
+                icon={<EditOutlined sx={{ fontSize: 18 }} />}
+                label="Drafts"
+                value={stats?.drafts ?? 0}
+                tint="#d97706"
+              />
+              <CmsKpiCard
+                icon={<TodayOutlined sx={{ fontSize: 18 }} />}
+                label="Holidays"
+                value={stats?.byType?.HOLIDAY ?? 0}
+                tint="#15803d"
+              />
+            </CmsKpiGrid>
+            <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_280px] 2xl:grid-cols-[minmax(0,1fr)_300px]">
+              {browseMain}
+              {rightRail}
+            </div>
           </div>
         ) : null}
         {view === "create" || view === "edit" ? (
-          <CmsSectionCard className="!p-4 hover:!transform-none">
-            <h2 className="mb-3 text-[15px] font-bold text-slate-900">
+          <CmsSectionCard className="mx-auto !max-w-3xl !p-5 hover:!transform-none">
+            <h2 className="mb-4 text-[16px] font-bold tracking-tight text-slate-900">
               {view === "edit" ? "Edit event" : "New event"}
             </h2>
             {eventForm}

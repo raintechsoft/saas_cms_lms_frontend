@@ -4,13 +4,12 @@ import {
   ImageOutlined,
   InfoOutlined,
 } from "@mui/icons-material";
-import { assetUrl } from "../../../lib/api";
+import { API_URL, assetUrl } from "../../../lib/api";
 import { notifyError, notifySuccess } from "../../../lib/notify";
 import type { Setup } from "./types";
 
 const MAX_FILES = 20;
 const MAX_BYTES = 500 * 1024;
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:4000/api/v1";
 
 type UploadResultRow = {
   fileName: string;

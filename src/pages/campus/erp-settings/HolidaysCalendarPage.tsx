@@ -19,7 +19,7 @@ import {
 } from "@mui/icons-material";
 import { useOutletContext } from "react-router-dom";
 import { useAuth } from "../../../auth/AuthContext";
-import { apiRequest } from "../../../lib/api";
+import { API_URL, apiRequest } from "../../../lib/api";
 import { notifyError, notifySuccess } from "../../../lib/notify";
 
 type OutletCtx = { activeLabel?: string };
@@ -379,7 +379,6 @@ export function HolidaysCalendarPage() {
   async function exportCalendar() {
     if (!accessToken) return;
     try {
-      const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:4000/api/v1";
       const q = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : "";
       const response = await fetch(`${API_URL}/erp/holidays-calendar/export${q}`, {
         headers: { Authorization: `Bearer ${accessToken}` },

@@ -14,12 +14,11 @@ import {
   ImageOutlined,
 } from "@mui/icons-material";
 import { Link, Navigate } from "react-router-dom";
-import { apiRequest, assetUrl } from "../../lib/api";
+import { API_URL, apiRequest, assetUrl } from "../../lib/api";
 import { isProductBucketAllowed } from "../../lib/productMode";
 import { notifyError, notifySuccess } from "../../lib/notify";
 import { usePortal } from "./PortalContext";
 
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:4000/api/v1";
 const PRIMARY = "#534AB7";
 const BORDER = "#E5E7EB";
 const PAGE_SIZE = 7;

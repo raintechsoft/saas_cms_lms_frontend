@@ -197,51 +197,65 @@ export function ParentAcademicCalendarPage() {
           {loading ? (
             <p className="py-16 text-center text-[13px] text-[#6B7280]">Loading calendar…</p>
           ) : (
-            <div className="mb-2 grid grid-cols-7 gap-1.5 text-center">
-              {WEEKDAYS.map((d) => (
-                <span key={d} className="py-1 text-[11px] font-semibold text-[#9CA3AF]">
-                  {d}
-                </span>
-              ))}
-              {cells.map((day, index) => {
-                if (day == null) return <div key={`e-${index}`} className="min-h-[72px]" />;
-                const dayEvents = eventsByDay.get(day) ?? [];
-                const primary = dayEvents[0];
-                const colors = primary ? EVENT_TYPE_COLORS[primary.type] : null;
-                const key = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-                const isToday = key === todayKey;
-
-                return (
-                  <div
-                    key={day}
-                    className="flex min-h-[72px] flex-col gap-1 rounded-xl border p-1.5"
-                    style={{
-                      borderColor: isToday ? PARENT_PRIMARY : PARENT_BORDER,
-                      background: colors ? colors.bg : isToday ? PARENT_PRIMARY_SUBTLE : "#FFFFFF",
-                    }}
+            <div className="overflow-hidden rounded-2xl border" style={{ borderColor: PARENT_BORDER }}>
+              <div className="grid grid-cols-7" style={{ background: PARENT_PRIMARY_SUBTLE }}>
+                {WEEKDAYS.map((d) => (
+                  <span
+                    key={d}
+                    className="py-2 text-center text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#9CA3AF]"
                   >
-                    <span
-                      className="text-[12px] font-bold"
-                      style={{ color: colors ? colors.text : isToday ? PARENT_PRIMARY : "#374151" }}
+                    {d}
+                  </span>
+                ))}
+              </div>
+              <div className="grid grid-cols-7 [&>div]:border-t [&>div]:border-r [&>div]:border-[#EEF0F4] [&>div:nth-child(7n)]:border-r-0">
+                {cells.map((day, index) => {
+                  if (day == null) return <div key={`e-${index}`} className="min-h-[88px] bg-[#F8FAFC]" />;
+                  const dayEvents = eventsByDay.get(day) ?? [];
+                  const key = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                  const isToday = key === todayKey;
+
+                  return (
+                    <div
+                      key={day}
+                      className="flex min-h-[88px] flex-col gap-1 p-1.5"
+                      style={{ background: isToday ? PARENT_PRIMARY_SUBTLE : "#FFFFFF" }}
                     >
-                      {day}
-                    </span>
-                    {dayEvents.slice(0, 2).map((event) => (
                       <span
-                        key={event.id}
-                        className="truncate rounded-md px-1 py-0.5 text-[9px] font-semibold leading-tight text-white"
-                        style={{ background: EVENT_TYPE_COLORS[event.type].dot }}
-                        title={event.title}
+                        className="inline-flex size-6 items-center justify-center rounded-full text-[12px] font-bold"
+                        style={{
+                          background: isToday ? PARENT_PRIMARY : "transparent",
+                          color: isToday ? "#FFFFFF" : "#374151",
+                        }}
                       >
-                        {event.title}
+                        {day}
                       </span>
-                    ))}
-                    {dayEvents.length > 2 && (
-                      <span className="text-[9px] font-semibold text-[#6B7280]">+{dayEvents.length - 2} more</span>
-                    )}
-                  </div>
-                );
-              })}
+                      {dayEvents.slice(0, 2).map((event) => {
+                        const colors = EVENT_TYPE_COLORS[event.type];
+                        return (
+                          <span
+                            key={event.id}
+                            className="truncate rounded-md px-1.5 py-0.5 text-[9.5px] font-semibold leading-tight"
+                            style={{
+                              background: colors.bg,
+                              color: colors.text,
+                              boxShadow: `inset 3px 0 0 ${colors.dot}`,
+                            }}
+                            title={event.title}
+                          >
+                            {event.title}
+                          </span>
+                        );
+                      })}
+                      {dayEvents.length > 2 && (
+                        <span className="px-1 text-[9px] font-semibold text-[#6B7280]">
+                          +{dayEvents.length - 2} more
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 

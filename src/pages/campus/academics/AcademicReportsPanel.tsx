@@ -15,11 +15,9 @@ import {
   TuneOutlined,
   WorkspacePremiumOutlined,
 } from "@mui/icons-material";
-import { apiRequest } from "../../../lib/api";
+import { API_URL, apiRequest } from "../../../lib/api";
 import type { AcademicReportResult, AcademicSetup, ClassSection, ReportCatalogItem, Weekday } from "./types";
 import { WEEKDAYS, WEEKDAY_LABELS, downloadCsv } from "./utils";
-
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:4000/api/v1";
 
 const REPORT_META: Record<string, { category: string; icon: React.ReactNode; categoryClass: string }> = {
   students: { category: "Students", icon: <GroupsOutlined />, categoryClass: "bg-indigo-50 text-indigo-700" },

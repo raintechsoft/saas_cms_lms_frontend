@@ -11,14 +11,13 @@ import {
   UploadFileOutlined,
 } from "@mui/icons-material";
 import { Link, Navigate } from "react-router-dom";
-import { apiRequest } from "../../lib/api";
+import { API_URL, apiRequest } from "../../lib/api";
 import { isProductBucketAllowed } from "../../lib/productMode";
 import { usePortal } from "./PortalContext";
 
 const PRIMARY = "#534AB7";
 const PRIMARY_SOFT = "#EEF0FD";
 const BORDER = "#E5E7EB";
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:4000/api/v1";
 
 interface FeePayment {
   id: string;

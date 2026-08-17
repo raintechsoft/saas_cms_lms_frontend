@@ -7,12 +7,10 @@ import {
   RefreshOutlined,
 } from "@mui/icons-material";
 import Swal from "sweetalert2";
-import { assetUrl, apiRequest } from "../../../lib/api";
+import { API_URL, assetUrl, apiRequest } from "../../../lib/api";
 import { notifyError, notifySuccess } from "../../../lib/notify";
 import type { Setup, StudentList, StudentListItem } from "./types";
 import { studentDisplayName } from "./types";
-
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:4000/api/v1";
 
 type Folder = {
   id: string;

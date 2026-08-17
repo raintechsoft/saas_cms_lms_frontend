@@ -36,7 +36,7 @@ import {
   CmsTab,
   CmsTabs,
 } from "../../components/cms/CmsLayout";
-import { API_ORIGIN, apiRequest, assetUrl } from "../../lib/api";
+import { API_ORIGIN, API_URL, apiRequest, assetUrl } from "../../lib/api";
 import { confirmDelete } from "../../lib/confirm";
 import { notifyError, notifySuccess } from "../../lib/notify";
 
@@ -474,7 +474,7 @@ export function NcertContentPage() {
       const body = new FormData();
       body.append("file", file);
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL ?? "http://localhost:4000/api/v1"}/ncert-content/upload`,
+        `${API_URL}/ncert-content/upload`,
         {
           method: "POST",
           headers: { Authorization: `Bearer ${accessToken}` },

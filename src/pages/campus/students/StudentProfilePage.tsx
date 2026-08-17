@@ -27,7 +27,7 @@ import { useAuth } from "../../../auth/AuthContext";
 import { CmsFooter, CmsPage, CmsScrollBody } from "../../../components/cms/CmsLayout";
 import { CmsIconTabs, type CmsIconTabItem } from "../../../components/cms/CmsIconTabs";
 import { InitialsAvatar } from "../../../components/InitialsAvatar";
-import { apiRequest } from "../../../lib/api";
+import { API_URL, apiRequest } from "../../../lib/api";
 import { notifyError, notifySuccess } from "../../../lib/notify";
 import {
   formatMoney,
@@ -1260,7 +1260,6 @@ function DocumentsTab({
   const [docName, setDocName] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
-  const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:4000/api/v1";
 
   useEffect(() => {
     apiRequest<Array<{ id: string; name: string }>>("/students/document-folders", token)

@@ -147,53 +147,62 @@ export function PortalCalendarPage() {
           {loading ? (
             <p className="py-16 text-center text-[13px] text-[#6B7280]">Loading calendar…</p>
           ) : (
-            <div className="mb-2 grid grid-cols-7 gap-1.5 text-center">
-              {WEEKDAYS.map((d) => (
-                <span key={d} className="py-1 text-[11px] font-semibold text-[#9CA3AF]">
-                  {d}
-                </span>
-              ))}
-              {cells.map((day, index) => {
-                if (day == null) return <div key={`e-${index}`} className="min-h-[72px]" />;
-                const date = new Date(year, month, day);
-                const dayEvents = events.filter((ev) => eventOnDay(ev, date)).slice(0, 2);
-                const more = events.filter((ev) => eventOnDay(ev, date)).length - dayEvents.length;
-                const key = toYmd(date);
-                const isToday = key === todayKey;
-                const primary = dayEvents[0];
-                const meta = primary ? TYPE_META[primary.eventType] : null;
-
-                return (
-                  <div
-                    key={day}
-                    className="flex min-h-[72px] flex-col gap-1 rounded-xl border p-1.5"
-                    style={{
-                      borderColor: isToday ? "#534AB7" : "#E5E7EB",
-                      background: meta ? meta.bg : isToday ? "#EEF2FF" : "#FFFFFF",
-                    }}
+            <div className="overflow-hidden rounded-2xl border border-[#EEF0F4]">
+              <div className="grid grid-cols-7 bg-[#F7F6FF]">
+                {WEEKDAYS.map((d) => (
+                  <span
+                    key={d}
+                    className="py-2 text-center text-[10.5px] font-bold uppercase tracking-[0.08em] text-[#9CA3AF]"
                   >
-                    <span
-                      className="text-[12px] font-bold"
-                      style={{ color: meta ? meta.color : isToday ? "#534AB7" : "#374151" }}
+                    {d}
+                  </span>
+                ))}
+              </div>
+              <div className="grid grid-cols-7 [&>div]:border-t [&>div]:border-r [&>div]:border-[#EEF0F4] [&>div:nth-child(7n)]:border-r-0">
+                {cells.map((day, index) => {
+                  if (day == null) return <div key={`e-${index}`} className="min-h-[88px] bg-[#F8FAFC]" />;
+                  const date = new Date(year, month, day);
+                  const dayEvents = events.filter((ev) => eventOnDay(ev, date)).slice(0, 2);
+                  const more = events.filter((ev) => eventOnDay(ev, date)).length - dayEvents.length;
+                  const key = toYmd(date);
+                  const isToday = key === todayKey;
+
+                  return (
+                    <div
+                      key={day}
+                      className={`flex min-h-[88px] flex-col gap-1 p-1.5 ${isToday ? "bg-[#F5F3FF]" : "bg-white"}`}
                     >
-                      {day}
-                    </span>
-                    {dayEvents.map((event) => (
                       <span
-                        key={event.id}
-                        className="truncate rounded-md px-1 py-0.5 text-[9px] font-semibold leading-tight text-white"
-                        style={{ background: TYPE_META[event.eventType].color }}
-                        title={event.title}
+                        className={`inline-flex size-6 items-center justify-center rounded-full text-[12px] font-bold ${
+                          isToday ? "bg-[#534AB7] text-white" : "text-[#374151]"
+                        }`}
                       >
-                        {event.title}
+                        {day}
                       </span>
-                    ))}
-                    {more > 0 ? (
-                      <span className="text-[9px] font-semibold text-[#6B7280]">+{more} more</span>
-                    ) : null}
-                  </div>
-                );
-              })}
+                      {dayEvents.map((event) => {
+                        const meta = TYPE_META[event.eventType];
+                        return (
+                          <span
+                            key={event.id}
+                            className="truncate rounded-md px-1.5 py-0.5 text-[9.5px] font-semibold leading-tight"
+                            style={{
+                              background: meta.bg,
+                              color: meta.color,
+                              boxShadow: `inset 3px 0 0 ${meta.color}`,
+                            }}
+                            title={event.title}
+                          >
+                            {event.title}
+                          </span>
+                        );
+                      })}
+                      {more > 0 ? (
+                        <span className="px-1 text-[9px] font-semibold text-[#6B7280]">+{more} more</span>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 
