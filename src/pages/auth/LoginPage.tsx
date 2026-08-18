@@ -66,34 +66,6 @@ const loginOptions = [
 
   },
 
-  {
-
-    id: "student",
-
-    title: "Student",
-
-    description: "View timetable, homework, results, fees, and school notices.",
-
-    symbol: "S",
-
-    email: "student@demo-school.local",
-
-  },
-
-  {
-
-    id: "parent",
-
-    title: "Parent",
-
-    description: "Track attendance, exams, fees, notices, and homework across children.",
-
-    symbol: "P",
-
-    email: "parent@demo-school.local",
-
-  },
-
 ] as const;
 
 
@@ -182,21 +154,9 @@ export function LoginPage() {
 
 
 
-  function navigateAfterLogin(id: LoginOption["id"] | undefined) {
+  function navigateAfterLogin() {
 
-    if (id === "student") {
-
-      navigate("/portal/student", { replace: true });
-
-    } else if (id === "parent") {
-
-      navigate("/parent/dashboard", { replace: true });
-
-    } else {
-
-      navigate("/dashboard", { replace: true });
-
-    }
+    navigate("/dashboard", { replace: true });
 
   }
 
@@ -256,7 +216,7 @@ export function LoginPage() {
 
       notifySuccess("Signed in successfully");
 
-      navigateAfterLogin(selectedLogin?.id);
+      navigateAfterLogin();
 
     } catch (cause) {
 
@@ -346,7 +306,7 @@ export function LoginPage() {
 
       notifySuccess("Signed in successfully");
 
-      navigateAfterLogin(selectedLogin?.id);
+      navigateAfterLogin();
 
     } catch (cause) {
 
@@ -401,7 +361,7 @@ export function LoginPage() {
 
       notifySuccess("Signed in successfully");
 
-      navigateAfterLogin(selectedLogin?.id);
+      navigateAfterLogin();
 
     } catch (cause) {
 
@@ -433,7 +393,7 @@ export function LoginPage() {
 
       notifySuccess("Signed in successfully");
 
-      navigateAfterLogin(selectedLogin?.id);
+      navigateAfterLogin();
 
     } catch (cause) {
 
@@ -473,382 +433,224 @@ export function LoginPage() {
 
 
 
+  const fieldClass = (invalid?: string) =>
+    `field !border-white/12 !bg-white/[0.06] focus:!border-amber-300/70 focus:!shadow-[0_0_0_3px_rgba(251,191,36,0.18)]${
+      invalid ? " is-invalid" : ""
+    }`;
+
   return (
+    <main className="relative min-h-screen overflow-hidden bg-[#1a120c] text-white">
+      <img
+        src={`${import.meta.env.BASE_URL}login-hero.jpg`}
+        alt=""
+        className="absolute inset-0 size-full object-cover"
+      />
+      <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(18,12,8,0.28)_0%,rgba(18,12,8,0.42)_38%,rgba(18,12,8,0.78)_68%,rgba(16,11,8,0.92)_100%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_left,transparent_20%,rgba(16,11,8,0.45)_100%)]" />
 
-    <main className="grid min-h-screen bg-slate-950 lg:grid-cols-2">
-
-      <section className="hidden overflow-hidden bg-indigo-600 p-14 text-white lg:flex lg:flex-col lg:justify-between">
-
-        <div className="text-xl font-semibold tracking-tight">SaaS CMS LMS</div>
-
-        <div className="max-w-xl">
-
-          <p className="mb-4 text-sm font-semibold uppercase tracking-[0.3em] text-indigo-200">
-
-            CMS + LMS
-
-          </p>
-
-          <h1 className="text-5xl font-semibold leading-tight">
-
-            One connected platform for modern education.
-
-          </h1>
-
-          <p className="mt-6 text-lg leading-8 text-indigo-100">
-
-            Secure tenant workspaces, shared academic data, and the tools every
-
-            institution needs to teach and operate.
-
-          </p>
-
-        </div>
-
-        <p className="text-sm text-indigo-200">SaaS CMS LMS SaaS Foundation</p>
-
-      </section>
-
-
-
-      <section className="flex items-center justify-center px-6 py-12">
-
-        <div className={`w-full ${selectedLogin ? "max-w-md" : "max-w-2xl"}`}>
-
-          <div className="mb-9 lg:hidden">
-
-            <span className="text-xl font-semibold text-white">SaaS CMS LMS</span>
-
+      <div className="relative z-10 mx-auto grid min-h-screen w-full max-w-[1440px] lg:grid-cols-[1.05fr_0.95fr]">
+        <section className="hidden flex-col justify-between px-12 py-12 lg:flex xl:px-16">
+          <div className="flex items-center gap-3">
+            <span className="grid size-10 place-items-center rounded-2xl border border-white/20 bg-white/10 text-[11px] font-bold tracking-[0.18em] backdrop-blur-md">
+              UA
+            </span>
+            <div>
+              <p className="text-[15px] font-semibold tracking-wide">SaaS CMS LMS</p>
+              <p className="text-[11px] tracking-[0.22em] text-white/55 uppercase">Universe AI</p>
+            </div>
           </div>
 
-          {!selectedLogin ? (
+          <div className="max-w-xl pb-8">
+            <p className="mb-4 text-[11px] font-semibold tracking-[0.34em] text-amber-200/80 uppercase">
+              Campus operating system
+            </p>
+            <h1 className="text-[52px] font-semibold leading-[1.08] tracking-[-0.03em]">
+              One connected platform for modern education.
+            </h1>
+            <p className="mt-6 max-w-md text-[16px] leading-8 text-white/78">
+              Secure tenant workspaces, shared academic data, and the tools every institution needs to teach and operate.
+            </p>
+            <div className="mt-8 flex gap-8 text-[12px] tracking-wide text-white/60">
+              <span>Admin</span>
+              <span className="text-white/25">·</span>
+              <span>Staff</span>
+              <span className="text-white/25">·</span>
+              <span>Finance</span>
+            </div>
+          </div>
+        </section>
 
-            <>
+        <section className="flex items-center justify-center px-5 py-10 sm:px-8">
+          <div className="w-full max-w-[460px] rounded-[28px] border border-white/12 bg-[#1c1410]/62 p-7 shadow-[0_30px_80px_rgba(0,0,0,0.35)] backdrop-blur-2xl sm:p-8">
+            <div className="mb-7 lg:hidden">
+              <span className="text-[15px] font-semibold">SaaS CMS LMS</span>
+            </div>
 
-              <p className="text-sm font-medium text-indigo-400">Institute login</p>
+            {!selectedLogin ? (
+              <>
+                <p className="text-[11px] font-semibold tracking-[0.28em] text-amber-200/85 uppercase">
+                  Institute login
+                </p>
+                <h2 className="mt-2 text-[30px] font-semibold tracking-tight">Welcome back</h2>
+                <p className="mt-2 text-[13px] leading-6 text-white/60">
+                  Choose your staff workspace. Students and parents sign in through the mobile app.
+                </p>
 
-              <h2 className="mt-2 text-3xl font-semibold tracking-tight text-white">
-
-                Choose your login
-
-              </h2>
-
-              <p className="mt-3 text-sm text-slate-400">
-
-                For school admin, staff, students, and parents. Use your workspace slug.
-
-              </p>
-
-
-
-              <div className="mt-8 grid gap-3 sm:grid-cols-2">
-
-                {loginOptions.map((option) => (
-
-                  <button
-
-                    key={option.id}
-
-                    type="button"
-
-                    onClick={() => chooseLogin(option)}
-
-                    className="group flex items-start gap-4 rounded-xl border border-slate-800 bg-slate-900/70 p-4 text-left transition hover:border-indigo-500 hover:bg-slate-900"
-
-                  >
-
-                    <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-indigo-500/15 text-sm font-bold text-indigo-300 transition group-hover:bg-indigo-500 group-hover:text-white">
-
-                      {option.symbol}
-
-                    </span>
-
-                    <span>
-
-                      <span className="block font-semibold text-white">{option.title}</span>
-
-                      <span className="mt-1 block text-xs leading-5 text-slate-400">
-
-                        {option.description}
-
+                <div className="mt-7 grid gap-3">
+                  {loginOptions.map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => chooseLogin(option)}
+                      className="group flex items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-4 text-left transition duration-200 hover:-translate-y-0.5 hover:border-amber-200/45 hover:bg-white/[0.08]"
+                    >
+                      <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-amber-200 to-amber-500 text-[13px] font-bold text-[#3b2714] shadow-[0_8px_18px_rgba(217,119,6,0.28)]">
+                        {option.symbol}
                       </span>
-
-                    </span>
-
-                  </button>
-
-                ))}
-
-              </div>
-
-              <p className="mt-8 text-center text-sm text-slate-500">
-
-                Platform Super Admin?{" "}
-
-                <a href="#/admin/login" className="font-semibold text-indigo-400 hover:text-indigo-300">
-
-                  Go to admin login
-
-                </a>
-
-              </p>
-
-            </>
-
-          ) : (
-
-            <>
-
-              <button
-
-                type="button"
-
-                onClick={() => setSelectedLogin(null)}
-
-                className="mb-6 text-sm font-medium text-slate-400 transition hover:text-white"
-
-              >
-
-                ← Choose another login
-
-              </button>
-
-              <div className="flex items-center gap-4">
-
-                <span className="grid size-12 place-items-center rounded-xl bg-indigo-500 text-sm font-bold text-white">
-
-                  {selectedLogin.symbol}
-
-                </span>
-
-                <div>
-
-                  <p className="text-sm font-medium text-indigo-400">Welcome back</p>
-
-                  <h2 className="text-3xl font-semibold tracking-tight text-white">
-
-                    {selectedLogin.title} login
-
-                  </h2>
-
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-[15px] font-semibold">{option.title}</span>
+                        <span className="mt-0.5 block text-[12px] leading-5 text-white/55">
+                          {option.description}
+                        </span>
+                      </span>
+                      <span className="text-white/25 transition group-hover:text-amber-200">→</span>
+                    </button>
+                  ))}
                 </div>
 
-              </div>
-
-              <p className="mt-4 text-sm text-slate-400">{selectedLogin.description}</p>
-
-
-
-              <div className="mt-8 space-y-5">
-
-                <label className="block">
-
-                  <span className="mb-2 block text-sm font-medium text-slate-200">Workspace slug</span>
-
-                  <input
-
-                    className={`field${fieldErrors.tenantSlug ? " is-invalid" : ""}`}
-
-                    value={tenantSlug}
-
-                    onChange={(event) => {
-
-                      setTenantSlug(event.target.value);
-
-                      setFieldErrors((prev) => clearFieldError(prev, "tenantSlug"));
-
-                    }}
-
-                    placeholder="your-school-slug"
-
-                    autoComplete="organization"
-
-                  />
-
-                  <FieldError error={fieldErrors.tenantSlug} />
-
-                  {!fieldErrors.tenantSlug ? (
-
-                  <span className="mt-2 block text-xs text-slate-500">
-
-                    Must match the tenant slug from Super Admin → Tenants (example:{" "}
-
-                    <code className="text-slate-300">green-valley</code>). Demo seed uses{" "}
-
-                    <code className="text-slate-300">demo-school</code>.
-
+                <p className="mt-7 text-center text-[12px] text-white/45">
+                  Platform Super Admin?{" "}
+                  <a href="#/admin/login" className="font-semibold text-amber-200 hover:text-amber-100">
+                    Go to admin login
+                  </a>
+                </p>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setSelectedLogin(null)}
+                  className="mb-6 text-[13px] font-medium text-white/50 transition hover:text-white"
+                >
+                  ← Choose another login
+                </button>
+                <div className="flex items-center gap-4">
+                  <span className="grid size-12 place-items-center rounded-2xl bg-gradient-to-br from-amber-200 to-amber-500 text-[13px] font-bold text-[#3b2714]">
+                    {selectedLogin.symbol}
                   </span>
+                  <div>
+                    <p className="text-[11px] font-semibold tracking-[0.22em] text-amber-200/85 uppercase">
+                      Welcome back
+                    </p>
+                    <h2 className="text-[26px] font-semibold tracking-tight">{selectedLogin.title} login</h2>
+                  </div>
+                </div>
+                <p className="mt-3 text-[13px] text-white/55">{selectedLogin.description}</p>
 
-                  ) : null}
+                <div className="mt-7 space-y-5">
+                  <label className="block">
+                    <span className="mb-2 block text-[13px] font-medium text-white/80">Workspace slug</span>
+                    <input
+                      className={fieldClass(fieldErrors.tenantSlug)}
+                      value={tenantSlug}
+                      onChange={(event) => {
+                        setTenantSlug(event.target.value);
+                        setFieldErrors((prev) => clearFieldError(prev, "tenantSlug"));
+                      }}
+                      placeholder="your-school-slug"
+                      autoComplete="organization"
+                    />
+                    <FieldError error={fieldErrors.tenantSlug} />
+                    {!fieldErrors.tenantSlug ? (
+                      <span className="mt-2 block text-[11px] text-white/40">
+                        Must match Super Admin → Tenants. Demo seed uses{" "}
+                        <code className="text-amber-100/80">demo-school</code>.
+                      </span>
+                    ) : null}
+                  </label>
+                  <label className="block">
+                    <span className="mb-2 block text-[13px] font-medium text-white/80">Email</span>
+                    <input
+                      className={fieldClass(fieldErrors.email)}
+                      type="email"
+                      value={email}
+                      onChange={(event) => {
+                        setEmail(event.target.value);
+                        setFieldErrors((prev) => clearFieldError(prev, "email"));
+                      }}
+                      placeholder={selectedLogin.email}
+                      autoComplete="username"
+                      autoFocus
+                    />
+                    <FieldError error={fieldErrors.email} />
+                  </label>
 
-                </label>
-
-                <label className="block">
-
-                  <span className="mb-2 block text-sm font-medium text-slate-200">Email</span>
-
-                  <input
-
-                    className={`field${fieldErrors.email ? " is-invalid" : ""}`}
-
-                    type="email"
-
-                    value={email}
-
-                    onChange={(event) => {
-
-                      setEmail(event.target.value);
-
-                      setFieldErrors((prev) => clearFieldError(prev, "email"));
-
+                  <LoginAuthExtras
+                    method={authMethod}
+                    onMethodChange={(method) => {
+                      setAuthMethod(method);
                     }}
-
-                    placeholder={selectedLogin.email}
-
-                    autoComplete="username"
-
-                    autoFocus
-
+                    tenantSlug={tenantSlug}
+                    requireTenant
+                    otpCode={otpCode}
+                    onOtpCodeChange={setOtpCode}
+                    onRequestOtp={handleRequestOtp}
+                    onVerifyOtp={handleVerifyOtp}
+                    otpRequested={otpRequested}
+                    otpInfo={otpInfo}
+                    submitting={submitting}
+                    googleClientId={googleClientId}
+                    onGoogleCredential={handleGoogleCredential}
+                    onGoogleError={notifyError}
+                    forgotPasswordPath="/forgot-password"
+                    msg91Enabled={Boolean(msg91Otp)}
+                    mobilePhone={mobilePhone}
+                    onMobilePhoneChange={setMobilePhone}
+                    onMsg91Verify={handleMsg91Otp}
                   />
 
-                  <FieldError error={fieldErrors.email} />
-
-                </label>
-
-
-
-                <LoginAuthExtras
-
-                  method={authMethod}
-
-                  onMethodChange={(method) => {
-
-                    setAuthMethod(method);
-
-                  }}
-
-                  tenantSlug={tenantSlug}
-
-                  requireTenant
-
-                  otpCode={otpCode}
-
-                  onOtpCodeChange={setOtpCode}
-
-                  onRequestOtp={handleRequestOtp}
-
-                  onVerifyOtp={handleVerifyOtp}
-
-                  otpRequested={otpRequested}
-
-                  otpInfo={otpInfo}
-
-                  submitting={submitting}
-
-                  googleClientId={googleClientId}
-
-                  onGoogleCredential={handleGoogleCredential}
-
-                  onGoogleError={notifyError}
-
-                  forgotPasswordPath="/forgot-password"
-
-                  msg91Enabled={Boolean(msg91Otp)}
-
-                  mobilePhone={mobilePhone}
-
-                  onMobilePhoneChange={setMobilePhone}
-
-                  onMsg91Verify={handleMsg91Otp}
-
-                />
-
-
-
-                {authMethod === "password" && (
-
-                  <form className="space-y-5" onSubmit={handlePasswordSubmit}>
-
-                    <label className="block">
-
-                      <span className="mb-2 flex items-center justify-between text-sm font-medium text-slate-200">
-
-                        <span>Password</span>
-
-                        <button
-
-                          type="button"
-
-                          className="text-xs font-semibold text-indigo-400 hover:text-indigo-300"
-
-                          onClick={() => setShowPassword((value) => !value)}
-
-                        >
-
-                          {showPassword ? "Hide" : "Show"}
-
-                        </button>
-
-                      </span>
-
-                      <input
-
-                        className={`field${fieldErrors.password ? " is-invalid" : ""}`}
-
-                        type={showPassword ? "text" : "password"}
-
-                        value={password}
-
-                        onChange={(event) => {
-
-                          setPassword(event.target.value);
-
-                          setFieldErrors((prev) => clearFieldError(prev, "password"));
-
-                        }}
-
-                        autoComplete="current-password"
-
-                        minLength={8}
-
-                      />
-
-                      <FieldError error={fieldErrors.password} />
-
-                    </label>
-
-
-
-                    <button
-
-                      className="w-full rounded-lg bg-indigo-500 px-4 py-3 font-semibold text-white transition hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-60"
-
-                      type="submit"
-
-                      disabled={submitting}
-
-                    >
-
-                      {submitting ? "Signing in…" : `Sign in as ${selectedLogin.title}`}
-
-                    </button>
-
-                  </form>
-
-                )}
-
-              </div>
-
-            </>
-
-          )}
-
-        </div>
-
-      </section>
-
+                  {authMethod === "password" && (
+                    <form className="space-y-5" onSubmit={handlePasswordSubmit}>
+                      <label className="block">
+                        <span className="mb-2 flex items-center justify-between text-[13px] font-medium text-white/80">
+                          <span>Password</span>
+                          <button
+                            type="button"
+                            className="text-[12px] font-semibold text-amber-200 hover:text-amber-100"
+                            onClick={() => setShowPassword((value) => !value)}
+                          >
+                            {showPassword ? "Hide" : "Show"}
+                          </button>
+                        </span>
+                        <input
+                          className={fieldClass(fieldErrors.password)}
+                          type={showPassword ? "text" : "password"}
+                          value={password}
+                          onChange={(event) => {
+                            setPassword(event.target.value);
+                            setFieldErrors((prev) => clearFieldError(prev, "password"));
+                          }}
+                          autoComplete="current-password"
+                          minLength={8}
+                        />
+                        <FieldError error={fieldErrors.password} />
+                      </label>
+                      <button
+                        className="w-full rounded-2xl bg-gradient-to-r from-amber-200 to-amber-500 px-4 py-3.5 text-[14px] font-semibold text-[#3b2714] shadow-[0_12px_28px_rgba(217,119,6,0.28)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
+                        type="submit"
+                        disabled={submitting}
+                      >
+                        {submitting ? "Signing in…" : `Sign in as ${selectedLogin.title}`}
+                      </button>
+                    </form>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </section>
+      </div>
     </main>
-
   );
 
 }
