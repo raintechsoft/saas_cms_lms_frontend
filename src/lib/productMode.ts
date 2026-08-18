@@ -60,7 +60,6 @@ export const CAMPUS_NAV: CampusNavItem[] = [
   { to: "/inventory", label: "Inventory", permission: "inventory.view", moduleKey: "inventory", bucket: "CMS", section: "cms" },
   { to: "/online-exams", label: "Online Exam", permission: "online_exam.view", moduleKey: "onlineExam", bucket: "CMS", section: "cms" },
   { to: "/users", label: "Users & Roles", permission: "users.view", moduleKey: null, bucket: "CMS", section: "cms" },
-  { to: "/erp/message-notice-templates", label: "Notification Templates", permission: "erp.view", moduleKey: "erp", bucket: "CMS", section: "cms" },
   { to: "/erp", label: "ERP Settings", permission: "erp.view", moduleKey: "erp", bucket: "CMS", section: "cms" },
 
   // LMS MODULES
