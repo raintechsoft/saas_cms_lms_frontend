@@ -55,20 +55,27 @@ export function LoginAuthExtras({
     ? `${forgotPasswordPath}?${forgotParams.toString()}`
     : forgotPasswordPath;
 
+  const goldButton =
+    "w-full rounded-2xl bg-gradient-to-r from-amber-200 to-amber-500 px-4 py-3.5 text-[14px] font-semibold text-[#3b2714] shadow-[0_12px_28px_rgba(217,119,6,0.28)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60";
+  const goldField =
+    "field !border-white/12 !bg-white/[0.06] tracking-[0.35em] focus:!border-amber-300/70 focus:!shadow-[0_0_0_3px_rgba(251,191,36,0.18)]";
+  const panelClass = light
+    ? "border border-slate-200 bg-slate-50"
+    : "border border-white/10 bg-white/[0.04]";
   const tabClass = (active: boolean) =>
-    `flex-1 rounded-lg px-2 py-2 text-sm font-semibold transition ${
+    `flex-1 rounded-xl px-2 py-2.5 text-[13px] font-semibold transition ${
       active
-        ? "bg-teal-500 text-white shadow-sm"
+        ? "bg-gradient-to-r from-amber-200 to-amber-500 text-[#3b2714] shadow-[0_8px_18px_rgba(217,119,6,0.22)]"
         : light
           ? "text-slate-500 hover:text-slate-800"
-          : "text-slate-400 hover:text-white"
+          : "text-white/55 hover:bg-white/[0.06] hover:text-white"
     }`;
 
   return (
     <div className="space-y-5">
       <div
-        className={`flex rounded-xl p-1 ${
-          light ? "border border-slate-200 bg-slate-50" : "border border-slate-800 bg-slate-900/50"
+        className={`flex rounded-2xl p-1 ${
+          light ? "border border-slate-200 bg-slate-50" : "border border-white/10 bg-white/[0.04]"
         }`}
       >
         <button type="button" className={tabClass(method === "password")} onClick={() => onMethodChange("password")}>
@@ -92,7 +99,7 @@ export function LoginAuthExtras({
         <div className="flex justify-end">
           <Link
             to={forgotHref}
-            className={`text-sm font-semibold ${light ? "text-teal-700 hover:text-teal-800" : "text-teal-400 hover:text-teal-300"}`}
+            className={`text-[13px] font-semibold ${light ? "text-amber-800 hover:text-amber-900" : "text-amber-200 hover:text-amber-100"}`}
           >
             Forgot password?
           </Link>
@@ -100,23 +107,15 @@ export function LoginAuthExtras({
       )}
 
       {method === "otp" && (
-        <div
-          className={`space-y-4 rounded-xl p-4 ${
-            light ? "border border-slate-200 bg-slate-50" : "border border-slate-800 bg-slate-900/40"
-          }`}
-        >
+        <div className={`space-y-4 rounded-2xl p-4 ${panelClass}`}>
           {!otpRequested ? (
             <>
-              <p className={`text-sm ${light ? "text-slate-600" : "text-slate-400"}`}>
+              <p className={`text-[13px] leading-6 ${light ? "text-slate-600" : "text-white/60"}`}>
                 We&apos;ll email a one-time sign-in code{requireTenant ? " for your workspace account" : ""}.
               </p>
               <button
                 type="button"
-                className={`w-full rounded-xl px-4 py-3 text-sm font-semibold transition disabled:opacity-60 ${
-                  light
-                    ? "border border-teal-200 bg-teal-50 text-teal-800 hover:bg-teal-100"
-                    : "border border-teal-500/40 bg-teal-500/10 text-teal-200 hover:bg-teal-500/20"
-                }`}
+                className={light ? "button-primary w-full py-3 disabled:opacity-60" : goldButton}
                 onClick={onRequestOtp}
                 disabled={submitting}
               >
@@ -130,18 +129,18 @@ export function LoginAuthExtras({
                   className={`rounded-xl px-3 py-2 text-sm ${
                     light
                       ? "border border-emerald-200 bg-emerald-50 text-emerald-700"
-                      : "border border-emerald-900/60 bg-emerald-950/40 text-emerald-200"
+                      : "border border-amber-200/20 bg-amber-200/10 text-amber-100"
                   }`}
                 >
                   {otpInfo}
                 </p>
               )}
               <label className="block">
-                <span className={`mb-2 block text-sm font-medium ${light ? "text-slate-700" : "text-slate-200"}`}>
+                <span className={`mb-2 block text-[13px] font-medium ${light ? "text-slate-700" : "text-white/80"}`}>
                   6-digit code
                 </span>
                 <input
-                  className={`${light ? "input" : "field"} tracking-[0.35em]`}
+                  className={`${light ? "input" : goldField} tracking-[0.35em]`}
                   inputMode="numeric"
                   autoComplete="one-time-code"
                   value={otpCode}
@@ -152,7 +151,7 @@ export function LoginAuthExtras({
               </label>
               <button
                 type="button"
-                className="button-primary w-full py-3 disabled:opacity-60"
+                className={light ? "button-primary w-full py-3 disabled:opacity-60" : goldButton}
                 onClick={onVerifyOtp}
                 disabled={submitting || otpCode.length < 6}
               >
@@ -160,7 +159,7 @@ export function LoginAuthExtras({
               </button>
               <button
                 type="button"
-                className={`w-full text-sm ${light ? "text-slate-500 hover:text-slate-800" : "text-slate-400 hover:text-white"}`}
+                className={`w-full text-[13px] font-medium ${light ? "text-slate-500 hover:text-slate-800" : "text-amber-200/80 hover:text-amber-100"}`}
                 onClick={onRequestOtp}
                 disabled={submitting}
               >
@@ -172,20 +171,16 @@ export function LoginAuthExtras({
       )}
 
       {method === "mobile_otp" && msg91Enabled ? (
-        <div
-          className={`space-y-4 rounded-xl p-4 ${
-            light ? "border border-slate-200 bg-slate-50" : "border border-slate-800 bg-slate-900/40"
-          }`}
-        >
-          <p className={`text-sm ${light ? "text-slate-600" : "text-slate-400"}`}>
+        <div className={`space-y-4 rounded-2xl p-4 ${panelClass}`}>
+          <p className={`text-[13px] leading-6 ${light ? "text-slate-600" : "text-white/60"}`}>
             Verify with MSG91 OTP. Use the mobile number saved on your campus user profile.
           </p>
           <label className="block">
-            <span className={`mb-2 block text-sm font-medium ${light ? "text-slate-700" : "text-slate-200"}`}>
+            <span className={`mb-2 block text-[13px] font-medium ${light ? "text-slate-700" : "text-white/80"}`}>
               Mobile number
             </span>
             <input
-              className={light ? "input" : "field"}
+              className={light ? "input" : "field !border-white/12 !bg-white/[0.06] focus:!border-amber-300/70 focus:!shadow-[0_0_0_3px_rgba(251,191,36,0.18)]"}
               inputMode="tel"
               autoComplete="tel"
               placeholder="9876543210 or +919876543210"
@@ -195,7 +190,7 @@ export function LoginAuthExtras({
           </label>
           <button
             type="button"
-            className="button-primary w-full py-3 disabled:opacity-60"
+            className={light ? "button-primary w-full py-3 disabled:opacity-60" : goldButton}
             onClick={onMsg91Verify}
             disabled={submitting}
           >
