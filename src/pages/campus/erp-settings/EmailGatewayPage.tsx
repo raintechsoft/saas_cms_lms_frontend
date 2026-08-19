@@ -186,7 +186,9 @@ export function EmailGatewayPage() {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [tab, setTab] = useState<TabKey>("config");
-  const [form, setForm] = useState(EMPTY_FORM);
+  const [form, setForm] = useState<
+    Omit<typeof EMPTY_FORM, "encryption"> & { encryption: "NONE" | "STARTTLS" | "SSL" }
+  >(EMPTY_FORM);
   const [templateForm, setTemplateForm] = useState({
     id: "",
     name: "",
@@ -326,8 +328,8 @@ export function EmailGatewayPage() {
       const data = await apiRequest<Setup>("/erp/email-gateway/templates", accessToken, {
         method: "POST",
         body: JSON.stringify({
-          id: templateForm.id || undefined,
           ...templateForm,
+          id: templateForm.id || undefined,
         }),
       });
       setSetup(data);
@@ -790,9 +792,9 @@ export function EmailGatewayPage() {
                               onClick={() =>
                                 void (async () => {
                                   if (!accessToken) return;
-                                  const ok = await confirmDelete(
-                                    `Delete gateway "${item.name}"?`,
-                                  );
+                                  const ok = await confirmDelete({
+                                    text: `Delete gateway "${item.name}"?`,
+                                  });
                                   if (!ok) return;
                                   try {
                                     const data = await apiRequest<Setup>(
@@ -998,7 +1000,7 @@ export function EmailGatewayPage() {
                             onClick={() =>
                               void (async () => {
                                 if (!accessToken) return;
-                                const ok = await confirmDelete(`Delete "${item.name}"?`);
+                                const ok = await confirmDelete({ text: `Delete "${item.name}"?` });
                                 if (!ok) return;
                                 try {
                                   const data = await apiRequest<Setup>(

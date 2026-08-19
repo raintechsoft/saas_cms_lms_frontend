@@ -11,6 +11,7 @@ const LEGEND: Array<{ label: string; color: string }> = [
   { label: "Event", color: EVENT_TYPE_COLORS.Event.dot },
   { label: "PTM", color: EVENT_TYPE_COLORS.PTM.dot },
   { label: "Holiday", color: EVENT_TYPE_COLORS.Holiday.dot },
+  { label: "Important", color: EVENT_TYPE_COLORS.Important.dot },
 ];
 
 function buildMonthGrid(year: number, month: number, marks: Map<number, CalendarEventType>) {

@@ -31,56 +31,11 @@ export function CampusComingSoonPage({
   );
 }
 
-export function AcademicCalendarPage() {
-  return (
-    <CampusComingSoonPage
-      title="Academic Calendar"
-      description="Term dates, holidays, exam windows, and school events."
-    />
-  );
-}
-
-export function LessonPlanningPage() {
-  return (
-    <CampusComingSoonPage
-      title="Lesson Planning"
-      description="Plan topics, lessons, and teaching schedules by subject and class."
-    />
-  );
-}
-
-export function LiveClassesPage() {
-  return (
-    <CampusComingSoonPage
-      title="Live Classes"
-      description="Schedule and join live online classroom sessions."
-    />
-  );
-}
-
 export function AiTutorPage() {
   return (
     <CampusComingSoonPage
       title="AI Tutor"
       description="AI-assisted doubt solving and personalized study help."
-    />
-  );
-}
-
-export function TestSeriesPage() {
-  return (
-    <CampusComingSoonPage
-      title="Test Series"
-      description="Create and manage online test series from the Question Bank."
-    />
-  );
-}
-
-export function NcertContentPage() {
-  return (
-    <CampusComingSoonPage
-      title="NCERT Content"
-      description="Textbook content mapped to syllabus — chapter-wise notes and study material."
     />
   );
 }

@@ -214,7 +214,9 @@ export function WebsiteCmsPage() {
   const [page, setPage] = useState(1);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showPageForm, setShowPageForm] = useState(false);
-  const [form, setForm] = useState(EMPTY_PAGE);
+  const [form, setForm] = useState<
+    Omit<typeof EMPTY_PAGE, "status"> & { status: "DRAFT" | "PUBLISHED" }
+  >(EMPTY_PAGE);
   const [siteForm, setSiteForm] = useState<SiteSettings | null>(null);
   const [bannerForm, setBannerForm] = useState({
     id: "" as string,
@@ -346,7 +348,7 @@ export function WebsiteCmsPage() {
 
   async function removePage(item: PageItem) {
     if (!accessToken || !canManage) return;
-    const ok = await confirmDelete(`Delete page "${item.title}"?`);
+    const ok = await confirmDelete({ text: `Delete page "${item.title}"?` });
     if (!ok) return;
     try {
       const data = await apiRequest<Setup>(`/erp/website-cms/pages/${item.id}`, accessToken, {
@@ -906,7 +908,7 @@ export function WebsiteCmsPage() {
                       onClick={() =>
                         void (async () => {
                           if (!accessToken) return;
-                          const ok = await confirmDelete(`Delete menu "${menu.name}"?`);
+                          const ok = await confirmDelete({ text: `Delete menu "${menu.name}"?` });
                           if (!ok) return;
                           try {
                             const data = await apiRequest<Setup>(
@@ -1078,7 +1080,7 @@ export function WebsiteCmsPage() {
                         onClick={() =>
                           void (async () => {
                             if (!accessToken) return;
-                            const ok = await confirmDelete(`Delete "${item.name}"?`);
+                            const ok = await confirmDelete({ text: `Delete "${item.name}"?` });
                             if (!ok) return;
                             try {
                               const data = await apiRequest<Setup>(
@@ -1229,7 +1231,7 @@ export function WebsiteCmsPage() {
                           onClick={() =>
                             void (async () => {
                               if (!accessToken) return;
-                              const ok = await confirmDelete(`Delete banner "${item.title}"?`);
+                              const ok = await confirmDelete({ text: `Delete banner "${item.title}"?` });
                               if (!ok) return;
                               try {
                                 const data = await apiRequest<Setup>(

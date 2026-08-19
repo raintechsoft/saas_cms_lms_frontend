@@ -36,6 +36,7 @@ export const PARENT_NAV: ParentNavItem[] = [
       { label: "Examination & Results", to: "/parent/academics/examination" },
       { label: "Test Series & Performance", to: "/parent/academics/test-series" },
       { label: "Live Classes", to: "/parent/academics/live-classes" },
+      { label: "NCERT Content", to: "/parent/academics/ncert" },
     ],
   },
   {

@@ -1,8 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useParams } from "react-router-dom";
+import { API_URL } from "../../lib/api";
 import { applyBrandingToDocument, parseBranding } from "../../lib/branding";
-
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:4000/api/v1";
 
 interface AdmissionForm {
   tenant: {

@@ -39,31 +39,11 @@ export function PortalAiTutorPage() {
   );
 }
 
-export function PortalCalendarPage() {
-  return (
-    <PortalComingSoonPage
-      title="Academic Calendar"
-      description="Term dates, holidays, exam dates, and school events in a calendar view."
-      bucket="LMS"
-    />
-  );
-}
-
 export function PortalQuestionBankPage() {
   return (
     <PortalComingSoonPage
       title="Question Bank"
       description="Practice questions by subject/chapter and previous-year papers."
-      bucket="LMS"
-    />
-  );
-}
-
-export function PortalNcertPage() {
-  return (
-    <PortalComingSoonPage
-      title="NCERT Content"
-      description="Textbook content mapped to syllabus — chapter-wise notes, videos, and study material."
       bucket="LMS"
     />
   );

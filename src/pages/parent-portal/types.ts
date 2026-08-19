@@ -44,7 +44,7 @@ export interface Announcement {
   tag: AnnouncementTag;
 }
 
-export type CalendarEventType = "Exam" | "Event" | "PTM" | "Holiday";
+export type CalendarEventType = "Exam" | "Event" | "PTM" | "Holiday" | "Important";
 
 export interface UpcomingEvent {
   id: string;

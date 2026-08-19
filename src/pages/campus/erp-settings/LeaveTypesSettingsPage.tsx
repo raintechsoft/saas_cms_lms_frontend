@@ -347,7 +347,7 @@ export function LeaveTypesSettingsPage() {
 
   async function deleteType(item: LeaveType) {
     if (!accessToken || !canManage) return;
-    const ok = await confirmDelete(`Delete leave type "${item.name}"?`);
+    const ok = await confirmDelete({ text: `Delete leave type "${item.name}"?` });
     if (!ok) return;
     setSaving(true);
     try {

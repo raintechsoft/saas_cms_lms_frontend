@@ -298,7 +298,7 @@ export function HomeworkSettingsPage() {
 
   async function deleteType(item: HomeworkType) {
     if (!accessToken || !canManage) return;
-    const ok = await confirmDelete(`Delete homework type "${item.name}"?`);
+    const ok = await confirmDelete({ text: `Delete homework type "${item.name}"?` });
     if (!ok) return;
     setSaving(true);
     try {
@@ -371,7 +371,7 @@ export function HomeworkSettingsPage() {
 
   async function deleteStatus(item: WorkflowStatus) {
     if (!accessToken || !canManage) return;
-    const ok = await confirmDelete(`Delete status "${item.name}"?`);
+    const ok = await confirmDelete({ text: `Delete status "${item.name}"?` });
     if (!ok) return;
     setSaving(true);
     try {

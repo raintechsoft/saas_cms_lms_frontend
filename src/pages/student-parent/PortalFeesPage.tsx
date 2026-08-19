@@ -11,14 +11,13 @@ import {
   UploadFileOutlined,
 } from "@mui/icons-material";
 import { Link, Navigate } from "react-router-dom";
-import { apiRequest } from "../../lib/api";
+import { API_URL, apiRequest } from "../../lib/api";
 import { isProductBucketAllowed } from "../../lib/productMode";
 import { usePortal } from "./PortalContext";
 
 const PRIMARY = "#534AB7";
 const PRIMARY_SOFT = "#EEF0FD";
 const BORDER = "#E5E7EB";
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:4000/api/v1";
 
 interface FeePayment {
   id: string;
@@ -131,16 +130,18 @@ function Card({
   children,
   className = "",
   id,
+  style,
 }: {
   children: React.ReactNode;
   className?: string;
   id?: string;
+  style?: React.CSSProperties;
 }) {
   return (
     <section
       id={id}
       className={`rounded-[20px] border bg-white p-5 shadow-[0_4px_18px_rgba(28,27,60,0.04)] ${className}`}
-      style={{ borderColor: BORDER }}
+      style={{ borderColor: BORDER, ...style }}
     >
       {children}
     </section>

@@ -38,7 +38,7 @@ export function CmsPageHeader({
   actions,
 }: {
   title: string;
-  description?: string;
+  description?: ReactNode;
   actions?: ReactNode;
 }) {
   return (

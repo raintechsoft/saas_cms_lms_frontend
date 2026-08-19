@@ -4,18 +4,18 @@ import { CmsDashboardPage } from "./pages/campus/CmsDashboardPage";
 import { LmsDashboardPage } from "./pages/campus/LmsDashboardPage";
 import { ResultsPerformancePage } from "./pages/campus/ResultsPerformancePage";
 import {
-  AcademicCalendarPage,
   AiTutorPage,
   ClassroomManagementPage,
-  LessonPlanningPage,
-  LiveClassesPage,
   LmsSettingsPage,
-  NcertContentPage,
   PreparationPracticePage,
-  TestSeriesPage,
   VideoGalleryPage,
   VoiceAiAgentPage,
 } from "./pages/campus/LmsComingSoonPages";
+import { AcademicCalendarPage } from "./pages/campus/AcademicCalendarPage";
+import { LessonPlanningPage } from "./pages/campus/LessonPlanningPage";
+import { LiveClassesPage } from "./pages/campus/LiveClassesPage";
+import { NcertContentPage } from "./pages/campus/NcertContentPage";
+import { TestSeriesPage } from "./pages/campus/TestSeriesPage";
 import { LoginPage } from "./pages/auth/LoginPage";
 import { ForgotPasswordPage } from "./pages/auth/ForgotPasswordPage";
 import { ResetPasswordPage } from "./pages/auth/ResetPasswordPage";
@@ -92,15 +92,15 @@ import { PortalTeacherRatingsPage } from "./pages/student-parent/PortalTeacherRa
 import {
   PortalAcademicsPage,
   PortalAiTutorPage,
-  PortalCalendarPage,
   PortalHelpPage,
   PortalLessonsPage,
   PortalMessagesPage,
-  PortalNcertPage,
   PortalQuestionBankPage,
   PortalSettingsPage,
 } from "./pages/student-parent/PortalComingSoonPages";
+import { PortalCalendarPage } from "./pages/student-parent/PortalAcademicCalendarPage";
 import { PortalLiveClassesPage } from "./pages/student-parent/PortalLiveClassesPage";
+import { PortalNcertPage } from "./pages/student-parent/PortalNcertPage";
 import { PortalTestSeriesPage } from "./pages/student-parent/PortalTestSeriesPage";
 import { StaffProfilePage } from "./pages/campus/StaffProfilePage";
 import { PayslipPrintPage } from "./pages/campus/PayslipPrintPage";
@@ -115,6 +115,7 @@ import { ParentHomeworkPage } from "./pages/parent-portal/ParentHomeworkPage";
 import { ParentExaminationPage } from "./pages/parent-portal/ParentExaminationPage";
 import { ParentTestSeriesPage } from "./pages/parent-portal/ParentTestSeriesPage";
 import { ParentLiveClassesPage } from "./pages/parent-portal/ParentLiveClassesPage";
+import { ParentNcertPage } from "./pages/parent-portal/ParentNcertPage";
 import { ParentAnnouncementsPage } from "./pages/parent-portal/ParentAnnouncementsPage";
 import { ParentMessagingPage } from "./pages/parent-portal/ParentMessagingPage";
 import { ParentPtmPage } from "./pages/parent-portal/ParentPtmPage";
@@ -136,6 +137,7 @@ const PARENT_PAGE_BY_PATH: Record<string, ReactElement> = {
   "/parent/academics/examination": <ParentExaminationPage />,
   "/parent/academics/test-series": <ParentTestSeriesPage />,
   "/parent/academics/live-classes": <ParentLiveClassesPage />,
+  "/parent/academics/ncert": <ParentNcertPage />,
   "/parent/communication/announcements": <ParentAnnouncementsPage />,
   "/parent/communication/messaging": <ParentMessagingPage />,
   "/parent/communication/ptm": <ParentPtmPage />,

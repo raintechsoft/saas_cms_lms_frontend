@@ -280,7 +280,7 @@ export function GradingScalePage() {
       notifyError("Cannot delete the default grading scale.");
       return;
     }
-    const ok = await confirmDelete(`Delete scale "${item.name}"?`);
+    const ok = await confirmDelete({ text: `Delete scale "${item.name}"?` });
     if (!ok) return;
     setSaving(true);
     try {
@@ -366,7 +366,7 @@ export function GradingScalePage() {
 
   async function deleteGrade(item: GradeBand) {
     if (!accessToken || !canManage) return;
-    const ok = await confirmDelete(`Delete grade "${item.grade}"?`);
+    const ok = await confirmDelete({ text: `Delete grade "${item.grade}"?` });
     if (!ok) return;
     setSaving(true);
     try {
